@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "1705.00557v1",
+  "title": "Discourse-Based Objectives for Fast Unsupervised Sentence Representation Learning",
+  "authors": [
+    "Yacine Jernite",
+    "Samuel R. Bowman",
+    "David Sontag"
+  ],
+  "abstract": "This work presents a novel objective function for the unsupervised training of neural network sentence encoders. It exploits signals from paragraph-level discourse coherence to train these models to understand text. Our objective is purely discriminative, allowing us to train models many times faster than was possible under prior methods, and it yields models which perform well in extrinsic evaluations.",
+  "categories": [
+    "cs.CL",
+    "cs.LG",
+    "cs.NE",
+    "stat.ML"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2017-04-23T09:15:35+00:00",
+  "updated": "2017-04-23T09:15:35+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1705.00557v1.pdf"
+}

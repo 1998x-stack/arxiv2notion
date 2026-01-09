@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "1606.02396v1",
+  "title": "Deep Successor Reinforcement Learning",
+  "authors": [
+    "Tejas D. Kulkarni",
+    "Ardavan Saeedi",
+    "Simanta Gautam",
+    "Samuel J. Gershman"
+  ],
+  "abstract": "Learning robust value functions given raw observations and rewards is now possible with model-free and model-based deep reinforcement learning algorithms. There is a third alternative, called Successor Representations (SR), which decomposes the value function into two components -- a reward predictor and a successor map. The successor map represents the expected future state occupancy from any given state and the reward predictor maps states to scalar rewards. The value function of a state can be computed as the inner product between the successor map and the reward weights. In this paper, we present DSR, which generalizes SR within an end-to-end deep reinforcement learning framework. DSR has several appealing properties including: increased sensitivity to distal reward changes due to factorization of reward and world dynamics, and the ability to extract bottleneck states (subgoals) given successor maps trained under a random policy. We show the efficacy of our approach on two diverse environments given raw pixel observations -- simple grid-world domains (MazeBase) and the Doom game engine.",
+  "categories": [
+    "stat.ML",
+    "cs.AI",
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "stat.ML",
+  "published": "2016-06-08T04:48:49+00:00",
+  "updated": "2016-06-08T04:48:49+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "10 pages, 6 figures",
+  "pdf_url": "https://arxiv.org/pdf/1606.02396v1.pdf"
+}

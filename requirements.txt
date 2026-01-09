@@ -1,0 +1,23 @@
+# ar5iv-to-notion 依赖清单
+
+# 核心依赖
+aiohttp>=3.9.0         # 异步 HTTP 客户端
+aiofiles>=23.2.1       # 异步文件操作
+beautifulsoup4>=4.12   # HTML 解析
+lxml>=5.1.0            # XML/HTML 解析器
+notion-client>=2.2.0   # Notion API 客户端
+python-dotenv>=1.0.0   # 环境变量管理
+loguru>=0.7.2          # 日志
+
+# 进度显示
+tqdm>=4.66.0
+
+# 可选依赖
+# Pillow>=10.0          # 图片处理（如需要）
+# requests>=2.31        # 同步 HTTP（备用）
+
+# 开发依赖
+pytest>=7.4.0          # 测试
+pytest-asyncio>=0.21.0 # 异步测试
+black>=23.0            # 代码格式化
+mypy>=1.5              # 类型检查

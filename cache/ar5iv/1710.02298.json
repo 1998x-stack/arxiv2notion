@@ -1,0 +1,1852 @@
+{
+  "paper_id": "1710.02298",
+  "title": "Rainbow: Combining Improvements in Deep Reinforcement Learning",
+  "authors": [
+    "Matteo Hessel DeepMind &Joseph Modayil DeepMind &Hado van Hasselt DeepMind &Tom Schaul DeepMind &Georg Ostrovski DeepMind \\ANDWill Dabney DeepMind &Dan Horgan DeepMind &Bilal Piot DeepMind &Mohammad Azar DeepMind &David Silver DeepMind"
+  ],
+  "affiliations": [],
+  "abstract": "The deep reinforcement learning community has made several independent improvements to the DQN algorithm. However, it is unclear which of these extensions are complementary and can be fruitfully combined. This paper examines six extensions to the DQN algorithm and empirically studies their combination. Our experiments show that the combination provides state-of-the-art performance on the Atari 2600 benchmark, both in terms of data efficiency and final performance. We also provide results from a detailed ablation study that shows the contribution of each component to overall performance.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "The many recent successes in scaling reinforcement learning (RL) to complex sequential decision-making problems were kick-started by the Deep Q-Networks algorithm (DQN; ? ?, ?). Its combination of Q-learning with convolutional neural networks and experience replay enabled it to learn, from raw pixels, how to play many Atari games at human-level performance. Since then, many extensions have been proposed that enhance its speed or stability.",
+        "Double DQN (DDQN; ? ?) addresses an overestimation bias of Q-learning (?), by decoupling selection and evaluation of the bootstrap action. Prioritized experience replay (?) improves data efficiency, by replaying more often transitions from which there is more to learn. The dueling network architecture (?) helps to generalize across actions by separately representing state values and action advantages. Learning from multi-step bootstrap targets (?; ?), as used in A3C (?), shifts the bias-variance trade-off and helps to propagate newly observed rewards faster to earlier visited states. Distributional Q-learning (?) learns a categorical distribution of discounted returns, instead of estimating the mean. Noisy DQN (?) uses stochastic network layers for exploration. This list is, of course, far from exhaustive.",
+        "Each of these algorithms enables substantial performance improvements in isolation. Since they do so by addressing radically different issues, and since they build on a shared framework, they could plausibly be combined. In some cases this has been done: Prioritized DDQN and Dueling DDQN both use double Q-learning, and Dueling DDQN was also combined with prioritized experience replay. In this paper we propose to study an agent that combines all the aforementioned ingredients. We show how these different ideas can be integrated, and that they are indeed largely complementary. In fact, their combination results in new state-of-the-art results on the benchmark suite of 57 Atari 2600 games from the Arcade Learning Environment (?), both in terms of data efficiency and of final performance. Finally we show results from ablation studies to help understand the contributions of the different components."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "Median human-normalized performance across 57 Atari games. We compare our integrated agent (rainbow-colored) to DQN (grey) and six published baselines. Note that we match DQN’s best performance after 7M frames, surpass any baseline within 44M frames, and reach substantially improved final performance. Curves are smoothed with a moving average over 5 points.",
+          "label": "Sx1.F1"
+        }
+      ],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Background",
+      "level": 2,
+      "paragraphs": [
+        "Reinforcement learning addresses the problem of an agent learning to act in an environment in order to maximize a scalar reward signal. No direct supervision is provided to the agent, for instance it is never directly told the best action."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Extensions to DQN",
+      "level": 2,
+      "paragraphs": [
+        "DQN has been an important milestone, but several limitations of this algorithm are now known, and many extensions have been proposed. We propose a selection of six extensions that each have addressed a limitation and improved overall performance. To keep the size of the selection manageable, we picked a set of extensions that address distinct concerns (e.g., just one of the many addressing exploration)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "The Integrated Agent",
+      "level": 2,
+      "paragraphs": [
+        "In this paper we integrate all the aforementioned components into a single integrated agent, which we call Rainbow.",
+        "First, we replace the 1-step distributional loss (3) with a multi-step variant. We construct the target distribution by contracting the value distribution in St+nsubscriptStnS_{t+n} according to the cumulative discount, and shifting it by the truncated nnn-step discounted return. This corresponds to defining the target distribution as dt(n)=(Rt(n)+γt(n)​z,pθ ̄​(St+n,at+n∗))subscriptsuperscriptdntsubscriptsuperscriptRntsuperscriptsubscriptγtnzsubscriptp ̄θsubscriptStnsubscriptsuperscriptatnd^{(n)}_{t}=(R^{(n)}_{t}+\\gamma_{t}^{(n)}\\bm{z},~{}~{}\\bm{p}_{\\overline{\\theta}}(S_{t+n},a^{*}_{t+n})). The resulting loss is",
+        "where, again, ΦzsubscriptΦz\\Phi_{\\bm{z}} is the projection onto zz\\bm{z}.",
+        "We combine the multi-step distributional loss with double Q-learning by using the greedy action in St+nsubscriptStnS_{t+n} selected according to the online network as the bootstrap action at+n∗subscriptsuperscriptatna^{*}_{t+n}, and evaluating such action using the target network.",
+        "In standard proportional prioritized replay (?) the absolute TD error is used to prioritize the transitions. This can be computed in the distributional setting, using the mean action values. However, in our experiments all distributional Rainbow variants prioritize transitions by the KL loss, since this is what the algorithm is minimizing:",
+        "The KL loss as priority might be more robust to noisy stochastic environments because the loss can continue to decrease even when the returns are not deterministic.",
+        "The network architecture is a dueling network architecture adapted for use with return distributions. The network has a shared representation fξ​(s)subscriptfξsf_{\\xi}(s), which is then fed into a value stream vηsubscriptvηv_{\\eta} with NatomssubscriptNatomsN_{\\text{atoms}} outputs, and into an advantage stream aξsubscriptaξa_{\\xi} with Natoms×NactionssubscriptNatomssubscriptNactionsN_{\\text{atoms}}\\times N_{\\text{actions}} outputs, where aξi​(fξ​(s),a)subscriptsuperscriptaiξsubscriptfξsaa^{i}_{\\xi}(f_{\\xi}(s),a) will denote the output corresponding to atom iii and action aaa. For each atom zisuperscriptziz^{i}, the value and advantage streams are aggregated, as in dueling DQN, and then passed through a softmax layer to obtain the normalised parametric distributions used to estimate the returns’ distributions:",
+        "where φ=fξ​(s)italic-φsubscriptfξs\\phi=f_{\\xi}(s) and a ̄ψi​(s)=1Nactions​∑a′aψi​(φ,a′)subscriptsuperscript ̄aiψs1subscriptNactionssubscriptsuperscripta′subscriptsuperscriptaiψitalic-φsuperscripta′\\overline{a}^{i}_{\\psi}(s)=\\frac{1}{N_{\\text{actions}}}\\sum_{a^{\\prime}}a^{i}_{\\psi}(\\phi,a^{\\prime}).",
+        "We then replace all linear layers with their noisy equivalent described in Equation (4). Within these noisy linear layers we use factorised Gaussian noise (?) to reduce the number of independent noise variables."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x2.png",
+          "alt": "Refer to caption",
+          "caption": "Each plot shows, for several agents, the number of games where they have achieved at least a given fraction of human performance, as a function of time. From left to right we consider the 20%, 50%, 100%, 200% and 500% thresholds. On the first row we compare Rainbow to the baselines. On the second row we compare Rainbow to its ablations.",
+          "label": "Sx4.F2"
+        }
+      ],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Experimental Methods",
+      "level": 2,
+      "paragraphs": [
+        "We now describe the methods and setup used for configuring and evaluating the learning agents."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Analysis",
+      "level": 2,
+      "paragraphs": [
+        "In this section we analyse the main experimental results. First, we show that Rainbow compares favorably to several published agents. Then we perform ablation studies, comparing several variants of the agent, each corresponding to removing a single component from Rainbow."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Discussion",
+      "level": 2,
+      "paragraphs": [
+        "We have demonstrated that several improvements to DQN can be successfully integrated into a single learning algorithm that achieves state-of-the-art performance. Moreover, we have shown that within the integrated algorithm, all but one of the components provided clear performance benefits. There are many more algorithmic components that we were not able to include, which would be promising candidates for further experiments on integrated agents. Among the many possible candidates, we discuss several below.",
+        "We have focused here on value-based methods in the Q-learning family. We have not considered purely policy-based RL algorithms such as trust-region policy optimisation (?), nor actor-critic methods (?; ?).",
+        "A number of algorithms exploit a sequence of data to achieve improved learning efficiency. Optimality tightening (?) uses multi-step returns to construct additional inequality bounds, instead of using them to replace the 1-step targets used in Q-learning. Eligibility traces allow a soft combination over n-step returns (?). However, sequential methods all leverage more computation per gradient than the multi-step targets used in Rainbow. Furthermore, introducing prioritized sequence replay raises questions of how to store, replay and prioritise sequences.",
+        "Episodic control (?) also focuses on data efficiency, and was shown to be very effective in some domains. It improves early learning by using episodic memory as a complementary learning system, capable of immediately re-enacting successful action sequences.",
+        "Besides Noisy Nets, numerous other exploration methods could also be useful algorithmic ingredients: among these Bootstrapped DQN (?), intrinsic motivation (?) and count-based exploration (?). Integration of these alternative components is fruitful subject for further research.",
+        "In this paper we have focused on the core learning updates, without exploring alternative computational architectures. Asynchronous learning from parallel copies of the environment, as in A3C (?), Gorila (?), or Evolution Strategies (?), can be effective in speeding up learning, at least in terms of wall-clock time. Note, however, they can be less data efficient.",
+        "Hierarchical RL has also been applied with success to several complex Atari games. Among successful applications of HRL we highlight h-DQN (?) and Feudal Networks (?).",
+        "The state representation could also be made more efficient by exploiting auxiliary tasks such as pixel control or feature control (?), supervised predictions (?) or successor features (?).",
+        "To evaluate Rainbow fairly against the baselines, we have followed the common domain modifications of clipping rewards, fixed action-repetition, and frame-stacking, but these might be removed by other learning algorithm improvements. Pop-Art normalization (?) allows reward clipping to be removed, while preserving a similar level of performance. Fine-grained action repetition (?) enabled to learn how to repeat actions. A recurrent state network (?) can learn a temporal state representation, replacing the fixed stack of observation frames. In general, we believe that exposing the real game to the agent is a promising direction for future research."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Median human-normalized performance across 57 Atari games. We compare our integrated agent (rainbow-colored) to DQN (grey) and six published baselines. Note that we match DQN’s best performance after 7M frames, surpass any baseline within 44M frames, and reach substantially improved final performance. Curves are smoothed with a moving average over 5 points.",
+      "label": "Sx1.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "Each plot shows, for several agents, the number of games where they have achieved at least a given fraction of human performance, as a function of time. From left to right we consider the 20%, 50%, 100%, 200% and 500% thresholds. On the first row we compare Rainbow to the baselines. On the second row we compare Rainbow to its ablations.",
+      "label": "Sx4.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Median human-normalized performance across 57 Atari games, as a function of time. We compare our integrated agent (rainbow-colored) to DQN (gray) and to six different ablations (dashed lines). Curves are smoothed with a moving average over 5 points.",
+      "label": "Sx6.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "Performance drops of ablation agents on all 57 Atari games. Performance is the area under the learning curve, normalized relative to the Rainbow agent and DQN. Two games where DQN outperforms Rainbow are omitted. The ablation leading to the strongest drop is highlighted for each game. The removal of either prioritization or multi-step learning reduces performance across most games, but the contribution of each component varies substantially per game.",
+      "label": "Sx6.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for Rainbow and the baselines discussed in the paper, for each individual game. Every curve is smoothed with a moving average of 10 to improve readability.",
+      "label": "Sx7.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1710.02298/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for Rainbow and its ablations, for each individual game. Every curve is smoothed with a moving average of 10 to improve readability.",
+      "label": "Sx7.F6"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 2: Each plot shows, for several agents, the number of games where they have achieved at least a given fraction of human performance, as a function of time. From left to right we consider the 20%, 50%, 100%, 200% and 500% thresholds. On the first row we compare Rainbow to the baselines. On the second row we compare Rainbow to its ablations.",
+      "headers": [],
+      "rows": [
+        [
+          "Value"
+        ],
+        [
+          "80K frames"
+        ],
+        [
+          "0.00006250.00006250.0000625"
+        ],
+        [
+          "0.00.00.0"
+        ],
+        [
+          "0.5"
+        ],
+        [
+          "32K frames"
+        ],
+        [
+          "1.5×10−41.5superscript1041.5\\times 10^{-4}"
+        ],
+        [
+          "proportional"
+        ],
+        [
+          "0.50.50.5"
+        ],
+        [
+          "0.4→1.0→0.41.00.4\\rightarrow 1.0"
+        ],
+        [
+          "3"
+        ],
+        [
+          "515151"
+        ],
+        [
+          "[−10,10]1010[-10,10]"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Rainbow hyper-parameters",
+      "headers": [
+        "Agent",
+        "no-ops",
+        "human starts"
+      ],
+      "rows": [
+        [
+          "79%",
+          "68%"
+        ],
+        [
+          "117%",
+          "110%"
+        ],
+        [
+          "140%",
+          "128%"
+        ],
+        [
+          "151%",
+          "117%"
+        ],
+        [
+          "-",
+          "116%"
+        ],
+        [
+          "118%",
+          "102%"
+        ],
+        [
+          "164%",
+          "125%"
+        ],
+        [
+          "223%",
+          "153%"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Figure 4: Performance drops of ablation agents on all 57 Atari games. Performance is the area under the learning curve, normalized relative to the Rainbow agent and DQN. Two games where DQN outperforms Rainbow are omitted. The ablation leading to the strongest drop is highlighted for each game. The removal of either prioritization or multi-step learning reduces performance across most games, but the contribution of each component varies substantially per game.",
+      "headers": [],
+      "rows": [
+        [
+          "Hyper-parameter",
+          "value"
+        ],
+        [
+          "Grey-scaling",
+          "True"
+        ],
+        [
+          "Observation down-sampling",
+          "(84, 84)"
+        ],
+        [
+          "Frames stacked",
+          "4"
+        ],
+        [
+          "Action repetitions",
+          "4"
+        ],
+        [
+          "Reward clipping",
+          "[-1, 1]"
+        ],
+        [
+          "Terminal on loss of life",
+          "True"
+        ],
+        [
+          "Max frames per episode",
+          "108K"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Preprocessing: the values of these hyper-parameters are the same used by DQN and it’s variants. They are here listed for completeness. Observations are grey-scaled and rescaled to 84×84848484\\times 84 pixels. 4 consecutive frames are concatenated as each state’s representation. Each action selected by the agent is repeated for 4 times. Rewards are clipped between −1,+111-1,+1. In games where the player has multiple lives, transitions associated to the loss of a life are considered terminal. All episodes are capped after 108K frames.",
+      "headers": [],
+      "rows": [
+        [
+          "value"
+        ],
+        [
+          "32, 64, 64"
+        ],
+        [
+          "8×8,4×4,3×38844338\\times 8,4\\times 4,3\\times 3"
+        ],
+        [
+          "4, 2, 1"
+        ],
+        [
+          "512"
+        ],
+        [
+          "Number of actions"
+        ],
+        [
+          "0.99"
+        ],
+        [
+          "1M transitions"
+        ],
+        [
+          "every 4 agent steps"
+        ],
+        [
+          "32"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Additional hyper-parameters: the values of these hyper-parameters are the same used by DQN and it’s variants. The network has 3 convolutional layers: with 32, 64 and 64 channels. The layers use 8×8888\\times 8, 4×4444\\times 4, 3×3333\\times 3 filters with strides of 4, 2, 1, respectively. The value and advantage streams of the dueling architecture have both a hidden layer with 512 units. The output layer of the network has a number of units equal to the number of actions available in the game. We use a discount factor of 0.99, which is set to 0 on terminal transitions. We perform a learning update every 4 agent steps, using mini-batches of 32 transitions.",
+      "headers": [
+        "Game",
+        "DQN",
+        "A3C",
+        "DDQN",
+        "Prior. DDQN",
+        "Duel. DDQN",
+        "Distrib. DQN",
+        "Noisy DQN",
+        "Rainbow"
+      ],
+      "rows": [
+        [
+          "634.0",
+          "518.4",
+          "1033.4",
+          "900.5",
+          "1,486.5",
+          "1,997.5",
+          "533.3",
+          "6,022.9"
+        ],
+        [
+          "178.4",
+          "263.9",
+          "169.1",
+          "218.4",
+          "172.7",
+          "237.7",
+          "148.0",
+          "202.8"
+        ],
+        [
+          "3489.3",
+          "5474.9",
+          "6060.8",
+          "7,748.5",
+          "3,994.8",
+          "5,101.3",
+          "5,124.3",
+          "14,491.7"
+        ],
+        [
+          "3170.5",
+          "22140.5",
+          "16837.0",
+          "31,907.5",
+          "15,840.0",
+          "395,599.5",
+          "8,277.3",
+          "280,114.0"
+        ],
+        [
+          "1458.7",
+          "4474.5",
+          "1193.2",
+          "1,654.0",
+          "2,035.4",
+          "2,071.7",
+          "4,078.1",
+          "2,249.4"
+        ],
+        [
+          "292491.0",
+          "911,091.0",
+          "319688.0",
+          "593,642.0",
+          "445,360.0",
+          "289,803.0",
+          "303,666.5",
+          "814,684.0"
+        ],
+        [
+          "312.7",
+          "970.1",
+          "886.0",
+          "816.8",
+          "1,129.3",
+          "835.6",
+          "955.0",
+          "826.0"
+        ],
+        [
+          "23750.0",
+          "12950.0",
+          "24740.0",
+          "29,100.0",
+          "31,320.0",
+          "32,250.0",
+          "26,985.0",
+          "52,040.0"
+        ],
+        [
+          "9743.2",
+          "22707.9",
+          "17417.2",
+          "26,172.7",
+          "14,591.3",
+          "15,002.4",
+          "15,241.5",
+          "21,768.5"
+        ],
+        [
+          "493.4",
+          "817.9",
+          "1011.1",
+          "1,165.6",
+          "910.6",
+          "1,000.0",
+          "670.8",
+          "1,793.4"
+        ],
+        [
+          "56.5",
+          "35.1",
+          "69.6",
+          "65.8",
+          "65.7",
+          "76.8",
+          "79.3",
+          "39.4"
+        ],
+        [
+          "70.3",
+          "59.8",
+          "73.5",
+          "68.6",
+          "77.3",
+          "62.1",
+          "66.3",
+          "54.9"
+        ],
+        [
+          "354.5",
+          "681.9",
+          "368.9",
+          "371.6",
+          "411.6",
+          "548.7",
+          "423.3",
+          "379.5"
+        ],
+        [
+          "3973.9",
+          "3755.8",
+          "3853.5",
+          "3,421.9",
+          "4,881.0",
+          "7,476.9",
+          "4,214.4",
+          "7,160.9"
+        ],
+        [
+          "5017.0",
+          "7021.0",
+          "3495.0",
+          "6,604.0",
+          "3,784.0",
+          "9,600.5",
+          "8,778.5",
+          "10,916.0"
+        ],
+        [
+          "98128.0",
+          "112646.0",
+          "113782.0",
+          "131,086.0",
+          "124,566.0",
+          "154,416.5",
+          "98,576.5",
+          "143,962.0"
+        ],
+        [
+          "15917.5",
+          "56533.0",
+          "27510.0",
+          "21,093.5",
+          "33,996.0",
+          "32,246.0",
+          "18,037.5",
+          "47,671.3"
+        ],
+        [
+          "12550.7",
+          "113,308.4",
+          "69803.4",
+          "73,185.8",
+          "56,322.8",
+          "109,856.6",
+          "25,207.8",
+          "109,670.7"
+        ],
+        [
+          "-6.0",
+          "-0.1",
+          "-0.3",
+          "2.7",
+          "-0.8",
+          "-3.7",
+          "-1.0",
+          "-0.6"
+        ],
+        [
+          "626.7",
+          "-82.5",
+          "1216.6",
+          "1,884.4",
+          "2,077.4",
+          "2,133.4",
+          "1,021.5",
+          "2,061.1"
+        ],
+        [
+          "-1.6",
+          "18.8",
+          "3.2",
+          "9.2",
+          "-4.1",
+          "-4.9",
+          "-3.7",
+          "22.6"
+        ],
+        [
+          "26.9",
+          "0.1",
+          "28.8",
+          "27.9",
+          "0.2",
+          "28.8",
+          "27.1",
+          "29.1"
+        ],
+        [
+          "496.1",
+          "190.5",
+          "1448.1",
+          "2,930.2",
+          "2,332.4",
+          "2,813.9",
+          "418.8",
+          "4,141.1"
+        ],
+        [
+          "8190.4",
+          "10022.8",
+          "15253.0",
+          "57,783.8",
+          "20,051.4",
+          "27,778.3",
+          "13,131.0",
+          "72,595.7"
+        ],
+        [
+          "298.0",
+          "303.5",
+          "200.5",
+          "218.0",
+          "297.0",
+          "422.0",
+          "250.5",
+          "567.5"
+        ],
+        [
+          "14992.9",
+          "32464.1",
+          "14892.5",
+          "20,506.4",
+          "15,207.9",
+          "28,554.2",
+          "2,454.2",
+          "50,496.8"
+        ],
+        [
+          "-1.6",
+          "-2.8",
+          "-2.5",
+          "-1.0",
+          "-1.3",
+          "-0.1",
+          "-2.4",
+          "-0.7"
+        ],
+        [
+          "4496.0",
+          "94.0",
+          "11204.0",
+          "10,241.0",
+          "10,334.0",
+          "9,555.5",
+          "7,465.0",
+          "10,841.0"
+        ],
+        [
+          "6206.0",
+          "5560.0",
+          "6796.1",
+          "7,406.5",
+          "8,051.6",
+          "6,757.8",
+          "6,833.5",
+          "6,715.5"
+        ],
+        [
+          "20882.0",
+          "28819.0",
+          "30207.0",
+          "31,244.0",
+          "24,288.0",
+          "33,890.0",
+          "27,921.0",
+          "28,999.8"
+        ],
+        [
+          "47.0",
+          "67.0",
+          "42.0",
+          "13.0",
+          "22.0",
+          "130.0",
+          "55.0",
+          "154.0"
+        ],
+        [
+          "1092.3",
+          "653.7",
+          "1241.3",
+          "1,824.6",
+          "2,250.6",
+          "2,064.1",
+          "1,012.1",
+          "2,570.2"
+        ],
+        [
+          "6738.8",
+          "10476.1",
+          "8960.3",
+          "11,836.1",
+          "11,185.1",
+          "11,382.3",
+          "7,186.4",
+          "11,686.5"
+        ],
+        [
+          "7484.8",
+          "52894.1",
+          "12366.5",
+          "27,430.1",
+          "20,410.5",
+          "31,358.3",
+          "15,505.0",
+          "103,061.6"
+        ],
+        [
+          "-113.2",
+          "-78.5",
+          "-186.7",
+          "-14.8",
+          "-46.9",
+          "-342.8",
+          "-154.4",
+          "-37.6"
+        ],
+        [
+          "18.0",
+          "5.6",
+          "19.1",
+          "18.9",
+          "18.8",
+          "18.9",
+          "18.0",
+          "19.0"
+        ],
+        [
+          "207.9",
+          "206.9",
+          "-575.5",
+          "179.0",
+          "292.6",
+          "5,717.5",
+          "5,955.4",
+          "1,704.4"
+        ],
+        [
+          "9271.5",
+          "15148.8",
+          "11020.8",
+          "11,277.0",
+          "14,175.8",
+          "15,035.9",
+          "9,176.6",
+          "18,397.6"
+        ],
+        [
+          "35215.0",
+          "34216.0",
+          "43156.0",
+          "56,990.0",
+          "58,549.0",
+          "56,086.0",
+          "35,376.5",
+          "54,261.0"
+        ],
+        [
+          "58.7",
+          "32.8",
+          "59.1",
+          "55.4",
+          "62.0",
+          "49.8",
+          "50.9",
+          "55.2"
+        ],
+        [
+          "4216.7",
+          "2355.4",
+          "14498.0",
+          "39,096.7",
+          "37,361.6",
+          "3,275.4",
+          "2,353.1",
+          "19,176.0"
+        ],
+        [
+          "-12142.1",
+          "-10911.1",
+          "-11490.4",
+          "-10,852.8",
+          "-11,928.0",
+          "-13,247.7",
+          "-13,905.9",
+          "-11,685.8"
+        ],
+        [
+          "1295.4",
+          "1956.0",
+          "810.0",
+          "2,238.2",
+          "1,768.4",
+          "2,530.2",
+          "2,608.2",
+          "2,860.7"
+        ],
+        [
+          "1293.8",
+          "15,730.5",
+          "2628.7",
+          "9,063.0",
+          "5,993.1",
+          "6,368.6",
+          "1,697.2",
+          "12,629.0"
+        ],
+        [
+          "52970.0",
+          "138218.0",
+          "58365.0",
+          "51,959.0",
+          "90,804.0",
+          "67,054.5",
+          "31,864.5",
+          "123,853.0"
+        ],
+        [
+          "-6.0",
+          "-9.7",
+          "1.9",
+          "-0.9",
+          "4.0",
+          "4.5",
+          "-3.1",
+          "7.0"
+        ],
+        [
+          "11.1",
+          "-6.3",
+          "-7.8",
+          "-2.0",
+          "4.4",
+          "22.6",
+          "-2.1",
+          "-2.2"
+        ],
+        [
+          "4786.0",
+          "12,679.0",
+          "6608.0",
+          "7,448.0",
+          "6,601.0",
+          "7,684.5",
+          "5,311.0",
+          "11,190.5"
+        ],
+        [
+          "45.6",
+          "156.3",
+          "92.2",
+          "33.6",
+          "48.0",
+          "124.3",
+          "123.3",
+          "126.9"
+        ],
+        [
+          "136.0",
+          "23.0",
+          "21.0",
+          "244.0",
+          "200.0",
+          "462.0",
+          "10.5",
+          "45.0"
+        ],
+        [
+          "154414.1",
+          "331628.1",
+          "367823.7",
+          "374,886.9",
+          "110,976.2",
+          "455,052.7",
+          "241,851.7",
+          "506,817.2"
+        ],
+        [
+          "1609.0",
+          "17,244.0",
+          "6201.0",
+          "7,451.0",
+          "7,054.0",
+          "11,824.5",
+          "4,796.5",
+          "14,631.5"
+        ],
+        [
+          "4577.5",
+          "7157.5",
+          "6270.6",
+          "5,965.1",
+          "25,976.5",
+          "8,267.7",
+          "5,487.3",
+          "93,007.9"
+        ],
+        [
+          "4412.0",
+          "24,622.0",
+          "8593.0",
+          "9,501.0",
+          "10,164.0",
+          "15,130.0",
+          "7,650.5",
+          "19,658.0"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Human Starts evaluation regime: Raw scores across all games, averaged over 200 testing episodes, from the agent snapshot that obtained the highest score during training. We report the published scores for DQN, A3C, DDQN, Dueling DDQN, and Prioritized DDQN. For Distributional DQN and Rainbow we report our own evaluations of the agents.",
+      "headers": [
+        "Game",
+        "DQN",
+        "DDQN",
+        "Prior. DDQN",
+        "Duel. DDQN",
+        "Distrib. DQN",
+        "Noisy DQN",
+        "Rainbow"
+      ],
+      "rows": [
+        [
+          "1620.0",
+          "3747.7",
+          "6,648.6",
+          "4,461.4",
+          "4,055.8",
+          "2,394.9",
+          "9,491.7"
+        ],
+        [
+          "978.0",
+          "1793.3",
+          "2,051.8",
+          "2,354.5",
+          "1,267.9",
+          "1,608.0",
+          "5,131.2"
+        ],
+        [
+          "4280.0",
+          "5393.2",
+          "7,965.7",
+          "4,621.0",
+          "5,909.0",
+          "5,198.6",
+          "14,198.5"
+        ],
+        [
+          "4359.0",
+          "17356.5",
+          "41,268.0",
+          "28,188.0",
+          "400,529.5",
+          "12,403.8",
+          "428,200.3"
+        ],
+        [
+          "1364.5",
+          "734.7",
+          "1,699.3",
+          "2,837.7",
+          "2,354.7",
+          "4,814.1",
+          "2,712.8"
+        ],
+        [
+          "279987.0",
+          "106056.0",
+          "427,658.0",
+          "382,572.0",
+          "273,895.0",
+          "329,010.0",
+          "826,659.5"
+        ],
+        [
+          "455.0",
+          "1030.6",
+          "1,126.8",
+          "1,611.9",
+          "1,056.7",
+          "1,323.0",
+          "1,358.0"
+        ],
+        [
+          "29900.0",
+          "31700.0",
+          "38,130.0",
+          "37,150.0",
+          "41,145.0",
+          "32,050.0",
+          "62,010.0"
+        ],
+        [
+          "8627.5",
+          "13772.8",
+          "22,430.7",
+          "12,164.0",
+          "13,213.4",
+          "12,534.0",
+          "16,850.2"
+        ],
+        [
+          "585.6",
+          "1225.4",
+          "1,614.2",
+          "1,472.6",
+          "1,421.8",
+          "837.3",
+          "2,545.6"
+        ],
+        [
+          "50.4",
+          "68.1",
+          "62.6",
+          "65.5",
+          "74.1",
+          "77.3",
+          "30.0"
+        ],
+        [
+          "88.0",
+          "91.6",
+          "98.8",
+          "99.4",
+          "98.1",
+          "83.3",
+          "99.6"
+        ],
+        [
+          "385.5",
+          "418.5",
+          "381.5",
+          "345.3",
+          "612.5",
+          "459.1",
+          "417.5"
+        ],
+        [
+          "4657.7",
+          "5409.4",
+          "5,175.4",
+          "7,561.4",
+          "9,015.5",
+          "4,355.8",
+          "8,167.3"
+        ],
+        [
+          "6126.0",
+          "5809.0",
+          "5,135.0",
+          "11,215.0",
+          "13,136.0",
+          "9,519.0",
+          "16,654.0"
+        ],
+        [
+          "110763.0",
+          "117282.0",
+          "183,137.0",
+          "143,570.0",
+          "178,355.0",
+          "118,768.0",
+          "168,788.5"
+        ],
+        [
+          "23633.0",
+          "35338.5",
+          "24,162.5",
+          "42,214.0",
+          "37,896.8",
+          "23,083.0",
+          "55,105.0"
+        ],
+        [
+          "12149.4",
+          "58044.2",
+          "70,171.8",
+          "60,813.3",
+          "110,626.5",
+          "24,950.1",
+          "111,185.2"
+        ],
+        [
+          "-6.6",
+          "-5.5",
+          "4.8",
+          "0.1",
+          "-3.8",
+          "-1.8",
+          "-0.3"
+        ],
+        [
+          "729.0",
+          "1211.8",
+          "2,155.0",
+          "2,258.2",
+          "2,259.3",
+          "1,129.2",
+          "2,125.9"
+        ],
+        [
+          "-4.9",
+          "15.5",
+          "30.2",
+          "46.4",
+          "9.1",
+          "7.7",
+          "31.3"
+        ],
+        [
+          "30.8",
+          "33.3",
+          "32.9",
+          "0.0",
+          "33.6",
+          "32.0",
+          "34.0"
+        ],
+        [
+          "797.4",
+          "1683.3",
+          "3,421.6",
+          "4,672.8",
+          "3,938.2",
+          "583.6",
+          "9,590.5"
+        ],
+        [
+          "8777.4",
+          "14840.8",
+          "49,097.4",
+          "15,718.4",
+          "28,841.0",
+          "15,107.9",
+          "70,354.6"
+        ],
+        [
+          "473.0",
+          "412.0",
+          "330.5",
+          "588.0",
+          "681.0",
+          "443.5",
+          "1,419.3"
+        ],
+        [
+          "20437.8",
+          "20130.2",
+          "27,153.9",
+          "20,818.2",
+          "33,860.9",
+          "5,053.1",
+          "55,887.4"
+        ],
+        [
+          "-1.9",
+          "-2.7",
+          "0.3",
+          "0.5",
+          "1.3",
+          "-2.1",
+          "1.1"
+        ],
+        [
+          "7259.0",
+          "12992.0",
+          "14,492.0",
+          "14,854.0",
+          "12,909.0",
+          "12,117.0",
+          "14,637.5"
+        ],
+        [
+          "8422.3",
+          "7920.5",
+          "10,263.1",
+          "11,451.9",
+          "9,885.9",
+          "9,061.9",
+          "8,741.5"
+        ],
+        [
+          "26059.0",
+          "29710.0",
+          "43,470.0",
+          "34,294.0",
+          "43,009.0",
+          "34,099.0",
+          "52,181.0"
+        ],
+        [
+          "0.0",
+          "0.0",
+          "0.0",
+          "0.0",
+          "367.0",
+          "0.0",
+          "384.0"
+        ],
+        [
+          "3085.6",
+          "2711.4",
+          "4,751.2",
+          "6,283.5",
+          "3,769.2",
+          "2,501.6",
+          "5,380.4"
+        ],
+        [
+          "8207.8",
+          "10616.0",
+          "13,439.4",
+          "11,971.1",
+          "12,983.6",
+          "8,332.4",
+          "13,136.0"
+        ],
+        [
+          "8485.2",
+          "12252.5",
+          "32,808.3",
+          "23,092.2",
+          "34,775.0",
+          "16,974.3",
+          "108,528.6"
+        ],
+        [
+          "-286.1",
+          "-29.9",
+          "0.0",
+          "0.0",
+          "-2.1",
+          "-18.2",
+          "0.0"
+        ],
+        [
+          "19.5",
+          "20.9",
+          "20.7",
+          "21.0",
+          "20.8",
+          "21.0",
+          "20.9"
+        ],
+        [
+          "146.7",
+          "129.7",
+          "200.0",
+          "103.0",
+          "15,172.9",
+          "3,966.0",
+          "4,234.0"
+        ],
+        [
+          "13117.3",
+          "15088.5",
+          "18,802.8",
+          "19,220.3",
+          "16,956.0",
+          "15,276.3",
+          "33,817.5"
+        ],
+        [
+          "39544.0",
+          "44127.0",
+          "62,785.0",
+          "69,524.0",
+          "63,366.0",
+          "41,681.0",
+          "62,041.0"
+        ],
+        [
+          "63.9",
+          "65.1",
+          "58.6",
+          "65.3",
+          "54.2",
+          "53.5",
+          "61.4"
+        ],
+        [
+          "5860.6",
+          "16452.7",
+          "44,417.4",
+          "50,254.2",
+          "4,754.4",
+          "2,495.4",
+          "15,898.9"
+        ],
+        [
+          "-13062.3",
+          "-9021.8",
+          "-9,900.5",
+          "-8,857.4",
+          "-14,959.8",
+          "-16,307.3",
+          "-12,957.8"
+        ],
+        [
+          "3482.8",
+          "3067.8",
+          "1,710.8",
+          "2,250.8",
+          "5,643.1",
+          "3,204.5",
+          "3,560.3"
+        ],
+        [
+          "1692.3",
+          "2525.5",
+          "7,696.9",
+          "6,427.3",
+          "6,869.1",
+          "2,145.5",
+          "18,789.0"
+        ],
+        [
+          "54282.0",
+          "60142.0",
+          "56,641.0",
+          "89,238.0",
+          "69,306.5",
+          "34,504.5",
+          "127,029.0"
+        ],
+        [
+          "-5.6",
+          "-2.9",
+          "2.1",
+          "4.4",
+          "6.2",
+          "-3.3",
+          "9.7"
+        ],
+        [
+          "12.2",
+          "-22.8",
+          "0.0",
+          "5.1",
+          "23.6",
+          "0.0",
+          "-0.0"
+        ],
+        [
+          "4870.0",
+          "8339.0",
+          "11,448.0",
+          "11,666.0",
+          "7,875.0",
+          "6,157.0",
+          "12,926.0"
+        ],
+        [
+          "68.1",
+          "218.4",
+          "87.2",
+          "211.4",
+          "249.4",
+          "231.6",
+          "241.0"
+        ],
+        [
+          "163.0",
+          "98.0",
+          "863.0",
+          "497.0",
+          "1,107.0",
+          "0.0",
+          "5.5"
+        ],
+        [
+          "196760.4",
+          "309941.9",
+          "406,420.4",
+          "98,209.5",
+          "478,646.7",
+          "270,444.6",
+          "533,936.5"
+        ],
+        [
+          "2704.0",
+          "7492.0",
+          "10,373.0",
+          "7,855.0",
+          "15,994.5",
+          "5,432.0",
+          "17,862.5"
+        ],
+        [
+          "18089.9",
+          "11712.6",
+          "16,451.7",
+          "49,622.1",
+          "16,608.6",
+          "9,570.1",
+          "102,557.0"
+        ],
+        [
+          "5363.0",
+          "10163.0",
+          "13,490.0",
+          "12,944.0",
+          "18,347.5",
+          "9,390.0",
+          "22,209.5"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "(R_{t+1}+\\gamma_{t+1}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+1},a^{\\prime})-q_{\\theta}(S_{t},A_{t}))^{2}\\ ,",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "(R_{t+1}+\\gamma_{t+1}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+1},a^{\\prime})-q_{\\theta}(S_{t},A_{t}))^{2}\\ ,",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "(R_{t+1}+\\gamma_{t+1}q_{\\overline{\\theta}}(S_{t+1},\\operatorname*{\\arg\\!\\max}_{a^{\\prime}}q_{\\theta}(S_{t+1},a^{\\prime}))-q_{\\theta}(S_{t},A_{t}))^{2}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "(R_{t+1}+\\gamma_{t+1}q_{\\overline{\\theta}}(S_{t+1},\\operatorname*{\\arg\\!\\max}_{a^{\\prime}}q_{\\theta}(S_{t+1},a^{\\prime}))-q_{\\theta}(S_{t},A_{t}))^{2}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p_{t}\\propto\\left|R_{t+1}+\\gamma_{t+1}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+1},a^{\\prime})-q_{\\theta}(S_{t},A_{t})\\right|^{\\omega}\\,,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p_{t}\\propto\\left|R_{t+1}+\\gamma_{t+1}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+1},a^{\\prime})-q_{\\theta}(S_{t},A_{t})\\right|^{\\omega}\\,,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "q_{\\theta}(s,a)=v_{\\eta}(f_{\\xi}(s))+a_{\\psi}(f_{\\xi}(s),a)-\\frac{\\sum_{a^{\\prime}}a_{\\psi}(f_{\\xi}(s),a^{\\prime})}{N_{\\text{actions}}},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "q_{\\theta}(s,a)=v_{\\eta}(f_{\\xi}(s))+a_{\\psi}(f_{\\xi}(s),a)-\\frac{\\sum_{a^{\\prime}}a_{\\psi}(f_{\\xi}(s),a^{\\prime})}{N_{\\text{actions}}},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "R_{t}^{(n)}\\equiv\\sum_{k=0}^{n-1}{\\gamma_{t}^{(k)}R_{t+k+1}}\\,.",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "R_{t}^{(n)}\\equiv\\sum_{k=0}^{n-1}{\\gamma_{t}^{(k)}R_{t+k+1}}\\,.",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "(R_{t}^{(n)}+\\gamma_{t}^{(n)}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+n},a^{\\prime})-q_{\\theta}(S_{t},A_{t}))^{2}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "(R_{t}^{(n)}+\\gamma_{t}^{(n)}\\max_{a^{\\prime}}q_{\\overline{\\theta}}(S_{t+n},a^{\\prime})-q_{\\theta}(S_{t},A_{t}))^{2}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "D_{\\text{KL}}(\\Phi_{\\bm{z}}d^{\\prime}_{t}||d_{t})\\,.",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "D_{\\text{KL}}(\\Phi_{\\bm{z}}d^{\\prime}_{t}||d_{t})\\,.",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\bm{y}=(\\bm{b}+\\textbf{W}\\bm{x})+(\\bm{b}_{noisy}\\odot\\epsilon^{b}+(\\textbf{W}_{noisy}\\odot\\epsilon^{w})\\bm{x}),",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\bm{y}=(\\bm{b}+\\textbf{W}\\bm{x})+(\\bm{b}_{noisy}\\odot\\epsilon^{b}+(\\textbf{W}_{noisy}\\odot\\epsilon^{w})\\bm{x}),",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "D_{\\text{KL}}(\\Phi_{\\bm{z}}d_{t}^{(n)}||d_{t})\\,,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "D_{\\text{KL}}(\\Phi_{\\bm{z}}d_{t}^{(n)}||d_{t})\\,,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p_{t}\\propto\\left(D_{\\text{KL}}(\\Phi_{\\bm{z}}d_{t}^{(n)}||d_{t})\\right)^{\\omega}\\,.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p_{t}\\propto\\left(D_{\\text{KL}}(\\Phi_{\\bm{z}}d_{t}^{(n)}||d_{t})\\right)^{\\omega}\\,.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p^{i}_{\\theta}(s,a)=\\frac{\\exp(v^{i}_{\\eta}(\\phi)+a^{i}_{\\psi}(\\phi,a)-\\overline{a}^{i}_{\\psi}(s))}{\\sum_{j}\\exp(v^{j}_{\\eta}(\\phi)+a^{j}_{\\psi}(\\phi,a)-\\overline{a}^{j}_{\\psi}(s))}\\,,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "p^{i}_{\\theta}(s,a)=\\frac{\\exp(v^{i}_{\\eta}(\\phi)+a^{i}_{\\psi}(\\phi,a)-\\overline{a}^{i}_{\\psi}(s))}{\\sum_{j}\\exp(v^{j}_{\\eta}(\\phi)+a^{j}_{\\psi}(\\phi,a)-\\overline{a}^{j}_{\\psi}(s))}\\,,",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "[Bellemare et al. 2013] Bellemare, M. G.; Naddaf, Y.; Veness, J.; and Bowling, M. 2013. The arcade learning environment: An evaluation platform for general agents. J. Artif. Intell. Res. (JAIR) 47:253–279.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Bellemare et al. 2013]"
+    },
+    {
+      "raw_text": "[Bellemare et al. 2016] Bellemare, M. G.; Srinivasan, S.; Ostrovski, G.; Schaul, T.; Saxton, D.; and Munos, R. 2016. Unifying count-based exploration and intrinsic motivation. In NIPS.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Bellemare et al. 2016]"
+    },
+    {
+      "raw_text": "[Bellemare, Dabney, and Munos 2017] Bellemare, M. G.; Dabney, W.; and Munos, R. 2017. A distributional perspective on reinforcement learning. In ICML.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Bellemare, Dabney, and Munos 2017]"
+    },
+    {
+      "raw_text": "[Blundell et al. 2016] Blundell, C.; Uria, B.; Pritzel, A.; Li, Y.; Ruderman, A.; Leibo, J. Z.; Rae, J.; Wierstra, D.; and Hassabis, D. 2016. Model-Free Episodic Control. ArXiv e-prints.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Blundell et al. 2016]"
+    },
+    {
+      "raw_text": "[Dosovitskiy and Koltun 2016] Dosovitskiy, A., and Koltun, V. 2016. Learning to act by predicting the future. CoRR abs/1611.01779.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1611.01779",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Dosovitskiy and Koltun 2016]"
+    },
+    {
+      "raw_text": "[Fortunato et al. 2017] Fortunato, M.; Azar, M. G.; Piot, B.; Menick, J.; Osband, I.; Graves, A.; Mnih, V.; Munos, R.; Hassabis, D.; Pietquin, O.; Blundell, C.; and Legg, S. 2017. Noisy networks for exploration. CoRR abs/1706.10295.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": "1706.10295",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Fortunato et al. 2017]"
+    },
+    {
+      "raw_text": "[Hausknecht and Stone 2015] Hausknecht, M., and Stone, P. 2015. Deep recurrent Q-learning for partially observable MDPs. arXiv preprint arXiv:1507.06527.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1507.06527",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Hausknecht and Stone 2015]"
+    },
+    {
+      "raw_text": "[He et al. 2016] He, F. S.; Liu, Y.; Schwing, A. G.; and Peng, J. 2016. Learning to play in a day: Faster deep reinforcement learning by optimality tightening. CoRR abs/1611.01606.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1611.01606",
+      "doi": null,
+      "url": null,
+      "citation_key": "[He et al. 2016]"
+    },
+    {
+      "raw_text": "[Jaderberg et al. 2016] Jaderberg, M.; Mnih, V.; Czarnecki, W. M.; Schaul, T.; Leibo, J. Z.; Silver, D.; and Kavukcuoglu, K. 2016. Reinforcement learning with unsupervised auxiliary tasks. CoRR abs/1611.05397.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1611.05397",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Jaderberg et al. 2016]"
+    },
+    {
+      "raw_text": "[Kingma and Ba 2014] Kingma, D. P., and Ba, J. 2014. Adam: A method for stochastic optimization. In Proceedings of the 3rd International Conference on Learning Representations (ICLR).",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Kingma and Ba 2014]"
+    },
+    {
+      "raw_text": "[Kulkarni et al. 2016a] Kulkarni, T. D.; Narasimhan, K.; Saeedi, A.; and Tenenbaum, J. B. 2016a. Hierarchical deep reinforcement learning: Integrating temporal abstraction and intrinsic motivation. CoRR abs/1604.06057.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1604.06057",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Kulkarni et al. 2016a]"
+    },
+    {
+      "raw_text": "[Kulkarni et al. 2016b] Kulkarni, T. D.; Saeedi, A.; Gautam, S.; and Gershman, S. J. 2016b. Deep successor reinforcement learning. arXiv preprint arXiv:1606.02396.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1606.02396",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Kulkarni et al. 2016b]"
+    },
+    {
+      "raw_text": "[Lin 1992] Lin, L.-J. 1992. Self-improving reactive agents based on reinforcement learning, planning and teaching. Machine Learning 8(3):293–321.",
+      "title": null,
+      "authors": [],
+      "year": "1992",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Lin 1992]"
+    },
+    {
+      "raw_text": "[Mnih et al. 2013] Mnih, V.; Kavukcuoglu, K.; Silver, D.; Graves, A.; Antonoglou, I.; Wierstra, D.; and Riedmiller, M. A. 2013. Playing atari with deep reinforcement learning. CoRR abs/1312.5602.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1312.5602",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Mnih et al. 2013]"
+    },
+    {
+      "raw_text": "[Mnih et al. 2015] Mnih, V.; Kavukcuoglu, K.; Silver, D.; Rusu, A. A.; Veness, J.; Bellemare, M. G.; Graves, A.; Riedmiller, M.; Fidjeland, A. K.; Ostrovski, G.; Petersen, S.; Beattie, C.; Sadik, A.; Antonoglou, I.; King, H.; Kumaran, D.; Wierstra, D.; Legg, S.; and Hassabis, D. 2015. Human-level control through deep reinforcement learning. Nature 518(7540):529–533.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Mnih et al. 2015]"
+    },
+    {
+      "raw_text": "[Mnih et al. 2016] Mnih, V.; Badia, A. P.; Mirza, M.; Graves, A.; Lillicrap, T.; Harley, T.; Silver, D.; and Kavukcuoglu, K. 2016. Asynchronous methods for deep reinforcement learning. In International Conference on Machine Learning.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Mnih et al. 2016]"
+    },
+    {
+      "raw_text": "[Nair et al. 2015] Nair, A.; Srinivasan, P.; Blackwell, S.; Alcicek, C.; Fearon, R.; De Maria, A.; Panneershelvam, V.; Suleyman, M.; Beattie, C.; Petersen, S.; Legg, S.; Mnih, V.; Kavukcuoglu, K.; and Silver, D. 2015. Massively parallel methods for deep reinforcement learning. arXiv preprint arXiv:1507.04296.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1507.04296",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Nair et al. 2015]"
+    },
+    {
+      "raw_text": "[O’Donoghue et al. 2016] O’Donoghue, B.; Munos, R.; Kavukcuoglu, K.; and Mnih, V. 2016. Pgq: Combining policy gradient and q-learning. CoRR abs/1611.01626.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1611.01626",
+      "doi": null,
+      "url": null,
+      "citation_key": "[O’Donoghue et al. 2016]"
+    },
+    {
+      "raw_text": "[Osband et al. 2016] Osband, I.; Blundell, C.; Pritzel, A.; and Roy, B. V. 2016. Deep exploration via bootstrapped dqn. In NIPS.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Osband et al. 2016]"
+    },
+    {
+      "raw_text": "[Salimans et al. 2017] Salimans, T.; Ho, J.; Chen, X.; and Sutskever, I. 2017. Evolution strategies as a scalable alternative to reinforcement learning. CoRR abs/1703.03864.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": "1703.03864",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Salimans et al. 2017]"
+    },
+    {
+      "raw_text": "[Schaul et al. 2015] Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay. In Proc. of ICLR.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Schaul et al. 2015]"
+    },
+    {
+      "raw_text": "[Schulman et al. 2015] Schulman, J.; Levine, S.; Moritz, P.; Jordan, M.; and Abbeel, P. 2015. Trust region policy optimization. In Proceedings of the 32Nd International Conference on International Conference on Machine Learning - Volume 37, ICML’15, 1889–1897. JMLR.org.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Schulman et al. 2015]"
+    },
+    {
+      "raw_text": "[Sharma, Lakshminarayanan, and Ravindran 2017] Sharma, S.; Lakshminarayanan, A. S.; and Ravindran, B. 2017. Learning to repeat: Fine grained action repetition for deep reinforcement learning. arXiv preprint arXiv:1702.06054.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": "1702.06054",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Sharma, Lakshminarayanan, and Ravindran 2017]"
+    },
+    {
+      "raw_text": "[Stadie, Levine, and Abbeel 2015] Stadie, B. C.; Levine, S.; and Abbeel, P. 2015. Incentivizing exploration in reinforcement learning with deep predictive models. CoRR abs/1507.00814.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1507.00814",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Stadie, Levine, and Abbeel 2015]"
+    },
+    {
+      "raw_text": "[Sutton and Barto 1998] Sutton, R. S., and Barto, A. G. 1998. Reinforcement Learning: An Introduction. The MIT press, Cambridge MA.",
+      "title": null,
+      "authors": [],
+      "year": "1998",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Sutton and Barto 1998]"
+    },
+    {
+      "raw_text": "[Sutton 1988] Sutton, R. S. 1988. Learning to predict by the methods of temporal differences. Machine learning 3(1):9–44.",
+      "title": null,
+      "authors": [],
+      "year": "1988",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Sutton 1988]"
+    },
+    {
+      "raw_text": "[Tieleman and Hinton 2012] Tieleman, T., and Hinton, G. 2012. Lecture 6.5-rmsprop: Divide the gradient by a running average of its recent magnitude. COURSERA: Neural networks for machine learning 4(2):26–31.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Tieleman and Hinton 2012]"
+    },
+    {
+      "raw_text": "[van Hasselt et al. 2016] van Hasselt, H.; Guez, A.; Guez, A.; Hessel, M.; Mnih, V.; and Silver, D. 2016. Learning values across many orders of magnitude. In Advances in Neural Information Processing Systems 29, 4287–4295.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[van Hasselt et al. 2016]"
+    },
+    {
+      "raw_text": "[van Hasselt, Guez, and Silver 2016] van Hasselt, H.; Guez, A.; and Silver, D. 2016. Deep reinforcement learning with double Q-learning. In Proc. of AAAI, 2094–2100.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[van Hasselt, Guez, and Silver 2016]"
+    },
+    {
+      "raw_text": "[van Hasselt 2010] van Hasselt, H. 2010. Double Q-learning. In Advances in Neural Information Processing Systems 23, 2613–2621.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[van Hasselt 2010]"
+    },
+    {
+      "raw_text": "[Vezhnevets et al. 2017] Vezhnevets, A. S.; Osindero, S.; Schaul, T.; Heess, N.; Jaderberg, M.; Silver, D.; and Kavukcuoglu, K. 2017. Feudal networks for hierarchical reinforcement learning. CoRR abs/1703.01161.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": "1703.01161",
+      "doi": null,
+      "url": null,
+      "citation_key": "[Vezhnevets et al. 2017]"
+    },
+    {
+      "raw_text": "[Wang et al. 2016] Wang, Z.; Schaul, T.; Hessel, M.; van Hasselt, H.; Lanctot, M.; and de Freitas, N. 2016. Dueling network architectures for deep reinforcement learning. In Proceedings of The 33rd International Conference on Machine Learning, 1995–2003.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[Wang et al. 2016]"
+    }
+  ],
+  "full_text": "## Introduction\n\nThe many recent successes in scaling reinforcement learning (RL) to complex sequential decision-making problems were kick-started by the Deep Q-Networks algorithm (DQN; ? ?, ?). Its combination of Q-learning with convolutional neural networks and experience replay enabled it to learn, from raw pixels, how to play many Atari games at human-level performance. Since then, many extensions have been proposed that enhance its speed or stability.\n\nDouble DQN (DDQN; ? ?) addresses an overestimation bias of Q-learning (?), by decoupling selection and evaluation of the bootstrap action. Prioritized experience replay (?) improves data efficiency, by replaying more often transitions from which there is more to learn. The dueling network architecture (?) helps to generalize across actions by separately representing state values and action advantages. Learning from multi-step bootstrap targets (?; ?), as used in A3C (?), shifts the bias-variance trade-off and helps to propagate newly observed rewards faster to earlier visited states. Distributional Q-learning (?) learns a categorical distribution of discounted returns, instead of estimating the mean. Noisy DQN (?) uses stochastic network layers for exploration. This list is, of course, far from exhaustive.\n\nEach of these algorithms enables substantial performance improvements in isolation. Since they do so by addressing radically different issues, and since they build on a shared framework, they could plausibly be combined. In some cases this has been done: Prioritized DDQN and Dueling DDQN both use double Q-learning, and Dueling DDQN was also combined with prioritized experience replay. In this paper we propose to study an agent that combines all the aforementioned ingredients. We show how these different ideas can be integrated, and that they are indeed largely complementary. In fact, their combination results in new state-of-the-art results on the benchmark suite of 57 Atari 2600 games from the Arcade Learning Environment (?), both in terms of data efficiency and of final performance. Finally we show results from ablation studies to help understand the contributions of the different components.\n\n## Background\n\nReinforcement learning addresses the problem of an agent learning to act in an environment in order to maximize a scalar reward signal. No direct supervision is provided to the agent, for instance it is never directly told the best action.\n\n## Extensions to DQN\n\nDQN has been an important milestone, but several limitations of this algorithm are now known, and many extensions have been proposed. We propose a selection of six extensions that each have addressed a limitation and improved overall performance. To keep the size of the selection manageable, we picked a set of extensions that address distinct concerns (e.g., just one of the many addressing exploration).\n\n## The Integrated Agent\n\nIn this paper we integrate all the aforementioned components into a single integrated agent, which we call Rainbow.\n\nFirst, we replace the 1-step distributional loss (3) with a multi-step variant. We construct the target distribution by contracting the value distribution in St+nsubscriptStnS_{t+n} according to the cumulative discount, and shifting it by the truncated nnn-step discounted return. This corresponds to defining the target distribution as dt(n)=(Rt(n)+γt(n)​z,pθ ̄​(St+n,at+n∗))subscriptsuperscriptdntsubscriptsuperscriptRntsuperscriptsubscriptγtnzsubscriptp ̄θsubscriptStnsubscriptsuperscriptatnd^{(n)}_{t}=(R^{(n)}_{t}+\\gamma_{t}^{(n)}\\bm{z},~{}~{}\\bm{p}_{\\overline{\\theta}}(S_{t+n},a^{*}_{t+n})). The resulting loss is\n\nwhere, again, ΦzsubscriptΦz\\Phi_{\\bm{z}} is the projection onto zz\\bm{z}.\n\nWe combine the multi-step distributional loss with double Q-learning by using the greedy action in St+nsubscriptStnS_{t+n} selected according to the online network as the bootstrap action at+n∗subscriptsuperscriptatna^{*}_{t+n}, and evaluating such action using the target network.\n\nIn standard proportional prioritized replay (?) the absolute TD error is used to prioritize the transitions. This can be computed in the distributional setting, using the mean action values. However, in our experiments all distributional Rainbow variants prioritize transitions by the KL loss, since this is what the algorithm is minimizing:\n\nThe KL loss as priority might be more robust to noisy stochastic environments because the loss can continue to decrease even when the returns are not deterministic.\n\nThe network architecture is a dueling network architecture adapted for use with return distributions. The network has a shared representation fξ​(s)subscriptfξsf_{\\xi}(s), which is then fed into a value stream vηsubscriptvηv_{\\eta} with NatomssubscriptNatomsN_{\\text{atoms}} outputs, and into an advantage stream aξsubscriptaξa_{\\xi} with Natoms×NactionssubscriptNatomssubscriptNactionsN_{\\text{atoms}}\\times N_{\\text{actions}} outputs, where aξi​(fξ​(s),a)subscriptsuperscriptaiξsubscriptfξsaa^{i}_{\\xi}(f_{\\xi}(s),a) will denote the output corresponding to atom iii and action aaa. For each atom zisuperscriptziz^{i}, the value and advantage streams are aggregated, as in dueling DQN, and then passed through a softmax layer to obtain the normalised parametric distributions used to estimate the returns’ distributions:\n\nwhere φ=fξ​(s)italic-φsubscriptfξs\\phi=f_{\\xi}(s) and a ̄ψi​(s)=1Nactions​∑a′aψi​(φ,a′)subscriptsuperscript ̄aiψs1subscriptNactionssubscriptsuperscripta′subscriptsuperscriptaiψitalic-φsuperscripta′\\overline{a}^{i}_{\\psi}(s)=\\frac{1}{N_{\\text{actions}}}\\sum_{a^{\\prime}}a^{i}_{\\psi}(\\phi,a^{\\prime}).\n\nWe then replace all linear layers with their noisy equivalent described in Equation (4). Within these noisy linear layers we use factorised Gaussian noise (?) to reduce the number of independent noise variables.\n\n## Experimental Methods\n\nWe now describe the methods and setup used for configuring and evaluating the learning agents.\n\n## Analysis\n\nIn this section we analyse the main experimental results. First, we show that Rainbow compares favorably to several published agents. Then we perform ablation studies, comparing several variants of the agent, each corresponding to removing a single component from Rainbow.\n\n## Discussion\n\nWe have demonstrated that several improvements to DQN can be successfully integrated into a single learning algorithm that achieves state-of-the-art performance. Moreover, we have shown that within the integrated algorithm, all but one of the components provided clear performance benefits. There are many more algorithmic components that we were not able to include, which would be promising candidates for further experiments on integrated agents. Among the many possible candidates, we discuss several below.\n\nWe have focused here on value-based methods in the Q-learning family. We have not considered purely policy-based RL algorithms such as trust-region policy optimisation (?), nor actor-critic methods (?; ?).\n\nA number of algorithms exploit a sequence of data to achieve improved learning efficiency. Optimality tightening (?) uses multi-step returns to construct additional inequality bounds, instead of using them to replace the 1-step targets used in Q-learning. Eligibility traces allow a soft combination over n-step returns (?). However, sequential methods all leverage more computation per gradient than the multi-step targets used in Rainbow. Furthermore, introducing prioritized sequence replay raises questions of how to store, replay and prioritise sequences.\n\nEpisodic control (?) also focuses on data efficiency, and was shown to be very effective in some domains. It improves early learning by using episodic memory as a complementary learning system, capable of immediately re-enacting successful action sequences.\n\nBesides Noisy Nets, numerous other exploration methods could also be useful algorithmic ingredients: among these Bootstrapped DQN (?), intrinsic motivation (?) and count-based exploration (?). Integration of these alternative components is fruitful subject for further research.\n\nIn this paper we have focused on the core learning updates, without exploring alternative computational architectures. Asynchronous learning from parallel copies of the environment, as in A3C (?), Gorila (?), or Evolution Strategies (?), can be effective in speeding up learning, at least in terms of wall-clock time. Note, however, they can be less data efficient.\n\nHierarchical RL has also been applied with success to several complex Atari games. Among successful applications of HRL we highlight h-DQN (?) and Feudal Networks (?).\n\nThe state representation could also be made more efficient by exploiting auxiliary tasks such as pixel control or feature control (?), supervised predictions (?) or successor features (?).\n\nTo evaluate Rainbow fairly against the baselines, we have followed the common domain modifications of clipping rewards, fixed action-repetition, and frame-stacking, but these might be removed by other learning algorithm improvements. Pop-Art normalization (?) allows reward clipping to be removed, while preserving a similar level of performance. Fine-grained action repetition (?) enabled to learn how to repeat actions. A recurrent state network (?) can learn a temporal state representation, replacing the fixed stack of observation frames. In general, we believe that exposing the real game to the agent is a promising direction for future research.\n",
+  "extracted_at": "2026-01-02T20:12:19.563044"
+}

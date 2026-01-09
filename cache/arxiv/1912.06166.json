@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "1912.06166v3",
+  "title": "ABOUT ML: Annotation and Benchmarking on Understanding and Transparency of Machine Learning Lifecycles",
+  "authors": [
+    "Inioluwa Deborah Raji",
+    "Jingying Yang"
+  ],
+  "abstract": "We present the \"Annotation and Benchmarking on Understanding and Transparency of Machine Learning Lifecycles\" (ABOUT ML) project as an initiative to operationalize ML transparency and work towards a standard ML documentation practice. We make the case for the project's relevance and effectiveness in consolidating disparate efforts across a variety of stakeholders, as well as bringing in the perspectives of currently missing voices that will be valuable in shaping future conversations. We describe the details of the initiative and the gaps we hope this project will help address.",
+  "categories": [
+    "cs.CY",
+    "stat.ML"
+  ],
+  "primary_category": "cs.CY",
+  "published": "2019-12-12T19:23:04+00:00",
+  "updated": "2020-01-08T04:10:52+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Presented at Human-Centric Machine Learning workshop at Neural Information Processing Systems conference 2019; equal contribution from authors, Jingying Yang is the current program lead for the ABOUT ML project at Partnership on AI, more details can be found about the project at https://www.partnershiponai.org/about-ml/",
+  "pdf_url": "https://arxiv.org/pdf/1912.06166v3.pdf"
+}

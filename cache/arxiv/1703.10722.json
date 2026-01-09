@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "1703.10722v3",
+  "title": "Factorization tricks for LSTM networks",
+  "authors": [
+    "Oleksii Kuchaiev",
+    "Boris Ginsburg"
+  ],
+  "abstract": "We present two simple ways of reducing the number of parameters and accelerating the training of large Long Short-Term Memory (LSTM) networks: the first one is \"matrix factorization by design\" of LSTM matrix into the product of two smaller matrices, and the second one is partitioning of LSTM matrix, its inputs and states into the independent groups. Both approaches allow us to train large LSTM networks significantly faster to the near state-of the art perplexity while using significantly less RNN parameters.",
+  "categories": [
+    "cs.CL",
+    "cs.NE",
+    "stat.ML"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2017-03-31T00:50:37+00:00",
+  "updated": "2018-02-24T22:04:52+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "accepted to ICLR 2017 Workshop",
+  "pdf_url": "https://arxiv.org/pdf/1703.10722v3.pdf"
+}

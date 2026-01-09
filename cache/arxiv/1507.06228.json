@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "1507.06228v2",
+  "title": "Training Very Deep Networks",
+  "authors": [
+    "Rupesh Kumar Srivastava",
+    "Klaus Greff",
+    "Jürgen Schmidhuber"
+  ],
+  "abstract": "Theoretical and empirical evidence indicates that the depth of neural networks is crucial for their success. However, training becomes more difficult as depth increases, and training of very deep networks remains an open problem. Here we introduce a new architecture designed to overcome this. Our so-called highway networks allow unimpeded information flow across many layers on information highways. They are inspired by Long Short-Term Memory recurrent networks and use adaptive gating units to regulate the information flow. Even with hundreds of layers, highway networks can be trained directly through simple gradient descent. This enables the study of extremely deep and efficient architectures.",
+  "categories": [
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2015-07-22T15:29:14+00:00",
+  "updated": "2015-11-23T16:25:30+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "11 pages. Extends arXiv:1505.00387. Project webpage is at http://people.idsia.ch/~rupesh/very_deep_learning/. in Advances in Neural Information Processing Systems 2015",
+  "pdf_url": "https://arxiv.org/pdf/1507.06228v2.pdf"
+}

@@ -1,0 +1,18 @@
+{
+  "arxiv_id": "1609.04747v2",
+  "title": "An overview of gradient descent optimization algorithms",
+  "authors": [
+    "Sebastian Ruder"
+  ],
+  "abstract": "Gradient descent optimization algorithms, while increasingly popular, are often used as black-box optimizers, as practical explanations of their strengths and weaknesses are hard to come by. This article aims to provide the reader with intuitions with regard to the behaviour of different algorithms that will allow her to put them to use. In the course of this overview, we look at different variants of gradient descent, summarize challenges, introduce the most common optimization algorithms, review architectures in a parallel and distributed setting, and investigate additional strategies for optimizing gradient descent.",
+  "categories": [
+    "cs.LG"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2016-09-15T17:32:34+00:00",
+  "updated": "2017-06-15T13:21:04+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Added derivations of AdaMax and Nadam",
+  "pdf_url": "https://arxiv.org/pdf/1609.04747v2.pdf"
+}

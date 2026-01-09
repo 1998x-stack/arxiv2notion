@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "1805.12471v3",
+  "title": "Neural Network Acceptability Judgments",
+  "authors": [
+    "Alex Warstadt",
+    "Amanpreet Singh",
+    "Samuel R. Bowman"
+  ],
+  "abstract": "This paper investigates the ability of artificial neural networks to judge the grammatical acceptability of a sentence, with the goal of testing their linguistic competence. We introduce the Corpus of Linguistic Acceptability (CoLA), a set of 10,657 English sentences labeled as grammatical or ungrammatical from published linguistics literature. As baselines, we train several recurrent neural network models on acceptability classification, and find that our models outperform unsupervised models by Lau et al (2016) on CoLA. Error-analysis on specific grammatical phenomena reveals that both Lau et al.'s models and ours learn systematic generalizations like subject-verb-object order. However, all models we test perform far below human level on a wide range of grammatical constructions.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2018-05-31T13:52:06+00:00",
+  "updated": "2019-10-01T18:41:05+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1805.12471v3.pdf"
+}

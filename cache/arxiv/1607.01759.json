@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "1607.01759v3",
+  "title": "Bag of Tricks for Efficient Text Classification",
+  "authors": [
+    "Armand Joulin",
+    "Edouard Grave",
+    "Piotr Bojanowski",
+    "Tomas Mikolov"
+  ],
+  "abstract": "This paper explores a simple and efficient baseline for text classification. Our experiments show that our fast text classifier fastText is often on par with deep learning classifiers in terms of accuracy, and many orders of magnitude faster for training and evaluation. We can train fastText on more than one billion words in less than ten minutes using a standard multicore~CPU, and classify half a million sentences among~312K classes in less than a minute.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2016-07-06T19:40:15+00:00",
+  "updated": "2016-08-09T17:38:43+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1607.01759v3.pdf"
+}

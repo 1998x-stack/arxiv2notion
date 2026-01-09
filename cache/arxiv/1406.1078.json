@@ -1,0 +1,27 @@
+{
+  "arxiv_id": "1406.1078v3",
+  "title": "Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation",
+  "authors": [
+    "Kyunghyun Cho",
+    "Bart van Merrienboer",
+    "Caglar Gulcehre",
+    "Dzmitry Bahdanau",
+    "Fethi Bougares",
+    "Holger Schwenk",
+    "Yoshua Bengio"
+  ],
+  "abstract": "In this paper, we propose a novel neural network model called RNN Encoder-Decoder that consists of two recurrent neural networks (RNN). One RNN encodes a sequence of symbols into a fixed-length vector representation, and the other decodes the representation into another sequence of symbols. The encoder and decoder of the proposed model are jointly trained to maximize the conditional probability of a target sequence given a source sequence. The performance of a statistical machine translation system is empirically found to improve by using the conditional probabilities of phrase pairs computed by the RNN Encoder-Decoder as an additional feature in the existing log-linear model. Qualitatively, we show that the proposed model learns a semantically and syntactically meaningful representation of linguistic phrases.",
+  "categories": [
+    "cs.CL",
+    "cs.LG",
+    "cs.NE",
+    "stat.ML"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2014-06-03T17:47:08+00:00",
+  "updated": "2014-09-03T00:25:02+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "EMNLP 2014",
+  "pdf_url": "https://arxiv.org/pdf/1406.1078v3.pdf"
+}

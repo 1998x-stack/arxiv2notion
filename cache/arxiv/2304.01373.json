@@ -1,0 +1,30 @@
+{
+  "arxiv_id": "2304.01373v2",
+  "title": "Pythia: A Suite for Analyzing Large Language Models Across Training and Scaling",
+  "authors": [
+    "Stella Biderman",
+    "Hailey Schoelkopf",
+    "Quentin Anthony",
+    "Herbie Bradley",
+    "Kyle O'Brien",
+    "Eric Hallahan",
+    "Mohammad Aflah Khan",
+    "Shivanshu Purohit",
+    "USVSN Sai Prashanth",
+    "Edward Raff",
+    "Aviya Skowron",
+    "Lintang Sutawika",
+    "Oskar van der Wal"
+  ],
+  "abstract": "How do large language models (LLMs) develop and evolve over the course of training? How do these patterns change as models scale? To answer these questions, we introduce \\textit{Pythia}, a suite of 16 LLMs all trained on public data seen in the exact same order and ranging in size from 70M to 12B parameters. We provide public access to 154 checkpoints for each one of the 16 models, alongside tools to download and reconstruct their exact training dataloaders for further study. We intend \\textit{Pythia} to facilitate research in many areas, and we present several case studies including novel results in memorization, term frequency effects on few-shot performance, and reducing gender bias. We demonstrate that this highly controlled setup can be used to yield novel insights toward LLMs and their training dynamics. Trained models, analysis code, training code, and training data can be found at \\url{https://github.com/EleutherAI/pythia}.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2023-04-03T20:58:15+00:00",
+  "updated": "2023-05-31T17:54:07+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Code at https://github.com/EleutherAI/pythia",
+  "pdf_url": "https://arxiv.org/pdf/2304.01373v2.pdf"
+}

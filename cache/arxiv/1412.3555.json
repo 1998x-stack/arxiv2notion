@@ -1,0 +1,22 @@
+{
+  "arxiv_id": "1412.3555v1",
+  "title": "Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling",
+  "authors": [
+    "Junyoung Chung",
+    "Caglar Gulcehre",
+    "KyungHyun Cho",
+    "Yoshua Bengio"
+  ],
+  "abstract": "In this paper we compare different types of recurrent units in recurrent neural networks (RNNs). Especially, we focus on more sophisticated units that implement a gating mechanism, such as a long short-term memory (LSTM) unit and a recently proposed gated recurrent unit (GRU). We evaluate these recurrent units on the tasks of polyphonic music modeling and speech signal modeling. Our experiments revealed that these advanced recurrent units are indeed better than more traditional recurrent units such as tanh units. Also, we found GRU to be comparable to LSTM.",
+  "categories": [
+    "cs.NE",
+    "cs.LG"
+  ],
+  "primary_category": "cs.NE",
+  "published": "2014-12-11T06:46:53+00:00",
+  "updated": "2014-12-11T06:46:53+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Presented in NIPS 2014 Deep Learning and Representation Learning Workshop",
+  "pdf_url": "https://arxiv.org/pdf/1412.3555v1.pdf"
+}

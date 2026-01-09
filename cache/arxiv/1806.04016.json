@@ -1,0 +1,22 @@
+{
+  "arxiv_id": "1806.04016v1",
+  "title": "Baselines and a datasheet for the Cerema AWP dataset",
+  "authors": [
+    "Ismaïla Seck",
+    "Khouloud Dahmane",
+    "Pierre Duthon",
+    "Gaëlle Loosli"
+  ],
+  "abstract": "This paper presents the recently published Cerema AWP (Adverse Weather Pedestrian) dataset for various machine learning tasks and its exports in machine learning friendly format. We explain why this dataset can be interesting (mainly because it is a greatly controlled and fully annotated image dataset) and present baseline results for various tasks. Moreover, we decided to follow the very recent suggestions of datasheets for dataset, trying to standardize all the available information of the dataset, with a transparency objective.",
+  "categories": [
+    "cs.LG",
+    "stat.ML"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2018-06-11T14:22:48+00:00",
+  "updated": "2018-06-11T14:22:48+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Conférence d'Apprentissage CAp, Jun 2018, Rouen, France. 2018, Conférence d'Apprentissage Francophone 2018",
+  "pdf_url": "https://arxiv.org/pdf/1806.04016v1.pdf"
+}

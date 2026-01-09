@@ -1,0 +1,2579 @@
+{
+  "paper_id": "2306.01116",
+  "title": "The RefinedWeb Dataset for Falcon LLM: Outperforming Curated Corpora with Web Data, and Web Data Only",
+  "authors": [
+    "Guilherme Penedo",
+    "Quentin Malartic",
+    "Daniel Hesslow",
+    "Ruxandra Cojocaru",
+    "Alessandro Cappelli",
+    "Hamza Alobeidli",
+    "Baptiste Pannier",
+    "Ebtesam Almazrouei",
+    "Julien Launay"
+  ],
+  "affiliations": [],
+  "abstract": "Large language models are commonly trained on a mixture of filtered web data and curated “high-quality” corpora, such as social media conversations, books, or technical papers. This curation process is believed to be necessary to produce performant models with broad zero-shot generalization abilities. However, as larger models requiring pretraining on trillions of tokens are considered, it is unclear how scalable is curation and whether we will run out of unique high-quality data soon. At variance with previous beliefs, we show that properly filtered and deduplicated web data alone can lead to powerful models; even significantly outperforming models from the state-of-the-art trained on The Pile. Despite extensive filtering, the high-quality data we extract from the web is still plentiful, and we are able to obtain five trillion tokens from CommonCrawl. We publicly release an extract of 600 billion tokens from our RefinedWeb dataset, and 1.3/7.5B parameters language models trained on it***Details about how to access Falcon LLM open source is available on falconllm.tii.ae.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Progress in natural language processing is increasingly driven by sheer compute scale alone (Sevilla et al., 2022): as more compute is expended to train large language models (LLM), they gain and exhibit powerful emergent capabilities (Brown et al., 2020; Wei et al., 2022). To best benefit from scaling, recent scaling laws dictate that both model size and dataset size should jointly be increased (Hoffmann et al., 2022). This is at variance with earlier findings, which had argued that scaling should focus on model size first and foremost, with minimal data scaling (Kaplan et al., 2020).",
+        "This joint scaling paradigm raises significant challenges: although plentiful, text data is not infinite, especially so when considerations on data quality and licensing are taken into account–leading some researchers to argue scaling may soon be bottlenecked by data availability (Villalobos et al., 2022). Concretely, optimally training a GPT-3 sized model (175B parameters) would require no less than 3,500 billion tokens of text according to Hoffmann et al. (2022). This is twice as much as the largest pretraining datasets ever demonstrated (Hoffmann et al., 2022; Touvron et al., 2023), and ten times more than the largest publicly available English datasets such as OSCAR (Ortiz Suárez et al., 2019), C4 (Raffel et al., 2020), or The Pile (Gao et al., 2020).",
+        "Massively scaling-up pretraining data is made even more challenging by the fact LLMs are commonly trained using a mixture of web crawls and so-called “high-quality” data (Brown et al., 2020; Gao et al., 2020). Typical high-quality corpora include curated sources of books, technical documents, human-selected web pages, or social media conversations. The increased diversity and quality brought forth by these curated corpora is believed to be a key component of performant models (Scao et al., 2022b). Unfortunately, curation is labour intensive: typically, each source requires specialized processing, while yielding a limited amount of data. Furthermore, licensed sources raise legal challenges.",
+        "Nevertheless, most pretraining data is still sourced from massive web crawls which can be scaled up to trillions of tokens with limited human intervention. However, the quality of this data has traditionally been seen as (much) inferior to that of the manually curated data sources. Even finely processed sources of web data, such as C4 (Raffel et al., 2020) or OSCAR (Ortiz Suárez et al., 2019), are regarded as inferior to curated corpora for LLMs (Rae et al., 2021; Scao et al., 2022b), producing less performant models.",
+        "To sustain the ever-increasing data needs of larger and larger LLMs, and to streamline data pipelines and reduce the need for human-intensive curation, we propose to explore how web data can be better processed to significantly improve its quality, resulting in models as capable, if not more capable, than models trained on curated corpora."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Related works",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Macrodata Refinement and RefinedWeb",
+      "level": 2,
+      "paragraphs": [
+        "We introduce MDR (MacroData Refinement), a pipeline for filtering and deduplicating web data from CommonCrawl at very large scale. Using MDR, we produce RefinedWeb, an English pretraining dataset of five trillion tokens based on web data only. We leverage strict filtering and stringent deduplication to uplift the quality of web data, distilling it down to a corpus matching the quality of aggregated corpora used to train state-of-the-art models."
+      ],
+      "subsections": [
+        {
+          "title": "Document preparation: reading data, filtering URLs, extracting text, and language identification",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": []
+        },
+        {
+          "title": "Filtering: document-wise and line-wise",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": []
+        },
+        {
+          "title": "Deduplication: fuzzy, exact, and across dumps",
+          "level": 3,
+          "paragraphs": [
+            "After filtering, although data quality has improved, a large fraction of the content is repeated across documents. This may be due to the crawler indirectly hitting the same page multiple times, to boilerplate content being repeated (e.g., licences), or even to plagiarism. These duplicates can strongly impact models, favoring memorization instead of generalization (Lee et al., 2022; Hernandez et al., 2022). Since deduplication is expensive, it has seen limited adoption in public datasets (Ortiz Suárez et al., 2019; Raffel et al., 2020). We adopt an aggressive deduplication strategy, combining both fuzzy document matches and exact sequences removal."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": []
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Experiments",
+      "level": 2,
+      "paragraphs": [
+        "We now validate that RefinedWeb can be used to train powerful models, matching the zero-shot performance obtained with curated corpora and state-of-the-art language models. We first discuss our evaluation and pretraining setup, and models with which we compare. We perform experiments at small scale to internally compare with other popular datasets, and ablate the three main stages of RefinedWeb (raw, filtered, final). Then, we scale to 1B and 7B models trained on 350GT to compare with state-of-the-art models. Finally, we apply the MDR pipeline to existing pretraining datasets, and show that it can potentially deliver further improvements."
+      ],
+      "subsections": [
+        {
+          "title": "Setting",
+          "level": 3,
+          "paragraphs": [
+            "Evaluation. At variance with previous works studying pretraining datasets (Rae et al., 2021; Lee et al., 2022), we focus our evaluation on zero-shot generalization across many tasks rather than measuring validation loss. Perplexity alone can be at odds with end-task performance (Tay et al., 2021), and modern works on LLMs predominantly report zero-shot performance (Brown et al., 2020; Rae et al., 2021; Chowdhery et al., 2022). Furthermore, zero-shot generalization is the “natural” setting for autoregressive decoder-only models, in which they perform best (Wang et al., 2022). Our evaluation setup is inspired by the one used by the architecture and scaling group of Big Science (Scao et al., 2022b).",
+            "We base our evaluation on the popular Eleuther AI evaluation harness (Gao et al., 2021), allowing us to evaluate across a wide range of tasks in the zero-shot setting. We identified aggregates of tasks allowing us to: (1) obtain signal (i.e., non zero zero-shot performance) at small scale for ablations; (2) compare with results reported by other models. We outline these four aggregates small (for ablations), and core, main, ext (for comparisons) in Table 3.",
+            "Comparisons across models trained and evaluated in different settings are difficult to untangle, as many externalities may influence the 1 987results (e.g., numerical precision of training vs inference, prompts used). We distinguish three levels of comparisons: (1) internal comparisons, with models trained and evaluated within our codebase, for which only the pretraining datasets differ; (2) benchmark-level comparisons, with models trained with a different codebase but evaluated with the Eleuther AI harness, taking results from Scao et al. (2022b); Black et al. (2022); Aleph Alpha (2023); Dey et al. (2023), thereafter flagged with a ∗*; (3) external comparisons with Brown et al. (2020); Chowdhery et al. (2022), thereafter flagged with a ††\\dagger. For further details on evaluation, see Section F.1.",
+            "Models. We train 1B, 3B, and 7B parameters autoregressive decoder-only models, based on configurations and hyperparameters similar to GPT-3 (Brown et al., 2020), diverging mostly on our use of ALiBi (Press et al., 2021). We use FlashAttention (Dao et al., 2022) in a custom codebase. We train internal models on both The Pile and RefinedWeb to control for deviations caused by our pretraining setup–we found The Pile models to perform in-line with others. For small-scale and ablation studies (first half of Section 4.2; Section 4.3), we train models to optimality according to the scaling laws of Hoffmann et al. (2022): on 27B and 60B tokens respectively for our 1B and 3B parameters models. For the main experiments demonstrating our approach (Falcon-RW models in Section 4.2), we train the models to 350GT, in line with popular public models (Brown et al., 2020; Wang & Komatsuzaki, 2021; Scao et al., 2022a). Note that we do not compare against the recently introduced LLaMA models (Touvron et al., 2023), as the smallest of them is trained on x2.5 more compute than our largest model, preventing a meaningful comparison from being made dataset-wise. For a more in-depth overview of the models and pretraining datasets with which we compare, see Appendix F."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x3.png",
+              "alt": "Refer to caption",
+              "caption": "Models trained on ●RefinedWeb alone outperform models trained on curated corpora. Zero-shot performance averaged on our core-agg (left) and ext-agg (right) task aggregates (see Section 4.1 for details, and Figure 1 for results on main-agg). Existing open models fail to match the performance of the original GPT-3 series (left); however, models trained on RefinedWeb significantly outperform models trained on ▼▼\\blacktriangledown The Pile: including our direct comparison model (right), ruling out our pretraining setup as the main source of increased performance. In fact, our RefinedWeb models even match the performance of the ■■\\blacksquare GPT-3 models.",
+              "label": "S4.F3"
+            }
+          ],
+          "tables": [],
+          "equations": []
+        },
+        {
+          "title": "Can web data alone outperform curated corpora?",
+          "level": 3,
+          "paragraphs": [
+            "We endeavour to demonstrate that web data alone can result in models outperforming other models trained on curated corpora. To do so, we first perform a small-scale study with 1B and 3B parameters models trained to optimality (27GT and 60GT) on popular web and curated datasets. Then, we scale up to 1B and 7B models trained on 350GT, and compare zero-shot generalization to state-of-the-art models."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": []
+        },
+        {
+          "title": "Do other corpora benefit from MDR?",
+          "level": 3,
+          "paragraphs": [
+            "Ablating the contributions and evaluating the performance of individual components in the MDR pipeline is difficult: for most heuristics, there is no agreed-upon ground truth, and changes may be too insignificant to result in sufficient zero-shot signal after pretraining. In the first half of Section 4.2, we identified that subsequent stages of RefinedWeb (raw, filtered, final) led to improvements in performance. In this section, we propose to apply independently the filtering and deduplication stages of MDR to popular pretraining datasets, studying whether they generalize widely.",
+            "We report results on the small-agg in Table 5. First, we find that improvements from filtering are not systematic. On The Pile, we had to adjust our line length and characters ratio heuristics to avoid expunging books and code. Despite improvements on OSCAR-21.09, C4, and The Pile, our filters worsen performance on OSCAR-22.01; generally, removal rates from filtering do not seem strongly correlated with downstream accuracy. Conversely, deduplication delivers a steady boost across all datasets, and removal rates are better correlated with changes in performance. We find OSCAR-21.09 and C4 to be already well deduplicated, while The Pile and OSCAR-22.01 exhibit 40-60% duplicates. The base version of OSCAR-22.01 is distributed without deduplication; for The Pile, this is consistent with the findings of Zhang et al. (2022). Finally, combining filtering and deduplication results in further improvements; interestingly, although performance is now more uniform across datasets, differences remain, suggesting that flaws in the original text extraction and processing can’t be fully compensated for.",
+            "By processing C4 through MDR, we are able to obtain subsets of data which might slightly outperform RefinedWeb; this combines both the stringent filtering of C4 (e.g., strict NSFW word blocklist, 3-sentence span deduplication) with our own filters and deduplication. While such a combination results in rejection rates that would be unacceptable for our target of 3-6 trillions tokens, this represents an interesting perspective for shorter runs, which may be able to extract extremely high-quality subsets from large web datasets."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": []
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Limitations",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": []
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "As LLMs are widely adopted, models trained past the recommendations of scaling laws are bound to become increasingly common to amortize inference costs (Touvron et al., 2023). This will further drive the need for pretraining datasets with trillions of tokens, an order of magnitude beyond publicly available corpora. We have demonstrated that stringent filtering and deduplication could result in a five trillion tokens web only dataset suitable to produce models competitive with the state-of-the-art, even outperforming LLMs trained on curated corpora. We publicly release a 600GT extract of RefinedWeb, and note that RefinedWeb has already been used to train state-of-the-art language models, such as Falcon-40B (Almazrouei et al., 2023)."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x5.png",
+          "alt": "Refer to caption",
+          "caption": "Toxic content in RefinedWeb is distributed similarly to The Pile. Cumulative proportion of documents below a given toxicity score, as evaluated by the Pespective API.",
+          "label": "S6.F4"
+        }
+      ],
+      "tables": [],
+      "equations": []
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Models trained on ●RefinedWeb alone outperform models trained on curated corpora. Zero-shot performance on our main-agg task aggregate (see Section 4.1 for details). At equivalent compute budgets, our models significantly outperform publicly available models trained on ▼▼\\blacktriangledown The Pile, and match the performance of the ■■\\blacksquare GPT-3 models when tested within our evaluation setup.",
+      "label": "S0.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "Subsequent stages of Macrodata Refinement remove nearly 90% of the documents originally in CommonCrawl. Notably, filtering and deduplication each result in a halving of the data available: around 50% of documents are discarded for not being English, 24% of remaining for being of insufficient quality, and 12% for being duplicates. We report removal rate (grey) with respect to each previous stage, and kept rate (shade) overall. Rates measured in % of documents in the document preparation phase, then in tokens.",
+      "label": "S3.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Models trained on ●RefinedWeb alone outperform models trained on curated corpora. Zero-shot performance averaged on our core-agg (left) and ext-agg (right) task aggregates (see Section 4.1 for details, and Figure 1 for results on main-agg). Existing open models fail to match the performance of the original GPT-3 series (left); however, models trained on RefinedWeb significantly outperform models trained on ▼▼\\blacktriangledown The Pile: including our direct comparison model (right), ruling out our pretraining setup as the main source of increased performance. In fact, our RefinedWeb models even match the performance of the ■■\\blacksquare GPT-3 models.",
+      "label": "S4.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": null,
+      "label": "S4.F3.1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": null,
+      "label": "S4.F3.2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "Toxic content in RefinedWeb is distributed similarly to The Pile. Cumulative proportion of documents below a given toxicity score, as evaluated by the Pespective API.",
+      "label": "S6.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Document Lengths",
+      "label": "A3.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Document Lengths",
+      "label": "A3.F5.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "(b) Top domains",
+      "label": "A3.F5.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "Top 20 languages (excluding English) from processed CommonCrawl based on number of documents and disk size.",
+      "label": "A4.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Degradation compared to 1 epoch",
+      "label": "A5.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Degradation compared to 1 epoch",
+      "label": "A5.F7.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x10.png",
+      "alt": "Refer to caption",
+      "caption": "(b) Gap between RW and RW-F",
+      "label": "A5.F7.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x11.png",
+      "alt": "Refer to caption",
+      "caption": "μμ\\mu-parametrization (Yang et al., 2021) slightly improves performance in the Cerebras-GPT series (Dey et al., 2023). Zero-shot performance on our core aggregate, gap between Cerebras-GPT with μμ\\mu-param and without. Individual curves for per-task results and 1-σσ\\sigma standard deviation across all tasks in the aggregate in transparent.",
+      "label": "A6.F8"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2306.01116/assets/x12.png",
+      "alt": "Refer to caption",
+      "caption": "In our core aggregate, deduplication brings a small improvement to the Pythia suite (Biderman et al., 2023). Zero-shot performance on our core aggregate, gap between Pythia trained on the deduplicated and vanilla Pile. Individual curves for per-task results and 1-σσ\\sigma standard deviation across all tasks in the aggregate in transparent.",
+      "label": "A6.F9"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "●RefinedWeb improves on existing English pretraining datasets for large language models by combining extensive filtering with stringent deduplication at unprecedented scale. For additional details, see the full version in Table 12 of Section F.3.",
+      "headers": [],
+      "rows": [
+        [
+          "Dataset",
+          "Size",
+          "Availability",
+          "Web",
+          "CC Processing",
+          "Deduplication"
+        ],
+        [
+          "Massive web datasets"
+        ],
+        [
+          "C4",
+          "∼360similar-toabsent360\\sim 360GT",
+          "Public",
+          "100100100%",
+          "Rules + NSFW words blocklist",
+          "Exact: spans of 3 sentences"
+        ],
+        [
+          "OSCAR-21.09",
+          "∼370similar-toabsent370\\sim 370GT",
+          "Public",
+          "100100100%",
+          "Built at the line-level",
+          "Exact: per line (∼55%similar-toabsentpercent55\\sim 55\\% removed)"
+        ],
+        [
+          "OSCAR-22.01",
+          "∼283similar-toabsent283\\sim 283GT",
+          "Public",
+          "100100100%",
+          "Line-level rules + optional rules & NSFW URL blocklist",
+          "Exact: per line (optional, not used for results in this paper)"
+        ],
+        [
+          "Curated datasets"
+        ],
+        [
+          "■■\\blacksquare GPT-3",
+          "300300300GT",
+          "Private",
+          "606060%",
+          "Content filter trained on known high-quality sources",
+          "Fuzzy: MinHash (∼10%similar-toabsentpercent10\\sim 10\\% removed)"
+        ],
+        [
+          "▼▼\\blacktriangledown The Pile",
+          "∼340similar-toabsent340\\sim 340GT",
+          "Public",
+          "181818%",
+          "jusText for extraction, content filter trained on curated data",
+          "Fuzzy: MinHash (∼26%similar-toabsentpercent26\\sim 26\\% removed)"
+        ],
+        [
+          "★★\\bigstar PaLM",
+          "780780780GT",
+          "Private",
+          "272727%",
+          "Filter trained on HQ data",
+          "Unknown"
+        ],
+        [
+          "Ours"
+        ],
+        [
+          "●RefinedWeb",
+          "∼5,000similar-toabsent5000\\sim 5,000GT",
+          "Public (600GT)",
+          "100%percent100100\\%",
+          "trafilatura for text extraction, document and line-level rules, NSFW URL blocklist",
+          "Exact & fuzzy: exact substring+MinHash (∼50%similar-toabsentpercent50\\sim 50\\% removed)"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Macrodata Refinement aggregates best practices from the state-of-the-art and novel approaches (URL scoring, line-wise filtering, etc.) to produce high-quality web data. On deduplication, we note that MDR is unique in both the scale at which it is performed, and in applying subsequently fuzzy and exact substring methods to improve coverage and scalability.",
+      "headers": [],
+      "rows": [
+        [
+          "Document preparation",
+          "Filtering",
+          "Deduplication"
+        ],
+        [
+          "URL filtering",
+          "Text extraction",
+          "Language identification",
+          "Document-wise filtering",
+          "Line-wise filtering",
+          "Deduplication",
+          "URL deduplication"
+        ],
+        [
+          "Aggregated blocklist, URL scoring, common HQ sources blocked",
+          "From WARC using warcio, trafilatura for extraction",
+          "fastText classifier from CCNet, thresholding on top language score",
+          "In-document repetition removal and quality heuristics from MassiveWeb",
+          "Remove undesirable lines (call to actions, navigation buttons, social counters, etc.)",
+          "Fuzzy deduplication w/ MinHash + exact substring deduplication w/ suffix arrays",
+          "Remove URLs revisited across CommonCrawl dumps"
+        ],
+        [
+          "Section G.1",
+          "Barbaresi (2021)",
+          "Wenzek et al. (2020)",
+          "Rae et al. (2021)",
+          "Section G.2",
+          "Lee et al. (2022)",
+          "Section 3.3"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "To evaluate models trained on RefinedWeb and compare to the state-of-the-art, we build four aggregates across 18 tasks on which to measure zero-shot performance. small was built for internal ablations, based on tasks with consistent performance at small scale, core is based on tasks commonly reported for public suites of models (Dey et al., 2023; Biderman et al., 2023), main is based on tasks from the GPT-3 and PaLM paper (Brown et al., 2020; Chowdhery et al., 2022), and ext is based on tasks used by the BigScience Architecture and Scaling group (Scao et al., 2022b). For all results reported, we flag with ††\\dagger results obtained in an arbitrary evaluation setup, and with ∗* results obtained with the EAI Harness (Gao et al., 2021), which we also employ for all our models.",
+      "headers": [],
+      "rows": [
+        [
+          "Tasks",
+          "Type",
+          "Random",
+          "small",
+          "core",
+          "main",
+          "ext"
+        ],
+        [
+          "HellaSwag (Zellers et al., 2019)",
+          "Sentence completion",
+          "25.0",
+          "✓",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "LAMBADA (Paperno et al., 2016)",
+          "Sentence completion",
+          "0.0",
+          "",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "Winogrande (Sakaguchi et al., 2021)",
+          "Coreference resolution",
+          "50.0",
+          "✓",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "PIQA (Bisk et al., 2020)",
+          "Multiple-choice question answering",
+          "50.0",
+          "✓",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "ARC (Clark et al., 2018)",
+          "Natural language inference",
+          "25.0",
+          "✓",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "OpenBookQA (Mihaylov et al., 2018)",
+          "Multiple-choice question answering",
+          "25.0",
+          "",
+          "✓",
+          "✓",
+          "✓"
+        ],
+        [
+          "BoolQ (Clark et al., 2019)",
+          "Multiple-choice question answering",
+          "50.0",
+          "✓",
+          "",
+          "✓",
+          "✓"
+        ],
+        [
+          "COPA (Gordon et al., 2012)",
+          "Sentence completion",
+          "50.0",
+          "",
+          "",
+          "✓",
+          "✓"
+        ],
+        [
+          "CB (De Marneffe et al., 2019)",
+          "Natural language inference",
+          "33.3",
+          "",
+          "",
+          "✓",
+          "✓"
+        ],
+        [
+          "RTE (Dagan et al., 2010)",
+          "Natural language inference",
+          "50.0",
+          "",
+          "",
+          "✓",
+          "✓"
+        ],
+        [
+          "ReCoRD (Zhang et al., 2018)",
+          "Question answering",
+          "0.0",
+          "",
+          "",
+          "✓",
+          ""
+        ],
+        [
+          "ANLI (Nie et al., 2019)",
+          "Natural language inference",
+          "33.3",
+          "",
+          "",
+          "✓",
+          ""
+        ],
+        [
+          "LogiQA (Liu et al., 2021)",
+          "Multiple-choice question answering",
+          "25.0",
+          "",
+          "",
+          "",
+          "✓"
+        ],
+        [
+          "HeadQA (Vilares & Gómez-Rodríguez, 2019)",
+          "Multiple-choice question answering",
+          "20.0",
+          "",
+          "",
+          "",
+          "✓"
+        ],
+        [
+          "MathQA (Amini et al., 2019)",
+          "Multiple-choice question answering",
+          "20.0",
+          "",
+          "",
+          "",
+          "✓"
+        ],
+        [
+          "PROST (Aroca-Ouellette et al., 2021)",
+          "Paraphrase identification",
+          "50.0",
+          "",
+          "",
+          "",
+          "✓"
+        ],
+        [
+          "PubMedQA (Jin et al., 2019)",
+          "Multiple-choice question answering",
+          "50.0",
+          "",
+          "",
+          "",
+          "✓"
+        ],
+        [
+          "SciQ (Welbl et al., 2017)",
+          "Multiple-choice question answering",
+          "25.0",
+          "✓",
+          "",
+          "",
+          "✓"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Curation is not a silver bullet for zero-shot generalization: small-scale models trained on ●RefinedWeb outperform models trained on web data (C4, OSCAR), and on curated corpora (▼▼\\blacktriangledown The Pile). Average accuracy in zero-shot on the small-agg aggregate. All models trained with identical architectures and pretraining hyperparameters. We find that OSCAR-22.01 underperforms other datasets signficantly, perhaps because deduplication is only optional. C4 is a strong baseline, with OSCAR-21.09 lagging slightly behind, but we find that RefinedWeb outperforms both web datasets and the most popular curated dataset, The Pile. Both filtering and deduplication contribute significantly to improving zero-shot performance.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Massive web datasets",
+          "Curated",
+          "Ours"
+        ],
+        [
+          "",
+          "OSCAR-21.09",
+          "OSCAR-22.01",
+          "C4",
+          "▼▼\\blacktriangledown The Pile",
+          "RW-Raw",
+          "RW-Filtered",
+          "●RefinedWeb"
+        ],
+        [
+          "1B@27GT",
+          "55.0%",
+          "52.7%",
+          "55.7%",
+          "53.4%",
+          "52.7%",
+          "54.3%",
+          "56.2%"
+        ],
+        [
+          "3B@60GT",
+          "59.1%",
+          "55.9%",
+          "59.6%",
+          "57.9%",
+          "57.4%",
+          "58.2%",
+          "59.8%"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Although improvements from filtering are not systematic across datasets, deduplication brings a steady performance boost across the board. Zero-shot accuracy averaged on our small-agg aggregate; [+x.x] reports absolute gains compared to base, removal rates reported against base. Due to limitations in our pipeline, we cannot apply the deduplication stage independently for RefinedWeb.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Massive web datasets",
+          "Curated",
+          "Ours"
+        ],
+        [
+          "",
+          "OSCAR-21.09",
+          "OSCAR-22.01",
+          "C4",
+          "▼▼\\blacktriangledown Pile",
+          "●RefinedWeb"
+        ],
+        [
+          "Base",
+          "55.0%",
+          "52.7%",
+          "55.7%",
+          "53.4%",
+          "52.7%"
+        ],
+        [
+          "Filtered",
+          "55.4% [+.4]",
+          "52.3% [-.4]",
+          "56.2% [+.5]",
+          "54.2% [+.8]",
+          "54.3% [+1.6]"
+        ],
+        [
+          "removal rate",
+          "-25.0%",
+          "-39.8%",
+          "-16.4%",
+          "-27.1%",
+          "-50.8%"
+        ],
+        [
+          "Deduplicated",
+          "55.6% [+.6]",
+          "55.6% [+2.9]",
+          "55.9% [+.2]",
+          "54.5% [+1.1]",
+          ""
+        ],
+        [
+          "removal rate",
+          "-10.8%",
+          "-60.8%",
+          "-7.59%",
+          "-45.3%",
+          ""
+        ],
+        [
+          "Filt.+Dedup.",
+          "55.5% [+.5]",
+          "55.4% [+2.7]",
+          "56.4% [+.7]",
+          "55.2% [+1.8]",
+          "56.2% [+3.5]"
+        ],
+        [
+          "removal rate",
+          "-28.2%",
+          "-62.2%",
+          "-17.9%",
+          "-66.0%",
+          "-75.4%"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Datasheet for RefinedWeb, following the framework introduced by Gebru et al. (2021).",
+      "headers": [],
+      "rows": [
+        [
+          "Motivation"
+        ],
+        [
+          "For what purpose was the dataset created?",
+          "RefinedWeb was created to serve as a large-scale dataset for the pretraining of large language models. It may be used on its own, or augmented with curated sources (e.g., Wikipedia, StackOverflow)."
+        ],
+        [
+          "Who created the dataset and on behalf of which entity?",
+          "The dataset was created by the Technology Innovation Institute."
+        ],
+        [
+          "Who funded the creation of the dataset?",
+          "The creation of the dataset was privately funded by the Technology Innovation Institute."
+        ],
+        [
+          "Any other comment?",
+          "RefinedWeb is built on-top of CommonCrawl, using the Macrodata Refinement Pipeline, which combines content extraction, filtering heuristics, and deduplication. In designing RefinedWeb, we abided to the following philosophy: (1) Scale first. We intend MDR to produce datasets to be used to train 40-200B parameters models, thus requiring trillions of tokens (Hoffmann et al., 2022). For English-only RefinedWeb, we target a size of 3-6 trillion tokens. Specifically, we eschew any labour intensive human curation process, and focus on CommonCrawl instead of disparate single-domain sources. (2) Strict deduplication. Inspired by the work of Lee et al. (2022), which demonstrated the value of deduplication for large language models, we implement a rigorous deduplication pipeline. We combine both exact and fuzzy deduplication, and use strict settings leading to removal rates far higher than others have reported. (3) Neutral filtering. To avoid introducing further undesirable biases into the model (Dodge et al., 2021; Welbl et al., 2021), we avoid using ML-based filtering outside of language identification. We stick to simple rules and heuristics, and use only URL filtering for adult content."
+        ],
+        [
+          "Composition"
+        ],
+        [
+          "What do the instances that comprise the dataset represent?",
+          "Instances are text-only documents, corresponding to single web pages."
+        ],
+        [
+          "How many instances are there in total?",
+          "RefinedWeb contains ∼similar-to\\sim10 billion documents, or around 5 trillion tokens. The public version is a subset representing a tenth of the full version."
+        ],
+        [
+          "Does the dataset contain all possible instances or is it a sample (not necessarily random) of instances from a larger set?",
+          "RefinedWeb is built using all CommonCrawl dumps until the 2023-06 one; it could be updated with additional dumps as they are released. The public release of RefinedWeb is a 600GT random extract of the 5,000GT of the full dataset. For all experiments, we randomly sampled from the public extract, or earlier development versions of it."
+        ],
+        [
+          "What data does each instance consist of?",
+          "Each instance is a text-only document, with metadata about its origin in CommonCrawl and source page URL. We also distribute a multimodal version of RefinedWeb, containing interlaced links to images."
+        ],
+        [
+          "Is there a label or target associated with each instance?",
+          "No."
+        ],
+        [
+          "Is any information missing from individual instances?",
+          "No."
+        ],
+        [
+          "Are relationships between individual instances made explicit?",
+          "No."
+        ],
+        [
+          "Are there recommended data splits?",
+          "No."
+        ],
+        [
+          "Are there any errors, sources of noise, or redundancies in the dataset?",
+          "Despite our best efforts to filter content that does not qualify as natural language, and to deduplicate documents, our pipeline may let through documents that may be considered as errors or redundant."
+        ],
+        [
+          "Is the dataset self-contained, or does it link to or otherwise rely on external resources?",
+          "The base version of the dataset is self-contained, but the multimodal version is interlaced with links to images–these are not distributed as part of the dataset, and constitute an external source."
+        ],
+        [
+          "Does the dataset contain data that might be considered confidential?",
+          "All documents in RefinedWeb have been publicly available online."
+        ],
+        [
+          "Does the dataset contain data that, if viewed directly, might be offensive, insulting, threatening, or might otherwise cause anxiety?",
+          "Yes, as this type of data is prevalent on the internet, it is likely our dataset contains such content. Notably, we estimate the prevalence of toxic content in the dataset to be similar to The Pile (Figure 4)."
+        ],
+        [
+          "Collection"
+        ],
+        [
+          "How was the data associated with each instance acquired?",
+          "We downloaded with warcio publicly available .WET files from the CommonCrawl foundation."
+        ],
+        [
+          "What mechanisms or procedures were used to collect the data?",
+          "We refer to the CommonCrawl website (commoncrawl.org) for details on how they collect data."
+        ],
+        [
+          "If the dataset is a sample from a larger set, what was the sampling strategy?",
+          "Whenever we use subsets, we randomly sample from the original data."
+        ],
+        [
+          "Who was involved in the data collection process and how were they compensated?",
+          "The original data collection was performed by CommonCrawl; authors from this paper were involved in retrieving it and preparing it."
+        ],
+        [
+          "Over what timeframe was the data collected?",
+          "We use all CommonCrawl dumps from 2008 to January/February 2023."
+        ],
+        [
+          "Were any ethical review processes conducted?",
+          "No."
+        ],
+        [
+          "Preprocessing"
+        ],
+        [
+          "Was any preprocessing/cleaning/labeling of the data done?",
+          "Yes, we applied extensive preprocessing and cleaning of the data. We first filter URLs to remove adult content using a blocklist and a score system (Section G.1), we then use trafilatura (Barbaresi, 2021) to extract content from pages, and perform language identification with the fastText classifier from CCNet (Wenzek et al., 2020). After this first preprocessing stage, we filter data using heuristics from MassiveWeb (Rae et al., 2021) and our own line-wise corrections (Section G.2). Finally, we run extensive deduplication, removing URLs revisited across dumps (Section 3.3) and performing subsequently fuzzy and exact substring deduplication, with each stage drawing from Lee et al. (2022). See Section 3 for further details and Table 2 for an outline."
+        ],
+        [
+          "Was the “raw” data saved in addition to the preprocessed/cleaned/labeled data?",
+          "During development, we saved intermediary outputs from our pipeline for investigations and for ablations–intermediary outputs exist for about 5% of RefinedWeb. We did not keep intermediary outputs for the final production version of the dataset due to storage and resource constraints."
+        ],
+        [
+          "Is the software that was used to preprocess/clean/label the data available?",
+          "No."
+        ],
+        [
+          "Uses"
+        ],
+        [
+          "Has the dataset been used for any tasks already?",
+          "Yes, this data has been used to develop large language models: both for scientific experiments (e.g., this paper) and production use."
+        ],
+        [
+          "Is there a repository that links to any or all papers or systems that use the dataset?",
+          "No."
+        ],
+        [
+          "What (other) tasks could the dataset be used for?",
+          "RefinedWeb was built as a large-scale corpora representative of the web, and as such may see many downstream uses which are difficult to predict."
+        ],
+        [
+          "Is there anything about the composition of the dataset or the way it was collected and preprocessed/cleaned/labeled that might impact future uses?",
+          "For the public extract of RefinedWeb, we chose to only draw from the English version of the dataset, preventing multilingual applications."
+        ],
+        [
+          "Are there tasks for which the dataset should not be used?",
+          "Any tasks which may considered irresponsible or harmful."
+        ],
+        [
+          "Distribution"
+        ],
+        [
+          "Will the dataset be distributed to third parties outside of the entity on behalf of which the dataset was created?",
+          "Yes, we make a 600GT extract publicly available for NLP practitioners. We currently don’t plan to share the full version of the dataset."
+        ],
+        [
+          "How will the dataset will be distributed?",
+          "The dataset will be made available through the HuggingFace Hub."
+        ],
+        [
+          "When will the dataset be distributed?",
+          "The dataset is available immediately."
+        ],
+        [
+          "Will the dataset be distributed under a copyright or other intellectual property (IP) license, and/or under applicable terms of use (ToU)?",
+          "The public extract is made available under an ODC-By 1.0 license; users should also abide to the CommonCrawl ToU: https://commoncrawl.org/terms-of-use/."
+        ],
+        [
+          "Have any third parties imposed IP-based or other restrictions on the data associated with the instances?",
+          "Not to our knowledge."
+        ],
+        [
+          "Do any export controls or other regulatory restrictions apply to the dataset or to individual instances?",
+          "Not to our knowledge."
+        ],
+        [
+          "Maintenance"
+        ],
+        [
+          "Who will be supporting/hosting/maintaining the dataset?",
+          "The dataset will be hosted on the HuggingFace Hub, we have no plans to further support or maintain it once it is released."
+        ],
+        [
+          "How can the owner/curator/manager of the dataset be contacted?",
+          "falconllm@tii.ae"
+        ],
+        [
+          "Is there an erratum?",
+          "No."
+        ],
+        [
+          "Will the dataset be updated?",
+          "No."
+        ],
+        [
+          "If others want to extend/augment/build on/contribute to the dataset, is there a mechanism for them to do so?",
+          "No."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Model card for Falcon-RW, following the framework introduced by Mitchell et al. (2019).",
+      "headers": [],
+      "rows": [
+        [
+          "Model details"
+        ],
+        [
+          "Person/organization developing the model",
+          "The models were created by the Technology Innovation Institute."
+        ],
+        [
+          "Model date",
+          "Falcon-RW models were trained in December 2022/January 2023."
+        ],
+        [
+          "Model type and information about training",
+          "Falcon-RW are autoregressive Transformer models trained with a causal language modeling objective. Architecture based on GPT-3 (Brown et al., 2020), with ALiBi positional encodings (Press et al., 2021) and FlashAttention (Dao et al., 2022). See Section 4.1 for details."
+        ],
+        [
+          "Licence",
+          "Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0."
+        ],
+        [
+          "Point of contact",
+          "falconllm@tii.ae"
+        ],
+        [
+          "Intended use"
+        ],
+        [
+          "Primary intended uses",
+          "Research on large language models, and the influence of adequately filtered and deduplicated web data on the properties of large language models (fairness, safety, limitations, capabilities, etc.)."
+        ],
+        [
+          "Primary intended users",
+          "NLP researchers."
+        ],
+        [
+          "Out-of-scope use cases",
+          "Production use without adequate assessment of risks and mitigation; any use cases which may be considered irresponsible or harmful."
+        ],
+        [
+          "Factors"
+        ],
+        [
+          "Relevant factors",
+          "Falcon-RW models are trained on English data only, and will not generalize appropriately to other languages. Furthermore, as they are trained on a large-scale corpora representative of the web, they will carry the stereotypes and biases commonly encountered online."
+        ],
+        [
+          "Evaluation factors",
+          "We evaluated the toxicity of the underlying pretraining dataset and found it to be in line with common curated pretraining datasets such as The Pile (see Figure 4). Note that this only accounts for toxicity under the definition of Perspective API: ”content that is rude or disrespectful”. Notably, this fails to include concerns about social biases or harmfulness."
+        ],
+        [
+          "Metrics"
+        ],
+        [
+          "Model performance measures",
+          "We focus our evaluation on measuring the zero-shot generalization capabilities of our models across a wide range of tasks, leveraging the Eleuther AI language model evaluation harness (Gao et al., 2021)."
+        ],
+        [
+          "Variation approaches",
+          "Due to the costs associated with training Falcon-RW we cannot train the models multiple times and measure variability across training runs."
+        ],
+        [
+          "Evaluation data"
+        ],
+        [
+          "Datasets",
+          "We evaluate zero-shot accuracy on 18 varied tasks, detailed in Table 3."
+        ],
+        [
+          "Motivation",
+          "We selected and aggregated tasks to build comparisons with other models in the literature (see Section 4.1; Section F.1 for details)."
+        ],
+        [
+          "Preprocessing",
+          "We use the default prompts and setup of Gao et al. (2021)."
+        ],
+        [
+          "Training data"
+        ],
+        [
+          "See the dedicated datasheet in LABEL:tab:datasheet."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "We source evaluation results from a variety of papers across the literature, maximizing task coverage. Although most results come from the EAI Evaluation Harness (Gao et al., 2021), results from PaLM and GPT-3 are sourced from their respective papers. Note in Figure 1 that the results from the GPT-3 paper are still ahead of results obtained through the API with the EAI evaluation harness.",
+      "headers": [],
+      "rows": [
+        [
+          "Models",
+          "Aggregates reported",
+          "Source of results",
+          "EAI eval harness?"
+        ],
+        [
+          "Ours",
+          "main, core, ext",
+          "This paper",
+          "✓✓\\checkmark"
+        ],
+        [
+          "BS-A&S∗",
+          "main, core",
+          "Scao et al. (2022b)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "GPT-Neo∗",
+          "main, core",
+          "Scao et al. (2022b)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "PaLM†",
+          "main",
+          "Chowdhery et al. (2022)",
+          ""
+        ],
+        [
+          "GPT-3 API∗",
+          "main, core",
+          "Scao et al. (2022b)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "GPT-3†",
+          "main",
+          "Brown et al. (2020)",
+          ""
+        ],
+        [
+          "Aleph Alpha∗",
+          "core",
+          "Aleph Alpha (2023)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "Cerebras-GPT∗",
+          "core",
+          "Dey et al. (2023)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "FairSeq∗",
+          "core",
+          "Black et al. (2022)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "Pythia(-Dedup)∗",
+          "core",
+          "Dey et al. (2023)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "OPT∗",
+          "core",
+          "Dey et al. (2023)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "GPT-J∗",
+          "core",
+          "Black et al. (2022)",
+          "✓✓\\checkmark"
+        ],
+        [
+          "GPT-NeoX 20B∗",
+          "core",
+          "Black et al. (2022)",
+          "✓✓\\checkmark"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Full-scale models trained on RefinedWeb (Falcon-RW) and other models from the state-of-the-art. Across models trained on The Pile, the Pythia models are the closest to our achitecture: they use FlashAttention with rotary embeddings–with for only notably exception the use of parallel attention and feedforward for their models. Training budget CCC in PF-days calculated using C=6​N​DC6NDC=6ND, with NNN the number of parameters, and DDD the pretraining dataset size (Kaplan et al., 2020).",
+      "headers": [],
+      "rows": [
+        [
+          "Series",
+          "GPT-3 (paper)†",
+          "GPT-3 (API)∗",
+          "BigScience∗",
+          "PaLM†",
+          "Ours"
+        ],
+        [
+          "Model",
+          "XL",
+          "XXL",
+          "babbage",
+          "curie",
+          "BS-A&S",
+          "PaLM-8B",
+          "Ours (Pile)",
+          "Falcon-RW"
+        ],
+        [
+          "Dataset",
+          "GPT-3",
+          "GPT-3",
+          "GPT-3",
+          "GPT-3",
+          "Pile",
+          "PaLM",
+          "Pile",
+          "RW",
+          "RW"
+        ],
+        [
+          "Params.",
+          "1.3B",
+          "6.7B",
+          "1.3B",
+          "6.7B",
+          "1.3B",
+          "8.6B",
+          "1.3B",
+          "1.3B",
+          "7.5B"
+        ],
+        [
+          "Pretraining",
+          "300GT",
+          "300GT",
+          "300GT",
+          "300GT",
+          "300GT",
+          "780GT",
+          "350GT",
+          "350GT",
+          "350GT"
+        ],
+        [
+          "PF-days",
+          "27",
+          "140",
+          "27",
+          "140",
+          "27",
+          "466",
+          "32",
+          "32",
+          "182"
+        ],
+        [
+          "Citation",
+          "Brown et al. (2020)",
+          "Scao et al. (2022b)",
+          "Chowdhery et al. (2022)",
+          "This paper"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Full-scale models trained on RefinedWeb (Falcon-RW) and other models from the state-of-the-art. Across models trained on The Pile, the Pythia models are the closest to our achitecture: they use FlashAttention with rotary embeddings–with for only notably exception the use of parallel attention and feedforward for their models. Training budget CCC in PF-days calculated using C=6​N​DC6NDC=6ND, with NNN the number of parameters, and DDD the pretraining dataset size (Kaplan et al., 2020).",
+      "headers": [],
+      "rows": [
+        [
+          "Series",
+          "EleutherAI∗",
+          "Pythia∗"
+        ],
+        [
+          "Model",
+          "GPT-Neo",
+          "GPT-J",
+          "GPT-NeoX 20B",
+          "Pythia(-Dedup)"
+        ],
+        [
+          "Dataset",
+          "Pile",
+          "Pile",
+          "Pile",
+          "Pile (dedup)"
+        ],
+        [
+          "Params.",
+          "1.3B",
+          "6.7B",
+          "20B",
+          "70M-12B"
+        ],
+        [
+          "Pretraining",
+          "380GT",
+          "402GT",
+          "472GT",
+          "300GT"
+        ],
+        [
+          "PF-days",
+          "34",
+          "187",
+          "656",
+          "1.5 - 250"
+        ],
+        [
+          "Citation",
+          "Black et al. (2021)",
+          "Wang & Komatsuzaki (2021)",
+          "Black et al. (2022)",
+          "Biderman et al. (2023)"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Full-scale models trained on RefinedWeb (Falcon-RW) and other models from the state-of-the-art. Across models trained on The Pile, the Pythia models are the closest to our achitecture: they use FlashAttention with rotary embeddings–with for only notably exception the use of parallel attention and feedforward for their models. Training budget CCC in PF-days calculated using C=6​N​DC6NDC=6ND, with NNN the number of parameters, and DDD the pretraining dataset size (Kaplan et al., 2020).",
+      "headers": [],
+      "rows": [
+        [
+          "Series",
+          "Aleph Alpha∗",
+          "Cerebras-GPT∗",
+          "OPT∗",
+          "FairSeq∗"
+        ],
+        [
+          "Model",
+          "Luminous",
+          "Cerebras-GPT",
+          "OPT",
+          "FairSeq"
+        ],
+        [
+          "Dataset",
+          "undisclosed",
+          "Pile",
+          "Pile (subset) + curated",
+          "curated"
+        ],
+        [
+          "Params.",
+          "13B",
+          "111M-13B",
+          "125M - 175B",
+          "1.3 - 13B"
+        ],
+        [
+          "Pretraining",
+          "400GT",
+          "2 - 257GT",
+          "300GT",
+          "300GT"
+        ],
+        [
+          "PF-days",
+          "361",
+          "0.02 - 232",
+          "3 - 3646",
+          "27 - 271"
+        ],
+        [
+          "Citation",
+          "Aleph Alpha (2023)",
+          "Dey et al. (2023)",
+          "Zhang et al. (2022)",
+          "Artetxe et al. (2021)"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Common massive web-scrape and LLM English datasets. Datasets such as OSCAR and C4 also have significant multilingual versions, which have enjoyed wide adoption (Xue et al., 2021). For OSCAR, the size corresponds to the non-deduplicated version, and is estimated from the number of words x0,75 (average number of words per tokens).",
+      "headers": [],
+      "rows": [
+        [
+          "General information",
+          "Web data"
+        ],
+        [
+          "Dataset",
+          "Notable models",
+          "Size",
+          "Availability",
+          "Web",
+          "HTML extraction",
+          "Language ID",
+          "Heuristics",
+          "Content filtering",
+          "Deduplication"
+        ],
+        [
+          "Massive web datasets"
+        ],
+        [
+          "C4 (Raffel et al., 2020)",
+          "T5 (Raffel et al., 2020)",
+          "∼360similar-toabsent360\\sim 360GT",
+          "Public",
+          "100100100%",
+          ".WET files",
+          "Document-level w/ langdetect",
+          "Document and line-level",
+          "Rules-based: code, NSFW",
+          "Exact: three sentences span"
+        ],
+        [
+          "OSCAR 21.09 (Ortiz Suárez et al., 2019)",
+          "",
+          "∼370similar-toabsent370\\sim 370GT",
+          "Public",
+          "100100100%",
+          ".WET files",
+          "Line-level w/ fastText (Joulin et al., 2016)",
+          "Line <100absent100<100 characters",
+          "None",
+          "(optional) Exact: per line (∼55%similar-toabsentpercent55\\sim 55\\% removed)"
+        ],
+        [
+          "OSCAR 22.01 (Abadji et al., 2022)",
+          "",
+          "∼283similar-toabsent283\\sim 283GT",
+          "Public",
+          "100100100%",
+          ".WET files",
+          "Document-level w/ fastText (Joulin et al., 2016)",
+          "Line-level, optional document-level",
+          "Optional NSFW blocklist",
+          "(optional) Exact: per line"
+        ],
+        [
+          "Curated datasets"
+        ],
+        [
+          "■■\\blacksquare GPT-3 (Brown et al., 2020)",
+          "300300300GT",
+          "Private",
+          "606060%",
+          "Unknown",
+          "Unknown",
+          "Unknown",
+          "fastText trained on HQ-data",
+          "Fuzzy: minhash with 10 hashes (∼10%similar-toabsentpercent10\\sim 10\\% removed)"
+        ],
+        [
+          "▼▼\\blacktriangledown The Pile (Gao et al., 2020)",
+          "GPT-J (Wang & Komatsuzaki, 2021), GPT-NeoX-20B (Black et al., 2022), Pythia (Biderman et al., 2023), Cerebras-GPT (Dey et al., 2023)",
+          "∼340similar-toabsent340\\sim 340GT",
+          "Public",
+          "181818%",
+          "jusText (Pomikálek, 2011)",
+          "Document-level w/ pycld2 (Sites, 2013)",
+          "None",
+          "fastText on curated crawl",
+          "Fuzzy: minhash with 10 hashes, sim. treshold 0.5 (∼26%similar-toabsentpercent26\\sim 26\\% removed)"
+        ],
+        [
+          "MassiveWeb (Rae et al., 2021)",
+          "Gopher (Rae et al., 2021), Chinchilla (Hoffmann et al., 2022)",
+          "1,40014001,400GT",
+          "Private",
+          "484848%",
+          "Custom",
+          "Unknown",
+          "Document-level",
+          "SafeSearch",
+          "Exact & fuzzy: exact documents, minhash w/ sim. treshold 0.8"
+        ],
+        [
+          "★★\\bigstar PaLM (Chowdhery et al., 2022)",
+          "780780780GT",
+          "Private",
+          "272727%",
+          "Unknown",
+          "Unknown",
+          "Document-level",
+          "ML-based filter on HQ data",
+          "Unknown"
+        ],
+        [
+          "Ours"
+        ],
+        [
+          "●RefinedWeb",
+          "Falcon-RW",
+          "5,000GT",
+          "600GT Public",
+          "100%percent100100\\%",
+          "trafilatura (Barbaresi, 2021)",
+          "From CCNet (Wenzek et al., 2020)",
+          "Document and line-level",
+          "URL blocklist",
+          "Exact & fuzzy"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "We select categories likely to contain adult or malicious content, as well as spam or unstructured text.",
+      "headers": [],
+      "rows": [
+        [
+          "Category",
+          "Description",
+          "Number of links"
+        ],
+        [
+          "adult",
+          "adult websites: from eroticism to hard pornography",
+          "4516478"
+        ],
+        [
+          "phishing",
+          "phishing websites, malwares, etc.",
+          "42445"
+        ],
+        [
+          "dating",
+          "dating websites",
+          "3829"
+        ],
+        [
+          "gambling",
+          "online casino",
+          "1365"
+        ],
+        [
+          "filehosting",
+          "websites hosting files, videos, pictures, music",
+          "909"
+        ],
+        [
+          "ddos",
+          "websites related to ddos attacks",
+          "421"
+        ],
+        [
+          "agressif",
+          "hate, racism, etc",
+          "390"
+        ],
+        [
+          "chat",
+          "online chat websites",
+          "244"
+        ],
+        [
+          "mixed adult",
+          "websites with some adult content",
+          "153"
+        ],
+        [
+          "arjel",
+          "French regulated gambling websites",
+          "69"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "RefinedWeb is stripped from common so-called high-quality sources to simplify combining it with existing curated corpora. This blocklist is applied at the URL filtering stage, along with the adult content blocklist.",
+      "headers": [],
+      "rows": [
+        [
+          "Curated data source",
+          "Domain name blocked"
+        ],
+        [
+          "arxiv",
+          "arxiv.org"
+        ],
+        [
+          "AskUbuntu",
+          "askubuntu.com"
+        ],
+        [
+          "StackOverflow",
+          "stackoverflow.com"
+        ],
+        [
+          "",
+          "stackapps.com"
+        ],
+        [
+          "",
+          "stackexchange.com"
+        ],
+        [
+          "",
+          "mathoverflow.net"
+        ],
+        [
+          "NIH Abstracts",
+          "exporter.nih.gov"
+        ],
+        [
+          "",
+          "ncbi.nlm.nih.gov"
+        ],
+        [
+          "Github",
+          "github.com"
+        ],
+        [
+          "Ubuntu IRC",
+          "irclogs.ubuntu.com"
+        ],
+        [
+          "HackerNews",
+          "news.ycombinator.com"
+        ],
+        [
+          "FreeLaw",
+          "courtlistener.com"
+        ],
+        [
+          "Reddit",
+          "reddit.com"
+        ],
+        [
+          "Europarl",
+          "statmt.org"
+        ],
+        [
+          "United States Patents",
+          "uspto.gov"
+        ],
+        [
+          "Wikipedia",
+          "wikipedia.org"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Top-8 largest MinHash clusters found when building RefinedWeb. We cut some of the longest samples in the interest of readability, only keeping a brief description.",
+      "headers": [],
+      "rows": [
+        [
+          "Description",
+          "Example document"
+        ],
+        [
+          "Wordpress sitemap notice generated by the Google Sitemap Generator Plugin",
+          "This is a XML Sitemap which is supposed to be processed by search engines which follow the XML Sitemap standard like Ask.com, Bing, Google and Yahoo. It was generated using the WordPress content management system and the Google Sitemap Generator Plugin by Arne Brachhold. You can find more information about XML sitemaps on sitemaps.org and Google’s list of sitemap programs. This file contains links to sub-sitemaps, follow them to see the actual sitemap content."
+        ],
+        [
+          "Cloudflare notice to enable Javascript",
+          ""
+        ],
+        [
+          "Templated disability notice, with different phone numbers across pages",
+          "Welcome to our website! As we have the ability to list over one million items on our website (our selection changes all of the time), it is not feasible for a company our size to record and playback the descriptions on every item on our website. However, if you are an American with a disability we are here to help you. Please call our disability services phone line at [redacted] or [redacted] during regular business hours and one of our kind and friendly personal shoppers will help you navigate through our website, help conduct advanced searches, help you choose the item you are looking for with the specifications you are seeking, read you the specifications of any item and consult with you about the products themselves. There is no charge for the help of this personal shopper for any American with a disability. Finally, your personal shopper will explain our Privacy Policy and Terms of Service, and help you place an order if you so desire."
+        ],
+        [
+          "Templated cookies notice",
+          ""
+        ],
+        [
+          "Templated domain name for sale page",
+          ""
+        ],
+        [
+          "www.metoperashop.org and sub-URLs, with content changes but always the same (large) footer",
+          ""
+        ],
+        [
+          "Different pages across more than 80 different domain names but with a common section",
+          "DC Customers also liked: Special event items are produced by manufacturers only after the outcome of a game or event. These are advanced sale items and will ship immediately after they are received in our warehouse. Manufacturer direct items are shipped directly from the manufacturer. These items are not available for international or expedited shipping. Customized items can be personalized with options such as your name, your favorite number, and/or designs. Some options may be limited by league rules."
+        ],
+        [
+          "http://www.boxofficemojo.com/daily and sub-URLs",
+          ""
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "URL with different GET parameters don’t always result in significantly different page content.",
+      "headers": [],
+      "rows": [
+        [
+          "http://gamesandbiz.blogspot.com/2010/ 07/bad-reviews-can-hurt-game-sales.ht ml?showComment=1278486430242",
+          "http://gamesandbiz.blogspot.com/2010/ 07/bad-reviews-can-hurt-game-sales.ht ml?showComment=1278499674195"
+        ],
+        [
+          "https://www.ocean-oxygen.org/home;jse ssionid=1E3290E84F668552FAC643D0A8F81 BEC?p_p_id=122_INSTANCE_Zy6zjkRLAg7v& p_p_lifecycle=0&p_p_state=normal&p_p_ mode=view&p_p_col_id=column-2&p_p_col _pos=1&p_p_col_count=6&p_r_p_56423352 4_resetCur=true&p_r_p_564233524_categ oryId=1346016",
+          "https://www.ocean-oxygen.org/home?p_p _id=122_INSTANCE_Zy6zjkRLAg7v&p_p_lif ecycle=0&p_p_state=normal&p_p_mode=vi ew&p_p_col_id=column-2&p_p_col_pos=1& p_p_col_count=6&p_r_p_564233524_reset Cur=true&p_r_p_564233524_categoryId=1 346016"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Matches found by exact substring deduplication (in italics).",
+      "headers": [],
+      "rows": [
+        [
+          "it appears there is a transfer of ranking signals in this relationship. Supporting this finding is a quote from Google’s guidelines: Using JavaScript to redirect users can be a legitimate practice. For example, if you redirect users to an internal page once they’re logged in, you can use JavaScript to do so. When examining JavaScript or other redirect methods to ensure your site adheres to our guidelines, consider the intent. Keep in mind that 301 redirects are best when moving your site, but you could use a JavaScript redirect for this purpose if you don’t have access to your website’s server. NOTE: Their experiment is based on a live page with status code 200 and NOT an inactive page. So if you want to implement this for legacy",
+          "Some examples of sneaky redirects include: - Search engines shown one type of content while users are redirected to something significantly different. - Desktop users receive a normal page, while mobile users are redirected to a completely different spam domain. Using JavaScript to redirect users can be a legitimate practice. For example, if you redirect users to an internal page once they’re logged in, you can use JavaScript to do so. When examining JavaScript or other redirect methods to ensure your site adheres to our guidelines, consider the intent. Keep in mind that 301 redirects are best when moving your site, but you could use a JavaScript redirect for this purpose if you don’t have access to your website’s server."
+        ],
+        [
+          "Find Palm Beache FL homes for sale and other Palm Beach real estate on homesofthepalmbeaches.com. Browse and search Palm Beach houses, condos, townhomes and single-family homes by community , building, or location. Our extensive database of real estate listings provide the most comprehensive property details including home values, features and local school and neighborhood info so you can be sure that you have nearly all the facts you need upfront. Search homesofthepalmbeaches.com today! Want a closer look at what other Palm Beach properties are available?",
+          "Search Stuart houses, condos, townhomes and single-family homes by price and location. Our extensive database of real estate listings provide the most comprehensive property details including home values, features and local school and neighborhood info so you can be sure that you have nearly all the facts you need upfront. Search Stuart Listings today! Want a closer look at what other Stuart properties are available? Also search our listings for the Newest Stuart Listings and Stuart Homes with Price Reductions now. Stuart FL Homes for Sale - Stuart Real Estate Listings FREE to search Stuart Property"
+        ],
+        [
+          "To find the correct size you should measure your foot from the heel to the toe point. Add approximately 1 - 1,5cm to get the actual inner sole length. Measure both feet and fit shoes to the larger foot. Measure feet at the end of the day, when your feet are at their largest. Lente shoes are women’s easy slip-on leisure shoes for everyday use. These lightweight shoes have a breathable textile mesh upper made of recycled PET bottles and cool Lycra lining.",
+          "To find the correct size you should measure your foot from the heel to the toe point. Add approximately 1 - 1,5cm to get the actual inner sole length. Measure both feet and fit shoes to the larger foot. Measure feet at the end of the day, when your feet are at their largest. Enjoy your summer days with Masera leisure sneakers. These low-cut women’s sneakers are extremely lightweight thanks to phylon midsole and breathable textile mesh upper"
+        ],
+        [
+          "This bandana makes the perfect addition to every fur babies birthday collection! With its sparkly crown pattern, your pup will be ready for every birthday celebration! With snaps for security, this bandana is made with love, down to the very last stitch ! Fabric: cotton Care Instructions: Hand wash only, iron as needed, on low heat Always supervise your pup while wearing Faithful Paws Co. accessories, as it could become a choking hazard if consumed.",
+          "This bandana makes the perfect addition to every fur babies summer collection! With its vibrant watercolor popsicle pattern, your pup will be ready for every summer cookout! With snaps for security, this bandana is made with love, down to the very last stitch ! Fabric: cotton Care Instructions: Hand wash only, iron as needed, on low heat Always supervise your pup while wearing Faithful Paws Co. accessories, as it could become a choking hazard if consumed."
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "J(d_{i},d_{j})=\\frac{\\left|d_{i}\\cap d_{j}\\right|}{\\left|d_{i}\\cup d_{j}\\right|}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "J(d_{i},d_{j})=\\frac{\\left|d_{i}\\cap d_{j}\\right|}{\\left|d_{i}\\cup d_{j}\\right|}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "P=1-(1-s_{i,j}^{b})^{r}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "P=1-(1-s_{i,j}^{b})^{r}",
+      "label": "(2)",
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Abadji et al. (2021) Abadji, J., Suárez, P. J. O., Romary, L., and Sagot, B. Ungoliant: An optimized pipeline for the generation of a very large-scale multilingual web corpus. Proceedings of the Workshop on Challenges in the Management of Large Corpora (CMLC-9) 2021. Limerick, 12 July 2021 (Online-Event), pp. 1 – 9, Mannheim, 2021. Leibniz-Institut für Deutsche Sprache. doi: 10.14618/ids-pub-10468. URL https://nbn-resolving.org/urn:nbn:de:bsz:mh39-104688.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.14618/ids-pub-10468",
+      "url": "https://nbn-resolving.org/urn:nbn:de:bsz:mh39-104688",
+      "citation_key": "Abadji et al. (2021)"
+    },
+    {
+      "raw_text": "Abadji et al. (2022) Abadji, J., Ortiz Suarez, P., Romary, L., and Sagot, B. Towards a Cleaner Document-Oriented Multilingual Crawled Corpus. arXiv e-prints, art. arXiv:2201.06642, January 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2201.06642",
+      "doi": null,
+      "url": null,
+      "citation_key": "Abadji et al. (2022)"
+    },
+    {
+      "raw_text": "Abbas et al. (2023) Abbas, A. K. M., Tirumala, K., Simig, D., Ganguli, S., and Morcos, A. S. Semdedup: Data-efficient learning at web-scale through semantic deduplication. In ICLR 2023 Workshop on Mathematical and Empirical Understanding of Foundation Models, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Abbas et al. (2023)"
+    },
+    {
+      "raw_text": "Adiwardana et al. (2020) Adiwardana, D., Luong, M.-T., So, D. R., Hall, J., Fiedel, N., Thoppilan, R., Yang, Z., Kulshreshtha, A., Nemade, G., Lu, Y., et al. Towards a human-like open-domain chatbot. arXiv preprint arXiv:2001.09977, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": "2001.09977",
+      "doi": null,
+      "url": null,
+      "citation_key": "Adiwardana et al. (2020)"
+    },
+    {
+      "raw_text": "Aleph Alpha (2023) Aleph Alpha. Luminous: performance benchmarks. arXiv preprint arXiv:1810.12885, 2023. URL https://www.aleph-alpha.com/pdf/2023_02_AA_Benchmarks_doc.pdf.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "1810.12885",
+      "doi": null,
+      "url": "https://www.aleph-alpha.com/pdf/2023_02_AA_Benchmarks_doc.pdf",
+      "citation_key": "Aleph Alpha (2023)"
+    },
+    {
+      "raw_text": "Allamanis (2019) Allamanis, M. The adverse effects of code duplication in machine learning models of code. In Proceedings of the 2019 ACM SIGPLAN International Symposium on New Ideas, New Paradigms, and Reflections on Programming and Software, pp. 143–153, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Allamanis (2019)"
+    },
+    {
+      "raw_text": "Almazrouei et al. (2023) Almazrouei, E., Cappelli, A., Cojocaru, R., Debbah, M., Goffinet, E., Heslow, D., Launay, J., Malartic, Q., Noune, B., Pannier, B., and Penedo, G. Falcon-40b: an open large language model with state-of-the-art performance. 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Almazrouei et al. (2023)"
+    },
+    {
+      "raw_text": "Amini et al. (2019) Amini, A., Gabriel, S., Lin, S., Koncel-Kedziorski, R., Choi, Y., and Hajishirzi, H. Mathqa: Towards interpretable math word problem solving with operation-based formalisms. In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers), pp. 2357–2367, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Amini et al. (2019)"
+    },
+    {
+      "raw_text": "Aroca-Ouellette et al. (2021) Aroca-Ouellette, S., Paik, C., Roncone, A., and Kann, K. Prost: Physical reasoning about objects through space and time. In Findings of the Association for Computational Linguistics: ACL-IJCNLP 2021, pp. 4597–4608, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Aroca-Ouellette et al. (2021)"
+    },
+    {
+      "raw_text": "Artetxe et al. (2021) Artetxe, M., Bhosale, S., Goyal, N., Mihaylov, T., Ott, M., Shleifer, S., Lin, X. V., Du, J., Iyer, S., Pasunuru, R., et al. Efficient large scale language modeling with mixtures of experts. arXiv preprint arXiv:2112.10684, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2112.10684",
+      "doi": null,
+      "url": null,
+      "citation_key": "Artetxe et al. (2021)"
+    },
+    {
+      "raw_text": "Barbaresi (2021) Barbaresi, A. Trafilatura: A Web Scraping Library and Command-Line Tool for Text Discovery and Extraction. In Proceedings of the Joint Conference of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing: System Demonstrations, pp. 122–131. Association for Computational Linguistics, 2021. URL https://aclanthology.org/2021.acl-demo.15.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://aclanthology.org/2021.acl-demo.15",
+      "citation_key": "Barbaresi (2021)"
+    },
+    {
+      "raw_text": "Beltagy et al. (2019) Beltagy, I., Lo, K., and Cohan, A. Scibert: A pretrained language model for scientific text. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP), pp. 3615–3620, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Beltagy et al. (2019)"
+    },
+    {
+      "raw_text": "Biderman et al. (2023) Biderman, S., Schoelkopf, H., Anthony, Q., Bradley, H., O’Brien, K., Hallahan, E., Khan, M. A., Purohit, S., Prashanth, U. S., Raff, E., et al. Pythia: A suite for analyzing large language models across training and scaling. arXiv preprint arXiv:2304.01373, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.01373",
+      "doi": null,
+      "url": null,
+      "citation_key": "Biderman et al. (2023)"
+    },
+    {
+      "raw_text": "Bisk et al. (2020) Bisk, Y., Zellers, R., Gao, J., Choi, Y., et al. Piqa: Reasoning about physical commonsense in natural language. In Proceedings of the AAAI conference on artificial intelligence, volume 34, pp. 7432–7439, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bisk et al. (2020)"
+    },
+    {
+      "raw_text": "Black et al. (2021) Black, S., Leo, G., Wang, P., Leahy, C., and Biderman, S. GPT-Neo: Large Scale Autoregressive Language Modeling with Mesh-Tensorflow, March 2021. URL https://doi.org/10.5281/zenodo.5297715. If you use this software, please cite it using these metadata.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.5281/zenodo.5297715",
+      "url": "https://doi.org/10.5281/zenodo.5297715",
+      "citation_key": "Black et al. (2021)"
+    },
+    {
+      "raw_text": "Black et al. (2022) Black, S., Biderman, S., Hallahan, E., Anthony, Q., Gao, L., Golding, L., He, H., Leahy, C., McDonell, K., Phang, J., et al. Gpt-neox-20b: An open-source autoregressive language model. Challenges & Perspectives in Creating Large Language Models, pp. 95, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Black et al. (2022)"
+    },
+    {
+      "raw_text": "Broder (1997) Broder, A. Z. On the resemblance and containment of documents. In Proceedings. Compression and Complexity of Sequences 1997, pp. 21–29. IEEE, 1997.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Broder (1997)"
+    },
+    {
+      "raw_text": "Brown et al. (2020) Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al. Language models are few-shot learners. Advances in neural information processing systems, 33:1877–1901, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Brown et al. (2020)"
+    },
+    {
+      "raw_text": "Carlini et al. (2021) Carlini, N., Tramer, F., Wallace, E., Jagielski, M., Herbert-Voss, A., Lee, K., Roberts, A., Brown, T., Song, D., Erlingsson, U., et al. Extracting training data from large language models. In 30th USENIX Security Symposium (USENIX Security 21), pp. 2633–2650, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Carlini et al. (2021)"
+    },
+    {
+      "raw_text": "Carlini et al. (2022) Carlini, N., Ippolito, D., Jagielski, M., Lee, K., Tramer, F., and Zhang, C. Quantifying memorization across neural language models. arXiv preprint arXiv:2202.07646, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2202.07646",
+      "doi": null,
+      "url": null,
+      "citation_key": "Carlini et al. (2022)"
+    },
+    {
+      "raw_text": "Charikar (2002) Charikar, M. S. Similarity estimation techniques from rounding algorithms. In Proceedings of the thiry-fourth annual ACM symposium on Theory of computing, pp. 380–388, 2002.",
+      "title": null,
+      "authors": [],
+      "year": "2002",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Charikar (2002)"
+    },
+    {
+      "raw_text": "Chelba et al. (2013) Chelba, C., Mikolov, T., Schuster, M., Ge, Q., Brants, T., Koehn, P., and Robinson, T. One billion word benchmark for measuring progress in statistical language modeling. arXiv preprint arXiv:1312.3005, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1312.3005",
+      "doi": null,
+      "url": null,
+      "citation_key": "Chelba et al. (2013)"
+    },
+    {
+      "raw_text": "Chowdhery et al. (2022) Chowdhery, A., Narang, S., Devlin, J., Bosma, M., Mishra, G., Roberts, A., Barham, P., Chung, H. W., Sutton, C., Gehrmann, S., et al. Palm: Scaling language modeling with pathways. arXiv preprint arXiv:2204.02311, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2204.02311",
+      "doi": null,
+      "url": null,
+      "citation_key": "Chowdhery et al. (2022)"
+    },
+    {
+      "raw_text": "Clark et al. (2019) Clark, C., Lee, K., Chang, M.-W., Kwiatkowski, T., Collins, M., and Toutanova, K. Boolq: Exploring the surprising difficulty of natural yes/no questions. In Proceedings of NAACL-HLT, pp. 2924–2936, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Clark et al. (2019)"
+    },
+    {
+      "raw_text": "Clark et al. (2018) Clark, P., Cowhey, I., Etzioni, O., Khot, T., Sabharwal, A., Schoenick, C., and Tafjord, O. Think you have solved question answering? try arc, the ai2 reasoning challenge. arXiv preprint arXiv:1803.05457, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": "1803.05457",
+      "doi": null,
+      "url": null,
+      "citation_key": "Clark et al. (2018)"
+    },
+    {
+      "raw_text": "Dagan et al. (2010) Dagan, I., Dolan, B., Magnini, B., and Roth, D. Recognizing textual entailment: Rational, evaluation and approaches–erratum. Natural Language Engineering, 16(1):105–105, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dagan et al. (2010)"
+    },
+    {
+      "raw_text": "Dao et al. (2022) Dao, T., Fu, D. Y., Ermon, S., Rudra, A., and Re, C. Flashattention: Fast and memory-efficient exact attention with io-awareness. In Advances in Neural Information Processing Systems, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dao et al. (2022)"
+    },
+    {
+      "raw_text": "De Marneffe et al. (2019) De Marneffe, M.-C., Simons, M., and Tonhauser, J. The commitmentbank: Investigating projection in naturally occurring discourse. In proceedings of Sinn und Bedeutung, volume 23, pp. 107–124, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "De Marneffe et al. (2019)"
+    },
+    {
+      "raw_text": "Devlin et al. (2019) Devlin, J., Chang, M.-W., Lee, K., and Toutanova, K. Bert: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers), pp. 4171–4186, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Devlin et al. (2019)"
+    },
+    {
+      "raw_text": "Dey et al. (2023) Dey, N., Gosal, G., Khachane, H., Marshall, W., Pathria, R., Tom, M., Hestness, J., et al. Cerebras-gpt: Open compute-optimal language models trained on the cerebras wafer-scale cluster. arXiv preprint arXiv:2304.03208, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.03208",
+      "doi": null,
+      "url": null,
+      "citation_key": "Dey et al. (2023)"
+    },
+    {
+      "raw_text": "Dodge et al. (2021) Dodge, J., Sap, M., Marasović, A., Agnew, W., Ilharco, G., Groeneveld, D., Mitchell, M., and Gardner, M. Documenting large webtext corpora: A case study on the colossal clean crawled corpus. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing, pp. 1286–1305, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dodge et al. (2021)"
+    },
+    {
+      "raw_text": "Eberhard et al. (2023) Eberhard, D. M., Simons, G. F., and Fennig, C. D. Ethnologue: Languages of the World. SIL International, Dallas, TX, USA, twenty-sixth edition, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Eberhard et al. (2023)"
+    },
+    {
+      "raw_text": "Gao et al. (2020) Gao, L., Biderman, S., Black, S., Golding, L., Hoppe, T., Foster, C., Phang, J., He, H., Thite, A., Nabeshima, N., et al. The pile: An 800gb dataset of diverse text for language modeling. arXiv preprint arXiv:2101.00027, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": "2101.00027",
+      "doi": null,
+      "url": null,
+      "citation_key": "Gao et al. (2020)"
+    },
+    {
+      "raw_text": "Gao et al. (2021) Gao, L., Tow, J., Biderman, S., Black, S., DiPofi, A., Foster, C., Golding, L., Hsu, J., McDonell, K., Muennighoff, N., Phang, J., Reynolds, L., Tang, E., Thite, A., Wang, B., Wang, K., and Zou, A. A framework for few-shot language model evaluation, September 2021. URL https://doi.org/10.5281/zenodo.5371628.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.5281/zenodo.5371628",
+      "url": "https://doi.org/10.5281/zenodo.5371628",
+      "citation_key": "Gao et al. (2021)"
+    },
+    {
+      "raw_text": "Gebru et al. (2021) Gebru, T., Morgenstern, J., Vecchione, B., Vaughan, J. W., Wallach, H., Iii, H. D., and Crawford, K. Datasheets for datasets. Communications of the ACM, 64(12):86–92, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Gebru et al. (2021)"
+    },
+    {
+      "raw_text": "Gokaslan et al. (2019) Gokaslan, A., Cohen, V., Pavlick, E., and Tellex, S. Openwebtext corpus. http://Skylion007.github.io/OpenWebTextCorpus, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://Skylion007.github.io/OpenWebTextCorpus",
+      "citation_key": "Gokaslan et al. (2019)"
+    },
+    {
+      "raw_text": "Gordon et al. (2012) Gordon, A., Kozareva, Z., and Roemmele, M. Semeval-2012 task 7: Choice of plausible alternatives: An evaluation of commonsense causal reasoning. In * SEM 2012: The First Joint Conference on Lexical and Computational Semantics–Volume 1: Proceedings of the main conference and the shared task, and Volume 2: Proceedings of the Sixth International Workshop on Semantic Evaluation (SemEval 2012), pp. 394–398, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Gordon et al. (2012)"
+    },
+    {
+      "raw_text": "Grave et al. (2018) Grave, É., Bojanowski, P., Gupta, P., Joulin, A., and Mikolov, T. Learning word vectors for 157 languages. In Proceedings of the Eleventh International Conference on Language Resources and Evaluation (LREC 2018), 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Grave et al. (2018)"
+    },
+    {
+      "raw_text": "Hanu & Unitary team (2020) Hanu, L. and Unitary team. Detoxify. Github. https://github.com/unitaryai/detoxify, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/unitaryai/detoxify",
+      "citation_key": "Hanu & Unitary team (2020)"
+    },
+    {
+      "raw_text": "Hernandez et al. (2022) Hernandez, D., Brown, T., Conerly, T., DasSarma, N., Drain, D., El-Showk, S., Elhage, N., Hatfield-Dodds, Z., Henighan, T., Hume, T., et al. Scaling laws and interpretability of learning from repeated data. arXiv preprint arXiv:2205.10487, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.10487",
+      "doi": null,
+      "url": null,
+      "citation_key": "Hernandez et al. (2022)"
+    },
+    {
+      "raw_text": "Hoffmann et al. (2022) Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E., Cai, T., Rutherford, E., Casas, D. d. L., Hendricks, L. A., Welbl, J., Clark, A., et al. Training compute-optimal large language models. arXiv preprint arXiv:2203.15556, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2203.15556",
+      "doi": null,
+      "url": null,
+      "citation_key": "Hoffmann et al. (2022)"
+    },
+    {
+      "raw_text": "Holtzman et al. (2019) Holtzman, A., Buys, J., Du, L., Forbes, M., and Choi, Y. The curious case of neural text degeneration. In International Conference on Learning Representations, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Holtzman et al. (2019)"
+    },
+    {
+      "raw_text": "Jaccard (1912) Jaccard, P. The distribution of the flora in the alpine zone.1. New Phytologist, 11:37–50, 1912.",
+      "title": null,
+      "authors": [],
+      "year": "1912",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Jaccard (1912)"
+    },
+    {
+      "raw_text": "Jin et al. (2019) Jin, Q., Dhingra, B., Liu, Z., Cohen, W., and Lu, X. Pubmedqa: A dataset for biomedical research question answering. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP), pp. 2567–2577, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Jin et al. (2019)"
+    },
+    {
+      "raw_text": "Joulin et al. (2016) Joulin, A., Grave, E., Bojanowski, P., Douze, M., Jégou, H., and Mikolov, T. Fasttext. zip: Compressing text classification models. arXiv preprint arXiv:1612.03651, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1612.03651",
+      "doi": null,
+      "url": null,
+      "citation_key": "Joulin et al. (2016)"
+    },
+    {
+      "raw_text": "Kaplan et al. (2020) Kaplan, J., McCandlish, S., Henighan, T., Brown, T. B., Chess, B., Child, R., Gray, S., Radford, A., Wu, J., and Amodei, D. Scaling laws for neural language models. arXiv preprint arXiv:2001.08361, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": "2001.08361",
+      "doi": null,
+      "url": null,
+      "citation_key": "Kaplan et al. (2020)"
+    },
+    {
+      "raw_text": "Kreutzer et al. (2022) Kreutzer, J., Caswell, I., Wang, L., Wahab, A., van Esch, D., Ulzii-Orshikh, N., Tapo, A. A., Subramani, N., Sokolov, A., Sikasote, C., et al. Quality at a glance: An audit of web-crawled multilingual datasets. Transactions of the Association for Computational Linguistics, 10:50–72, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kreutzer et al. (2022)"
+    },
+    {
+      "raw_text": "Laurençon et al. (2022) Laurençon, H., Saulnier, L., Wang, T., Akiki, C., del Moral, A. V., Le Scao, T., Von Werra, L., Mou, C., Ponferrada, E. G., Nguyen, H., et al. The bigscience roots corpus: A 1.6 tb composite multilingual dataset. In Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Laurençon et al. (2022)"
+    },
+    {
+      "raw_text": "Lee et al. (2022) Lee, K., Ippolito, D., Nystrom, A., Zhang, C., Eck, D., Callison-Burch, C., and Carlini, N. Deduplicating training data makes language models better. In Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 8424–8445, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lee et al. (2022)"
+    },
+    {
+      "raw_text": "Liu et al. (2021) Liu, J., Cui, L., Liu, H., Huang, D., Wang, Y., and Zhang, Y. Logiqa: a challenge dataset for machine reading comprehension with logical reasoning. In Proceedings of the Twenty-Ninth International Conference on International Joint Conferences on Artificial Intelligence, pp. 3622–3628, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2021)"
+    },
+    {
+      "raw_text": "Liu et al. (2019) Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., Levy, O., Lewis, M., Zettlemoyer, L., and Stoyanov, V. Roberta: A robustly optimized bert pretraining approach. arXiv preprint arXiv:1907.11692, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": "1907.11692",
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2019)"
+    },
+    {
+      "raw_text": "Lopukhin (2019) Lopukhin, K. Evaluating quality of article body extraction for commercial services and open-source libraries. https://github.com/scrapinghub/article-extraction-benchmark, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/scrapinghub/article-extraction-benchmark",
+      "citation_key": "Lopukhin (2019)"
+    },
+    {
+      "raw_text": "Manber & Myers (1993) Manber, U. and Myers, G. Suffix arrays: a new method for on-line string searches. Journal on Computing, 22(5):935–948, 1993.",
+      "title": null,
+      "authors": [],
+      "year": "1993",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Manber & Myers (1993)"
+    },
+    {
+      "raw_text": "Mihaylov et al. (2018) Mihaylov, T., Clark, P., Khot, T., and Sabharwal, A. Can a suit of armor conduct electricity? a new dataset for open book question answering. In Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing, pp. 2381–2391, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mihaylov et al. (2018)"
+    },
+    {
+      "raw_text": "Mitchell et al. (2019) Mitchell, M., Wu, S., Zaldivar, A., Barnes, P., Vasserman, L., Hutchinson, B., Spitzer, E., Raji, I. D., and Gebru, T. Model cards for model reporting. In Proceedings of the conference on fairness, accountability, and transparency, pp. 220–229, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mitchell et al. (2019)"
+    },
+    {
+      "raw_text": "Nie et al. (2019) Nie, Y., Williams, A., Dinan, E., Bansal, M., Weston, J., and Kiela, D. Adversarial nli: A new benchmark for natural language understanding. arXiv preprint arXiv:1910.14599, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": "1910.14599",
+      "doi": null,
+      "url": null,
+      "citation_key": "Nie et al. (2019)"
+    },
+    {
+      "raw_text": "Ortiz Suárez et al. (2019) Ortiz Suárez, P. J., Sagot, B., and Romary, L. Asynchronous pipelines for processing huge corpora on medium to low resource infrastructures. Proceedings of the Workshop on Challenges in the Management of Large Corpora (CMLC-7) 2019. Cardiff, 22nd July 2019, pp. 9 – 16, Mannheim, 2019. Leibniz-Institut für Deutsche Sprache. doi: 10.14618/ids-pub-9021. URL http://nbn-resolving.de/urn:nbn:de:bsz:mh39-90215.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.14618/ids-pub-9021",
+      "url": "http://nbn-resolving.de/urn:nbn:de:bsz:mh39-90215",
+      "citation_key": "Ortiz Suárez et al. (2019)"
+    },
+    {
+      "raw_text": "Paperno et al. (2016) Paperno, D., Kruszewski, G., Lazaridou, A., Pham, N.-Q., Bernardi, R., Pezzelle, S., Baroni, M., Boleda, G., and Fernández, R. The lambada dataset: Word prediction requiring a broad discourse context. In Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 1525–1534, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Paperno et al. (2016)"
+    },
+    {
+      "raw_text": "Pomikálek (2011) Pomikálek, J. Justext. 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pomikálek (2011)"
+    },
+    {
+      "raw_text": "Press et al. (2021) Press, O., Smith, N., and Lewis, M. Train short, test long: Attention with linear biases enables input length extrapolation. In International Conference on Learning Representations, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Press et al. (2021)"
+    },
+    {
+      "raw_text": "Radford et al. (2018) Radford, A., Narasimhan, K., Salimans, T., Sutskever, I., et al. Improving language understanding by generative pre-training. 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Radford et al. (2018)"
+    },
+    {
+      "raw_text": "Radford et al. (2019) Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., Sutskever, I., et al. Language models are unsupervised multitask learners. 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Radford et al. (2019)"
+    },
+    {
+      "raw_text": "Rae et al. (2021) Rae, J. W., Borgeaud, S., Cai, T., Millican, K., Hoffmann, J., Song, F., Aslanides, J., Henderson, S., Ring, R., Young, S., Rutherford, E., Hennigan, T., Menick, J., Cassirer, A., Powell, R., Driessche, G. v. d., Hendricks, L. A., Rauh, M., Huang, P.-S., Glaese, A., Welbl, J., Dathathri, S., Huang, S., Uesato, J., Mellor, J., Higgins, I., Creswell, A., McAleese, N., Wu, A., Elsen, E., Jayakumar, S., Buchatskaya, E., Budden, D., Sutherland, E., Simonyan, K., Paganini, M., Sifre, L., Martens, L., Li, X. L., Kuncoro, A., Nematzadeh, A., Gribovskaya, E., Donato, D., Lazaridou, A., Mensch, A., Lespiau, J.-B., Tsimpoukelli, M., Grigorev, N., Fritz, D., Sottiaux, T., Pajarskas, M., Pohlen, T., Gong, Z., Toyama, D., d’Autume, C. d. M., Li, Y., Terzi, T., Mikulik, V., Babuschkin, I., Clark, A., Casas, D. d. L., Guy, A., Jones, C., Bradbury, J., Johnson, M., Hechtman, B., Weidinger, L., Gabriel, I., Isaac, W., Lockhart, E., Osindero, S., Rimell, L., Dyer, C., Vinyals, O., Ayoub, K., Stanway, J., Bennett, L., Hassabis, D., Kavukcuoglu, K., and Irving, G. Scaling language models: Methods, analysis & insights from training gopher. 2021. doi: 10.48550/ARXIV.2112.11446. URL https://arxiv.org/abs/2112.11446.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2112.11446",
+      "doi": "10.48550/ARXIV.2112.11446",
+      "url": "https://arxiv.org/abs/2112.11446",
+      "citation_key": "Rae et al. (2021)"
+    },
+    {
+      "raw_text": "Raffel et al. (2020) Raffel, C., Shazeer, N., Roberts, A., Lee, K., Narang, S., Matena, M., Zhou, Y., Li, W., and Liu, P. J. Exploring the limits of transfer learning with a unified text-to-text transformer. Journal of Machine Learning Research, 21(140):1–67, 2020. URL http://jmlr.org/papers/v21/20-074.html.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://jmlr.org/papers/v21/20-074.html",
+      "citation_key": "Raffel et al. (2020)"
+    },
+    {
+      "raw_text": "Sakaguchi et al. (2021) Sakaguchi, K., Bras, R. L., Bhagavatula, C., and Choi, Y. Winogrande: An adversarial winograd schema challenge at scale. Communications of the ACM, 64(9):99–106, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Sakaguchi et al. (2021)"
+    },
+    {
+      "raw_text": "Scao et al. (2022a) Scao, T. L., Fan, A., Akiki, C., Pavlick, E., Ilić, S., Hesslow, D., Castagné, R., Luccioni, A. S., Yvon, F., Gallé, M., et al. Bloom: A 176b-parameter open-access multilingual language model. arXiv preprint arXiv:2211.05100, 2022a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2211.05100",
+      "doi": null,
+      "url": null,
+      "citation_key": "Scao et al. (2022a)"
+    },
+    {
+      "raw_text": "Scao et al. (2022b) Scao, T. L., Wang, T., Hesslow, D., Saulnier, L., Bekman, S., Bari, M. S., Bideman, S., Elsahar, H., Muennighoff, N., Phang, J., et al. What language model to train if you have one million gpu hours? arXiv preprint arXiv:2210.15424, 2022b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2210.15424",
+      "doi": null,
+      "url": null,
+      "citation_key": "Scao et al. (2022b)"
+    },
+    {
+      "raw_text": "Sevilla et al. (2022) Sevilla, J., Heim, L., Ho, A., Besiroglu, T., Hobbhahn, M., and Villalobos, P. Compute trends across three eras of machine learning. arXiv preprint arXiv:2202.05924, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2202.05924",
+      "doi": null,
+      "url": null,
+      "citation_key": "Sevilla et al. (2022)"
+    },
+    {
+      "raw_text": "Sites (2013) Sites, D. Compact language detector 2. Software available at https://github. com/CLD2Owners/cld2 (last updated on August 2015), 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github",
+      "citation_key": "Sites (2013)"
+    },
+    {
+      "raw_text": "Tay et al. (2021) Tay, Y., Dehghani, M., Rao, J., Fedus, W., Abnar, S., Chung, H. W., Narang, S., Yogatama, D., Vaswani, A., and Metzler, D. Scale efficiently: Insights from pretraining and finetuning transformers. In International Conference on Learning Representations, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Tay et al. (2021)"
+    },
+    {
+      "raw_text": "Thoppilan et al. (2022) Thoppilan, R., De Freitas, D., Hall, J., Shazeer, N., Kulshreshtha, A., Cheng, H.-T., Jin, A., Bos, T., Baker, L., Du, Y., et al. Lamda: Language models for dialog applications. arXiv preprint arXiv:2201.08239, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2201.08239",
+      "doi": null,
+      "url": null,
+      "citation_key": "Thoppilan et al. (2022)"
+    },
+    {
+      "raw_text": "Touvron et al. (2023) Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., Rozière, B., Goyal, N., Hambro, E., Azhar, F., et al. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.13971",
+      "doi": null,
+      "url": null,
+      "citation_key": "Touvron et al. (2023)"
+    },
+    {
+      "raw_text": "Trinh & Le (2018) Trinh, T. H. and Le, Q. V. A simple method for commonsense reasoning. arXiv preprint arXiv:1806.02847, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": "1806.02847",
+      "doi": null,
+      "url": null,
+      "citation_key": "Trinh & Le (2018)"
+    },
+    {
+      "raw_text": "Vilares & Gómez-Rodríguez (2019) Vilares, D. and Gómez-Rodríguez, C. Head-qa: A healthcare dataset for complex reasoning. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, pp. 960–966, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Vilares & Gómez-Rodríguez (2019)"
+    },
+    {
+      "raw_text": "Villalobos et al. (2022) Villalobos, P., Sevilla, J., Heim, L., Besiroglu, T., Hobbhahn, M., and Ho, A. Will we run out of data? an analysis of the limits of scaling datasets in machine learning. arXiv preprint arXiv:2211.04325, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2211.04325",
+      "doi": null,
+      "url": null,
+      "citation_key": "Villalobos et al. (2022)"
+    },
+    {
+      "raw_text": "Wang & Komatsuzaki (2021) Wang, B. and Komatsuzaki, A. GPT-J-6B: A 6 Billion Parameter Autoregressive Language Model. https://github.com/kingoflolz/mesh-transformer-jax, May 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/kingoflolz/mesh-transformer-jax",
+      "citation_key": "Wang & Komatsuzaki (2021)"
+    },
+    {
+      "raw_text": "Wang et al. (2022) Wang, T., Roberts, A., Hesslow, D., Scao, T. L., Chung, H. W., Beltagy, I., Launay, J., and Raffel, C. What language model architecture and pretraining objective work best for zero-shot generalization? In International Conference on Machine Learning, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2022)"
+    },
+    {
+      "raw_text": "Wei et al. (2022) Wei, J., Tay, Y., Bommasani, R., Raffel, C., Zoph, B., Borgeaud, S., Yogatama, D., Bosma, M., Zhou, D., Metzler, D., et al. Emergent abilities of large language models. Transactions on Machine Learning Research, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wei et al. (2022)"
+    },
+    {
+      "raw_text": "Welbl et al. (2017) Welbl, J., Liu, N. F., and Gardner, M. Crowdsourcing multiple choice science questions. In Proceedings of the 3rd Workshop on Noisy User-generated Text, pp. 94–106, 2017.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Welbl et al. (2017)"
+    },
+    {
+      "raw_text": "Welbl et al. (2021) Welbl, J., Glaese, A., Uesato, J., Dathathri, S., Mellor, J., Hendricks, L. A., Anderson, K., Kohli, P., Coppin, B., and Huang, P.-S. Challenges in detoxifying language models. In Findings of the Association for Computational Linguistics: EMNLP 2021, pp. 2447–2469, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Welbl et al. (2021)"
+    },
+    {
+      "raw_text": "Wenzek et al. (2020) Wenzek, G., Lachaux, M.-A., Conneau, A., Chaudhary, V., Guzmán, F., Joulin, A., and Grave, É. Ccnet: Extracting high quality monolingual datasets from web crawl data. In Proceedings of the 12th Language Resources and Evaluation Conference, pp. 4003–4012, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wenzek et al. (2020)"
+    },
+    {
+      "raw_text": "Xue et al. (2021) Xue, L., Constant, N., Roberts, A., Kale, M., Al-Rfou, R., Siddhant, A., Barua, A., and Raffel, C. mt5: A massively multilingual pre-trained text-to-text transformer. In Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, pp. 483–498, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Xue et al. (2021)"
+    },
+    {
+      "raw_text": "Yang et al. (2021) Yang, G., Hu, E., Babuschkin, I., Sidor, S., Liu, X., Farhi, D., Ryder, N., Pachocki, J., Chen, W., and Gao, J. Tuning large neural networks via zero-shot hyperparameter transfer. Advances in Neural Information Processing Systems, 34:17084–17097, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. (2021)"
+    },
+    {
+      "raw_text": "Zellers et al. (2019) Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi, Y. Hellaswag: Can a machine really finish your sentence? In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, pp. 4791–4800, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zellers et al. (2019)"
+    },
+    {
+      "raw_text": "Zeng et al. (2021) Zeng, W., Ren, X., Su, T., Wang, H., Liao, Y., Wang, Z., Jiang, X., Yang, Z., Wang, K., Zhang, X., et al. Pangu-alpha: Large-scale autoregressive pretrained chinese language models with auto-parallel computation. arXiv preprint arXiv:2104.12369, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2104.12369",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zeng et al. (2021)"
+    },
+    {
+      "raw_text": "Zhang et al. (2018) Zhang, S., Liu, X., Liu, J., Gao, J., Duh, K., and Van Durme, B. Record: Bridging the gap between human and machine commonsense reading comprehension. arXiv preprint arXiv:1810.12885, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": "1810.12885",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. (2018)"
+    },
+    {
+      "raw_text": "Zhang et al. (2022) Zhang, S., Roller, S., Goyal, N., Artetxe, M., Chen, M., Chen, S., Dewan, C., Diab, M., Li, X., Lin, X. V., et al. Opt: Open pre-trained transformer language models. arXiv preprint arXiv:2205.01068, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.01068",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. (2022)"
+    },
+    {
+      "raw_text": "Zhu et al. (2015) Zhu, Y., Kiros, R., Zemel, R., Salakhutdinov, R., Urtasun, R., Torralba, A., and Fidler, S. Aligning books and movies: Towards story-like visual explanations by watching movies and reading books. In Proceedings of the IEEE international conference on computer vision, pp. 19–27, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhu et al. (2015)"
+    }
+  ],
+  "full_text": "## Introduction\n\nProgress in natural language processing is increasingly driven by sheer compute scale alone (Sevilla et al., 2022): as more compute is expended to train large language models (LLM), they gain and exhibit powerful emergent capabilities (Brown et al., 2020; Wei et al., 2022). To best benefit from scaling, recent scaling laws dictate that both model size and dataset size should jointly be increased (Hoffmann et al., 2022). This is at variance with earlier findings, which had argued that scaling should focus on model size first and foremost, with minimal data scaling (Kaplan et al., 2020).\n\nThis joint scaling paradigm raises significant challenges: although plentiful, text data is not infinite, especially so when considerations on data quality and licensing are taken into account–leading some researchers to argue scaling may soon be bottlenecked by data availability (Villalobos et al., 2022). Concretely, optimally training a GPT-3 sized model (175B parameters) would require no less than 3,500 billion tokens of text according to Hoffmann et al. (2022). This is twice as much as the largest pretraining datasets ever demonstrated (Hoffmann et al., 2022; Touvron et al., 2023), and ten times more than the largest publicly available English datasets such as OSCAR (Ortiz Suárez et al., 2019), C4 (Raffel et al., 2020), or The Pile (Gao et al., 2020).\n\nMassively scaling-up pretraining data is made even more challenging by the fact LLMs are commonly trained using a mixture of web crawls and so-called “high-quality” data (Brown et al., 2020; Gao et al., 2020). Typical high-quality corpora include curated sources of books, technical documents, human-selected web pages, or social media conversations. The increased diversity and quality brought forth by these curated corpora is believed to be a key component of performant models (Scao et al., 2022b). Unfortunately, curation is labour intensive: typically, each source requires specialized processing, while yielding a limited amount of data. Furthermore, licensed sources raise legal challenges.\n\nNevertheless, most pretraining data is still sourced from massive web crawls which can be scaled up to trillions of tokens with limited human intervention. However, the quality of this data has traditionally been seen as (much) inferior to that of the manually curated data sources. Even finely processed sources of web data, such as C4 (Raffel et al., 2020) or OSCAR (Ortiz Suárez et al., 2019), are regarded as inferior to curated corpora for LLMs (Rae et al., 2021; Scao et al., 2022b), producing less performant models.\n\nTo sustain the ever-increasing data needs of larger and larger LLMs, and to streamline data pipelines and reduce the need for human-intensive curation, we propose to explore how web data can be better processed to significantly improve its quality, resulting in models as capable, if not more capable, than models trained on curated corpora.\n\n## Related works\n\n## Macrodata Refinement and RefinedWeb\n\nWe introduce MDR (MacroData Refinement), a pipeline for filtering and deduplicating web data from CommonCrawl at very large scale. Using MDR, we produce RefinedWeb, an English pretraining dataset of five trillion tokens based on web data only. We leverage strict filtering and stringent deduplication to uplift the quality of web data, distilling it down to a corpus matching the quality of aggregated corpora used to train state-of-the-art models.\n\n### Document preparation: reading data, filtering URLs, extracting text, and language identification\n\n### Filtering: document-wise and line-wise\n\n### Deduplication: fuzzy, exact, and across dumps\n\nAfter filtering, although data quality has improved, a large fraction of the content is repeated across documents. This may be due to the crawler indirectly hitting the same page multiple times, to boilerplate content being repeated (e.g., licences), or even to plagiarism. These duplicates can strongly impact models, favoring memorization instead of generalization (Lee et al., 2022; Hernandez et al., 2022). Since deduplication is expensive, it has seen limited adoption in public datasets (Ortiz Suárez et al., 2019; Raffel et al., 2020). We adopt an aggressive deduplication strategy, combining both fuzzy document matches and exact sequences removal.\n\n## Experiments\n\nWe now validate that RefinedWeb can be used to train powerful models, matching the zero-shot performance obtained with curated corpora and state-of-the-art language models. We first discuss our evaluation and pretraining setup, and models with which we compare. We perform experiments at small scale to internally compare with other popular datasets, and ablate the three main stages of RefinedWeb (raw, filtered, final). Then, we scale to 1B and 7B models trained on 350GT to compare with state-of-the-art models. Finally, we apply the MDR pipeline to existing pretraining datasets, and show that it can potentially deliver further improvements.\n\n### Setting\n\nEvaluation. At variance with previous works studying pretraining datasets (Rae et al., 2021; Lee et al., 2022), we focus our evaluation on zero-shot generalization across many tasks rather than measuring validation loss. Perplexity alone can be at odds with end-task performance (Tay et al., 2021), and modern works on LLMs predominantly report zero-shot performance (Brown et al., 2020; Rae et al., 2021; Chowdhery et al., 2022). Furthermore, zero-shot generalization is the “natural” setting for autoregressive decoder-only models, in which they perform best (Wang et al., 2022). Our evaluation setup is inspired by the one used by the architecture and scaling group of Big Science (Scao et al., 2022b).\n\nWe base our evaluation on the popular Eleuther AI evaluation harness (Gao et al., 2021), allowing us to evaluate across a wide range of tasks in the zero-shot setting. We identified aggregates of tasks allowing us to: (1) obtain signal (i.e., non zero zero-shot performance) at small scale for ablations; (2) compare with results reported by other models. We outline these four aggregates small (for ablations), and core, main, ext (for comparisons) in Table 3.\n\nComparisons across models trained and evaluated in different settings are difficult to untangle, as many externalities may influence the 1 987results (e.g., numerical precision of training vs inference, prompts used). We distinguish three levels of comparisons: (1) internal comparisons, with models trained and evaluated within our codebase, for which only the pretraining datasets differ; (2) benchmark-level comparisons, with models trained with a different codebase but evaluated with the Eleuther AI harness, taking results from Scao et al. (2022b); Black et al. (2022); Aleph Alpha (2023); Dey et al. (2023), thereafter flagged with a ∗*; (3) external comparisons with Brown et al. (2020); Chowdhery et al. (2022), thereafter flagged with a ††\\dagger. For further details on evaluation, see Section F.1.\n\nModels. We train 1B, 3B, and 7B parameters autoregressive decoder-only models, based on configurations and hyperparameters similar to GPT-3 (Brown et al., 2020), diverging mostly on our use of ALiBi (Press et al., 2021). We use FlashAttention (Dao et al., 2022) in a custom codebase. We train internal models on both The Pile and RefinedWeb to control for deviations caused by our pretraining setup–we found The Pile models to perform in-line with others. For small-scale and ablation studies (first half of Section 4.2; Section 4.3), we train models to optimality according to the scaling laws of Hoffmann et al. (2022): on 27B and 60B tokens respectively for our 1B and 3B parameters models. For the main experiments demonstrating our approach (Falcon-RW models in Section 4.2), we train the models to 350GT, in line with popular public models (Brown et al., 2020; Wang & Komatsuzaki, 2021; Scao et al., 2022a). Note that we do not compare against the recently introduced LLaMA models (Touvron et al., 2023), as the smallest of them is trained on x2.5 more compute than our largest model, preventing a meaningful comparison from being made dataset-wise. For a more in-depth overview of the models and pretraining datasets with which we compare, see Appendix F.\n\n### Can web data alone outperform curated corpora?\n\nWe endeavour to demonstrate that web data alone can result in models outperforming other models trained on curated corpora. To do so, we first perform a small-scale study with 1B and 3B parameters models trained to optimality (27GT and 60GT) on popular web and curated datasets. Then, we scale up to 1B and 7B models trained on 350GT, and compare zero-shot generalization to state-of-the-art models.\n\n### Do other corpora benefit from MDR?\n\nAblating the contributions and evaluating the performance of individual components in the MDR pipeline is difficult: for most heuristics, there is no agreed-upon ground truth, and changes may be too insignificant to result in sufficient zero-shot signal after pretraining. In the first half of Section 4.2, we identified that subsequent stages of RefinedWeb (raw, filtered, final) led to improvements in performance. In this section, we propose to apply independently the filtering and deduplication stages of MDR to popular pretraining datasets, studying whether they generalize widely.\n\nWe report results on the small-agg in Table 5. First, we find that improvements from filtering are not systematic. On The Pile, we had to adjust our line length and characters ratio heuristics to avoid expunging books and code. Despite improvements on OSCAR-21.09, C4, and The Pile, our filters worsen performance on OSCAR-22.01; generally, removal rates from filtering do not seem strongly correlated with downstream accuracy. Conversely, deduplication delivers a steady boost across all datasets, and removal rates are better correlated with changes in performance. We find OSCAR-21.09 and C4 to be already well deduplicated, while The Pile and OSCAR-22.01 exhibit 40-60% duplicates. The base version of OSCAR-22.01 is distributed without deduplication; for The Pile, this is consistent with the findings of Zhang et al. (2022). Finally, combining filtering and deduplication results in further improvements; interestingly, although performance is now more uniform across datasets, differences remain, suggesting that flaws in the original text extraction and processing can’t be fully compensated for.\n\nBy processing C4 through MDR, we are able to obtain subsets of data which might slightly outperform RefinedWeb; this combines both the stringent filtering of C4 (e.g., strict NSFW word blocklist, 3-sentence span deduplication) with our own filters and deduplication. While such a combination results in rejection rates that would be unacceptable for our target of 3-6 trillions tokens, this represents an interesting perspective for shorter runs, which may be able to extract extremely high-quality subsets from large web datasets.\n\n## Limitations\n\n## Conclusion\n\nAs LLMs are widely adopted, models trained past the recommendations of scaling laws are bound to become increasingly common to amortize inference costs (Touvron et al., 2023). This will further drive the need for pretraining datasets with trillions of tokens, an order of magnitude beyond publicly available corpora. We have demonstrated that stringent filtering and deduplication could result in a five trillion tokens web only dataset suitable to produce models competitive with the state-of-the-art, even outperforming LLMs trained on curated corpora. We publicly release a 600GT extract of RefinedWeb, and note that RefinedWeb has already been used to train state-of-the-art language models, such as Falcon-40B (Almazrouei et al., 2023).\n",
+  "extracted_at": "2026-01-05T15:35:34.499537"
+}

@@ -1,0 +1,19 @@
+{
+  "arxiv_id": "0205028v1",
+  "title": "NLTK: The Natural Language Toolkit",
+  "authors": [
+    "Edward Loper",
+    "Steven Bird"
+  ],
+  "abstract": "NLTK, the Natural Language Toolkit, is a suite of open source program modules, tutorials and problem sets, providing ready-to-use computational linguistics courseware. NLTK covers symbolic and statistical natural language processing, and is interfaced to annotated corpora. Students augment and replace existing components, learn structured programming by example, and manipulate sophisticated models from the outset.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2002-05-17T12:51:00+00:00",
+  "updated": "2002-05-17T12:51:00+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "8 pages, 1 figure, Proceedings of the ACL Workshop on Effective Tools and Methodologies for Teaching Natural Language Processing and Computational Linguistics, Philadelphia, July 2002, Association for Computational Linguistics",
+  "pdf_url": "https://arxiv.org/pdf/0205028v1.pdf"
+}

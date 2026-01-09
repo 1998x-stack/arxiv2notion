@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "1611.01626v3",
+  "title": "Combining policy gradient and Q-learning",
+  "authors": [
+    "Brendan O'Donoghue",
+    "Remi Munos",
+    "Koray Kavukcuoglu",
+    "Volodymyr Mnih"
+  ],
+  "abstract": "Policy gradient is an efficient technique for improving a policy in a reinforcement learning setting. However, vanilla online variants are on-policy only and not able to take advantage of off-policy data. In this paper we describe a new technique that combines policy gradient with off-policy Q-learning, drawing experience from a replay buffer. This is motivated by making a connection between the fixed points of the regularized policy gradient algorithm and the Q-values. This connection allows us to estimate the Q-values from the action preferences of the policy, to which we apply Q-learning updates. We refer to the new technique as 'PGQL', for policy gradient and Q-learning. We also establish an equivalency between action-value fitting techniques and actor-critic algorithms, showing that regularized policy gradient techniques can be interpreted as advantage function learning algorithms. We conclude with some numerical examples that demonstrate improved data efficiency and stability of PGQL. In particular, we tested PGQL on the full suite of Atari games and achieved performance exceeding that of both asynchronous advantage actor-critic (A3C) and Q-learning.",
+  "categories": [
+    "cs.LG",
+    "cs.AI",
+    "math.OC",
+    "stat.ML"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2016-11-05T10:49:37+00:00",
+  "updated": "2017-04-07T15:20:05+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1611.01626v3.pdf"
+}

@@ -1,0 +1,28 @@
+{
+  "arxiv_id": "1308.4214v1",
+  "title": "Pylearn2: a machine learning research library",
+  "authors": [
+    "Ian J. Goodfellow",
+    "David Warde-Farley",
+    "Pascal Lamblin",
+    "Vincent Dumoulin",
+    "Mehdi Mirza",
+    "Razvan Pascanu",
+    "James Bergstra",
+    "Frédéric Bastien",
+    "Yoshua Bengio"
+  ],
+  "abstract": "Pylearn2 is a machine learning research library. This does not just mean that it is a collection of machine learning algorithms that share a common API; it means that it has been designed for flexibility and extensibility in order to facilitate research projects that involve new or unusual use cases. In this paper we give a brief history of the library, an overview of its basic philosophy, a summary of the library's architecture, and a description of how the Pylearn2 community functions socially.",
+  "categories": [
+    "stat.ML",
+    "cs.LG",
+    "cs.MS"
+  ],
+  "primary_category": "stat.ML",
+  "published": "2013-08-20T02:50:43+00:00",
+  "updated": "2013-08-20T02:50:43+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "9 pages",
+  "pdf_url": "https://arxiv.org/pdf/1308.4214v1.pdf"
+}

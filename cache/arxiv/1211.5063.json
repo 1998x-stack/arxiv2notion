@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "1211.5063v2",
+  "title": "On the difficulty of training Recurrent Neural Networks",
+  "authors": [
+    "Razvan Pascanu",
+    "Tomas Mikolov",
+    "Yoshua Bengio"
+  ],
+  "abstract": "There are two widely known issues with properly training Recurrent Neural Networks, the vanishing and the exploding gradient problems detailed in Bengio et al. (1994). In this paper we attempt to improve the understanding of the underlying issues by exploring these problems from an analytical, a geometric and a dynamical systems perspective. Our analysis is used to justify a simple yet effective solution. We propose a gradient norm clipping strategy to deal with exploding gradients and a soft constraint for the vanishing gradients problem. We validate empirically our hypothesis and proposed solutions in the experimental section.",
+  "categories": [
+    "cs.LG"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2012-11-21T15:40:11+00:00",
+  "updated": "2013-02-16T00:35:48+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Improved description of the exploding gradient problem and description and analysis of the vanishing gradient problem",
+  "pdf_url": "https://arxiv.org/pdf/1211.5063v2.pdf"
+}

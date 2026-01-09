@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "1703.03906v2",
+  "title": "Massive Exploration of Neural Machine Translation Architectures",
+  "authors": [
+    "Denny Britz",
+    "Anna Goldie",
+    "Minh-Thang Luong",
+    "Quoc Le"
+  ],
+  "abstract": "Neural Machine Translation (NMT) has shown remarkable progress over the past few years with production systems now being deployed to end-users. One major drawback of current architectures is that they are expensive to train, typically requiring days to weeks of GPU time to converge. This makes exhaustive hyperparameter search, as is commonly done with other neural network architectures, prohibitively expensive. In this work, we present the first large-scale analysis of NMT architecture hyperparameters. We report empirical results and variance numbers for several hundred experimental runs, corresponding to over 250,000 GPU hours on the standard WMT English to German translation task. Our experiments lead to novel insights and practical advice for building and extending NMT architectures. As part of this contribution, we release an open-source NMT framework that enables researchers to easily experiment with novel techniques and reproduce state of the art results.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2017-03-11T04:17:46+00:00",
+  "updated": "2017-03-21T20:34:59+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "9 pages, 2 figures, 8 tables, submitted to ACL 2017, open source code at https://github.com/google/seq2seq/",
+  "pdf_url": "https://arxiv.org/pdf/1703.03906v2.pdf"
+}

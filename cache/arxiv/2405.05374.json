@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2405.05374v1",
+  "title": "Arctic-Embed: Scalable, Efficient, and Accurate Text Embedding Models",
+  "authors": [
+    "Luke Merrick",
+    "Danmei Xu",
+    "Gaurav Nuti",
+    "Daniel Campos"
+  ],
+  "abstract": "This report describes the training dataset creation and recipe behind the family of \\texttt{arctic-embed} text embedding models (a set of five models ranging from 22 to 334 million parameters with weights open-sourced under an Apache-2 license). At the time of their release, each model achieved state-of-the-art retrieval accuracy for models of their size on the MTEB Retrieval leaderboard, with the largest model, arctic-embed-l outperforming closed source embedding models such as Cohere's embed-v3 and Open AI's text-embed-3-large. In addition to the details of our training recipe, we have provided several informative ablation studies, which we believe are the cause of our model performance.",
+  "categories": [
+    "cs.CL",
+    "cs.AI",
+    "cs.IR"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2024-05-08T19:05:18+00:00",
+  "updated": "2024-05-08T19:05:18+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "17 pages, 11 Figures, 9 tables",
+  "pdf_url": "https://arxiv.org/pdf/2405.05374v1.pdf"
+}
