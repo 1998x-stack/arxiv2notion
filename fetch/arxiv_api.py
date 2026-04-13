@@ -103,6 +103,18 @@ class ArxivApiClient:
             async with session.get(url, headers=headers, timeout=self.config.timeout) as response:
                 if response.status == 200:
                     return await response.text()
+                elif response.status == 429:
+                    # Rate limited — honour Retry-After header or back off exponentially
+                    retry_after = int(response.headers.get("Retry-After", 60 * (retry_count + 1)))
+                    logger.warning(
+                        f"arXiv rate limited (429), waiting {retry_after}s "
+                        f"(attempt {retry_count + 1}/{self.config.max_retries}): {url}"
+                    )
+                    await asyncio.sleep(retry_after)
+                    if retry_count < self.config.max_retries:
+                        return await self._fetch_xml(session, url, retry_count + 1)
+                    logger.warning(f"arXiv still rate limited after retries — skipping: {url}")
+                    self.errors += 1
                 elif response.status == 503:
                     # 服务暂时不可用
                     wait_time = 30 * (retry_count + 1)

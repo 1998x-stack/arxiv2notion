@@ -94,18 +94,21 @@ class Ar5ivToNotion:
         start_ms = int(_time.time() * 1000)
 
         try:
-            # 1. Fetch arXiv metadata
+            # 1. Fetch arXiv metadata (optional — 429/network errors are non-fatal)
             paper.metadata = await self.arxiv_client.get_paper(arxiv_id, use_cache)
-            if not paper.metadata:
-                paper.status = PaperStatus.FAILED
-                paper.error = "Could not fetch arXiv metadata"
-                return paper
-
-            logger.info(f"Title: {paper.metadata.title}")
+            if paper.metadata:
+                logger.info(f"Title: {paper.metadata.title}")
+                if not category:
+                    category = _detect_category(paper.metadata.primary_category)
+            else:
+                logger.warning(
+                    f"arXiv metadata unavailable for {arxiv_id} "
+                    f"(rate limited or not found) — continuing with ar5iv content only"
+                )
 
             # Auto-detect category from arXiv primary category if not provided
             if not category:
-                category = _detect_category(paper.metadata.primary_category)
+                category = _detect_category("")  # falls back to "other"
 
             # 2. Extract ar5iv content
             paper.status = PaperStatus.PARSING
