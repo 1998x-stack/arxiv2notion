@@ -5,9 +5,10 @@ Responsibility: Call Qwen via DashScope to generate Chinese reading notes for ea
 import asyncio
 import re
 import time
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from loguru import logger
+from tqdm.asyncio import tqdm as async_tqdm
 
 from config import QwenConfig
 from storage.file_manager import FileManager
@@ -19,9 +20,16 @@ SYSTEM_PROMPT = (
     "请保持解释简洁、准确，不超过2-3句话。"
 )
 
-USER_TEMPLATE = """请分析以下学术段落，用中文回答：
+USER_TEMPLATE = """你正在阅读论文《{paper_title}》。
 
-1. 通俗解读（1-2句话）：用简单的语言解释这段话的核心意思
+论文摘要：
+{paper_abstract}
+
+---
+
+现在请分析以下段落，用中文回答：
+
+1. 通俗解读（1-2句话）：结合论文主题，用简单语言解释这段话的核心意思
 2. 关键要点（2-3条）：每条一句话，提炼最重要的信息
 
 段落原文：
@@ -107,7 +115,8 @@ class QwenAnnotator:
         return explanation, key_points
 
     async def annotate_paragraph(
-        self, text: str, section_title: str, para_idx: int
+        self, text: str, section_title: str, para_idx: int,
+        paper_title: str = "", paper_abstract: str = "",
     ) -> ParagraphAnnotation:
         """
         Annotate a single paragraph. Returns a placeholder annotation if the
@@ -127,9 +136,14 @@ class QwenAnnotator:
 
         # Truncate long input
         truncated = text[: self.config.max_para_length]
+        content = USER_TEMPLATE.format(
+            paper_title=paper_title or "Unknown",
+            paper_abstract=(paper_abstract[:800] + "...") if len(paper_abstract) > 800 else (paper_abstract or "N/A"),
+            text=truncated,
+        )
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_TEMPLATE.format(text=truncated)},
+            {"role": "user", "content": content},
         ]
 
         t0 = time.time()
@@ -177,42 +191,66 @@ class QwenAnnotator:
         category: str,
     ) -> List[ParagraphAnnotation]:
         """
-        Annotate all paragraphs in a paper.
+        Annotate all paragraphs in a paper with max-concurrency=3.
 
-        If annotations already exist on disk, loads and returns them without any API calls.
-        Otherwise calls Qwen for each paragraph, saves to disk, and returns results.
+        Cache-first: if annotations exist on disk, loads and returns immediately.
+        Otherwise annotates concurrently (up to 3 at a time) with a tqdm bar.
         """
         # Cache hit — skip all API calls
         if self.fm.has_annotations(arxiv_id, category):
             logger.info(f"Loading cached annotations for {arxiv_id}")
             return self.fm.load_annotations(arxiv_id, category)
 
-        logger.info(f"Annotating {arxiv_id} with Qwen ({self.config.model})...")
-        annotations: List[ParagraphAnnotation] = []
+        paper_title = content.title or arxiv_id
+        paper_abstract = content.abstract or ""
 
-        # Paper-level TL;DR from abstract
-        if content.abstract and len(content.abstract) >= self.config.min_para_length:
-            abstract_ann = await self.annotate_paragraph(
-                content.abstract, section_title="__abstract__", para_idx=-1
-            )
-            annotations.append(abstract_ann)
+        logger.info(f"Annotating {arxiv_id} with Qwen ({self.config.model})...")
+
+        # Collect all annotation tasks: (section_title, para_idx, text)
+        tasks: List[tuple] = []
+
+        # TL;DR from abstract
+        if paper_abstract and len(paper_abstract) >= self.config.min_para_length:
+            tasks.append(("__abstract__", -1, paper_abstract))
 
         # Per-section, per-paragraph
         for section in content.sections:
-            section_anns = await self._annotate_section(section)
-            annotations.extend(section_anns)
+            self._collect_tasks(section, tasks)
+
+        if not tasks:
+            logger.info(f"No paragraphs to annotate for {arxiv_id}")
+            return []
+
+        # Run concurrently with Semaphore(3)
+        semaphore = asyncio.Semaphore(3)
+        annotations: List[ParagraphAnnotation] = []
+
+        async def _bounded_annotate(section_title: str, para_idx: int, text: str) -> ParagraphAnnotation:
+            async with semaphore:
+                return await self.annotate_paragraph(
+                    text=text,
+                    section_title=section_title,
+                    para_idx=para_idx,
+                    paper_title=paper_title,
+                    paper_abstract=paper_abstract,
+                )
+
+        desc = f"Annotating {arxiv_id}"
+        results = await async_tqdm.gather(
+            *[_bounded_annotate(s, i, t) for s, i, t in tasks],
+            desc=desc,
+            total=len(tasks),
+        )
+        annotations = list(results)
 
         # Save to disk
         self.fm.save_annotations(arxiv_id, category, annotations)
         logger.info(f"Annotated {len(annotations)} paragraphs for {arxiv_id}")
         return annotations
 
-    async def _annotate_section(self, section) -> List[ParagraphAnnotation]:
-        """Annotate all paragraphs in a section (recursively includes subsections)."""
-        annotations = []
+    def _collect_tasks(self, section, tasks: List[tuple]) -> None:
+        """Recursively collect (section_title, para_idx, text) tuples."""
         for idx, para in enumerate(section.paragraphs):
-            ann = await self.annotate_paragraph(para, section.title, idx)
-            annotations.append(ann)
+            tasks.append((section.title, idx, para))
         for sub in section.subsections:
-            annotations.extend(await self._annotate_section(sub))
-        return annotations
+            self._collect_tasks(sub, tasks)
