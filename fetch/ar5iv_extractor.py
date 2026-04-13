@@ -234,18 +234,18 @@ class Ar5ivExtractor:
         if re.match(r"^(references|bibliography|appendix|acknowledgement)", title, re.I):
             return None
         
-        # 提取段落
+        # 提取段落（保留行内数学公式标记）
         paragraphs = []
         for para in elem.find_all("p", class_="ltx_p", recursive=False):
-            text = clean_text(para.get_text())
+            text = self._extract_para_with_math(para)
             if text and len(text) > 10:
                 paragraphs.append(text)
-        
+
         # 如果没有直接段落，查找 ltx_para 容器
         if not paragraphs:
             for para_container in elem.find_all(class_="ltx_para", recursive=False):
                 for para in para_container.find_all("p", class_="ltx_p"):
-                    text = clean_text(para.get_text())
+                    text = self._extract_para_with_math(para)
                     if text and len(text) > 10:
                         paragraphs.append(text)
         
@@ -293,6 +293,40 @@ class Ar5ivExtractor:
             equations=equations
         )
     
+    def _extract_para_with_math(self, elem: Tag) -> str:
+        """
+        Extract text from a paragraph element, preserving math as markers:
+        - Inline math (<math display="inline">) → $latex$
+        - Display/block math (<math display="block">) → $$latex$$
+
+        Falls back to alttext; if missing, uses visible text.
+        """
+        from bs4 import NavigableString
+
+        parts: List[str] = []
+        for node in elem.children:
+            if isinstance(node, NavigableString):
+                parts.append(str(node))
+            elif node.name == "math":
+                latex = (node.get("alttext") or "").strip()
+                if not latex:
+                    # No alttext — use visible text as fallback
+                    parts.append(node.get_text())
+                    continue
+                display = (node.get("display") or "inline").lower()
+                if display == "block":
+                    parts.append(f" $${latex}$$ ")
+                else:
+                    parts.append(f"${latex}$")
+            else:
+                # Recurse into spans, strong, em, etc.
+                parts.append(self._extract_para_with_math(node))
+
+        # Join and normalise whitespace without collapsing $ markers
+        text = "".join(parts)
+        text = re.sub(r"[ \t]+", " ", text).strip()
+        return text
+
     def _parse_figure(self, fig: Tag) -> Optional[Figure]:
         """解析图片"""
         img = fig.select_one("img")

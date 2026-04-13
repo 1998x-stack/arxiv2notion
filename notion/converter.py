@@ -329,6 +329,134 @@ class NotionBlockBuilder:
             }
         }
 
+    @staticmethod
+    def equation_rich_text(latex: str) -> Dict[str, Any]:
+        """Create an inline equation rich_text element (KaTeX rendered inline)."""
+        return {
+            "type": "equation",
+            "equation": {"expression": latex},
+        }
+
+
+# ── LaTeX cleanup for KaTeX ───────────────────────────────────────────────────
+
+# Macros unsupported by KaTeX that have simple replacements
+_LATEX_REPLACEMENTS = [
+    (r"\\bm\{", r"\\boldsymbol{"),          # \bm → \boldsymbol
+    (r"\\mbox\{([^}]*)\}", r"\\text{\1}"),   # \mbox → \text
+    (r"\\hbox\{([^}]*)\}", r"\\text{\1}"),   # \hbox → \text
+    (r"\\rm\b", r"\\mathrm"),                # \rm → \mathrm
+    (r"\\bf\b", r"\\mathbf"),                # \bf → \mathbf
+]
+
+_LATEX_STRIP_PATTERNS = [
+    r"\\label\{[^}]*\}",       # \label{...} — KaTeX ignores labels
+    r"\\tag\*?\{[^}]*\}",      # \tag{1} — strip equation numbers
+    r"\\notag\b",              # \notag
+    r"\\nonumber\b",           # \nonumber
+]
+
+
+def _clean_latex(latex: str) -> str:
+    """
+    Clean LaTeX extracted from ar5iv for KaTeX rendering in Notion.
+
+    Strips labels/tags and replaces macros KaTeX doesn't support.
+    """
+    for pat in _LATEX_STRIP_PATTERNS:
+        latex = re.sub(pat, "", latex)
+    for pat, repl in _LATEX_REPLACEMENTS:
+        latex = re.sub(pat, repl, latex)
+    return latex.strip()
+
+
+# ── Paragraph → Notion blocks ─────────────────────────────────────────────────
+
+# Matches $$...$$ (display/block equations) — non-greedy, allows newlines
+_BLOCK_MATH_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+# Matches $...$ (inline equations) — does NOT span newlines, avoids false positives
+_INLINE_MATH_RE = re.compile(r"\$([^$\n]+?)\$")
+
+
+def _para_to_notion_blocks(
+    para_text: str,
+    builder: "NotionBlockBuilder",
+    max_text_length: int = 2000,
+) -> List[Dict[str, Any]]:
+    """
+    Convert a paragraph string (possibly containing $...$ and $$...$$) to
+    a list of Notion blocks:
+    - $$latex$$ → standalone equation block
+    - $latex$ within text → paragraph block with inline equation rich_text
+    - plain text → paragraph block(s) split at Notion's 2000-char limit
+    """
+    blocks: List[Dict[str, Any]] = []
+
+    # Split on $$...$$ first to separate display equations from prose
+    display_parts = _BLOCK_MATH_RE.split(para_text)
+
+    for i, part in enumerate(display_parts):
+        if i % 2 == 1:
+            # Odd indices = content captured by the $$...$$ group
+            latex = _clean_latex(part.strip())
+            if latex:
+                blocks.append({
+                    "object": "block",
+                    "type": "equation",
+                    "equation": {"expression": latex},
+                })
+        else:
+            # Even indices = prose (may contain $...$)
+            if not part.strip():
+                continue
+            rich_texts = _text_to_rich_texts(part, builder, max_text_length)
+            if rich_texts:
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {"rich_text": rich_texts},
+                })
+
+    return blocks
+
+
+def _text_to_rich_texts(
+    text: str,
+    builder: "NotionBlockBuilder",
+    max_text_length: int = 2000,
+) -> List[Dict[str, Any]]:
+    """
+    Convert plain text (possibly containing $...$ inline math) to a list of
+    Notion rich_text objects: text runs and inline equation elements interleaved.
+    """
+    rich_texts: List[Dict[str, Any]] = []
+
+    # Split on $...$ to find inline equations
+    inline_parts = _INLINE_MATH_RE.split(text)
+
+    for j, chunk in enumerate(inline_parts):
+        if j % 2 == 1:
+            # Odd = inline equation latex
+            latex = _clean_latex(chunk.strip())
+            if latex:
+                rich_texts.append(builder.equation_rich_text(latex))
+        else:
+            # Even = plain text — split into ≤ max_text_length chunks
+            if not chunk:
+                continue
+            remaining = chunk
+            while remaining:
+                if len(remaining) <= max_text_length:
+                    rich_texts.append(builder.rich_text(remaining))
+                    break
+                # Try to break at a word boundary
+                cut = remaining.rfind(" ", 0, max_text_length)
+                cut = cut if cut > 0 else max_text_length
+                rich_texts.append(builder.rich_text(remaining[:cut]))
+                remaining = remaining[cut:].lstrip()
+
+    return rich_texts
+
 
 # ── Section heading emoji mapping ─────────────────────────────────────────────
 
@@ -552,8 +680,9 @@ class NotionConverter:
         ann_map = {(a.section_title, a.para_idx): a for a in annotations}
 
         for idx, para in enumerate(section.paragraphs):
-            for chunk in self._split_text(para):
-                blocks.append(self.builder.paragraph(chunk))
+            # Render paragraph — inline $...$ → rich_text equations, $$...$$ → equation blocks
+            para_blocks = _para_to_notion_blocks(para, self.builder, self.max_text_length)
+            blocks.extend(para_blocks)
 
             # Add AI reading notes toggle if annotation exists for this paragraph
             ann = ann_map.get((section.title, idx))
@@ -562,10 +691,12 @@ class NotionConverter:
             ):
                 blocks.append(self._make_annotation_toggle(ann))
 
+        # Standalone display equations extracted at section level (not inline in any paragraph)
         if self.include_equations and section.equations:
             for eq in section.equations[:10]:
-                if eq.latex:
-                    blocks.append(self.builder.equation(eq.latex))
+                latex = _clean_latex(eq.latex or "")
+                if latex:
+                    blocks.append(self.builder.equation(latex))
 
         if self.include_figures and section.figures:
             for fig in section.figures[:5]:

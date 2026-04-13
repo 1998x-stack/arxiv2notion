@@ -172,3 +172,79 @@ class TestReferenceFormatting:
         blocks = conv._create_references_section(sample_paper.content.references)
         toggles = find_blocks(blocks, "toggle")
         assert any("其他参考文献" in b["toggle"]["rich_text"][0]["text"]["content"] for b in toggles)
+
+
+class TestMathRendering:
+    def test_inline_math_becomes_equation_rich_text(self):
+        from notion.converter import _para_to_notion_blocks, NotionBlockBuilder
+        builder = NotionBlockBuilder()
+        blocks = _para_to_notion_blocks(
+            "The loss is $L = -\\log p(y|x)$ for each sample.",
+            builder,
+        )
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "paragraph"
+        rt = blocks[0]["paragraph"]["rich_text"]
+        eq_parts = [r for r in rt if r["type"] == "equation"]
+        assert len(eq_parts) == 1
+        assert eq_parts[0]["equation"]["expression"] == "L = -\\log p(y|x)"
+
+    def test_display_math_becomes_equation_block(self):
+        from notion.converter import _para_to_notion_blocks, NotionBlockBuilder
+        builder = NotionBlockBuilder()
+        blocks = _para_to_notion_blocks(
+            "We minimise: $$E = mc^2$$ where $m$ is mass.",
+            builder,
+        )
+        types = [b["type"] for b in blocks]
+        assert "equation" in types
+        eq_blocks = [b for b in blocks if b["type"] == "equation"]
+        assert eq_blocks[0]["equation"]["expression"] == "E = mc^2"
+
+    def test_clean_latex_strips_label_and_tag(self):
+        from notion.converter import _clean_latex
+        raw = r"E = mc^2 \label{eq:energy} \tag{1}"
+        cleaned = _clean_latex(raw)
+        assert r"\label" not in cleaned
+        assert r"\tag" not in cleaned
+        assert "E = mc^2" in cleaned
+
+    def test_clean_latex_replaces_bm_with_boldsymbol(self):
+        from notion.converter import _clean_latex
+        raw = r"\bm{x} = \bm{A}\bm{b}"
+        cleaned = _clean_latex(raw)
+        assert r"\boldsymbol{" in cleaned
+        assert r"\bm{" not in cleaned
+
+    def test_plain_paragraph_unchanged(self):
+        from notion.converter import _para_to_notion_blocks, NotionBlockBuilder
+        builder = NotionBlockBuilder()
+        blocks = _para_to_notion_blocks("No math here, just plain text.", builder)
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "paragraph"
+        rt = blocks[0]["paragraph"]["rich_text"]
+        assert all(r["type"] == "text" for r in rt)
+
+    def test_extract_para_with_math_inline(self):
+        """ar5iv extractor preserves inline math as $...$."""
+        from bs4 import BeautifulSoup
+        from fetch.ar5iv_extractor import Ar5ivExtractor
+        html = '<p class="ltx_p">The value <math display="inline" alttext="x=1">x=1</math> holds.</p>'
+        soup = BeautifulSoup(html, "lxml")
+        para = soup.select_one("p.ltx_p")
+        extractor = Ar5ivExtractor()
+        text = extractor._extract_para_with_math(para)
+        assert "$x=1$" in text
+        assert "The value" in text
+        assert "holds." in text
+
+    def test_extract_para_with_math_display(self):
+        """ar5iv extractor preserves display math as $$...$$."""
+        from bs4 import BeautifulSoup
+        from fetch.ar5iv_extractor import Ar5ivExtractor
+        html = '<p class="ltx_p">Equation <math display="block" alttext="E=mc^2">E=mc^2</math> proved.</p>'
+        soup = BeautifulSoup(html, "lxml")
+        para = soup.select_one("p.ltx_p")
+        extractor = Ar5ivExtractor()
+        text = extractor._extract_para_with_math(para)
+        assert "$$E=mc^2$$" in text
