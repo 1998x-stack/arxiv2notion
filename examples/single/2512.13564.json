@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2512.13564",
+  "category": "ai_agent",
+  "title": "Memory in the Age of AI Agents",
+  "intro": "面向 AI agents 的 memory landscape 综述。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

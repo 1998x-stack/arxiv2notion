@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1409.0473",
+  "category": "deep_learning",
+  "title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+  "intro": "Bahdanau Attention 代表作，attention 成为主流。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

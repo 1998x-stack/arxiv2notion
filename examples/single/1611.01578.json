@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1611.01578",
+  "category": "deep_learning",
+  "title": "Neural Architecture Search with Reinforcement Learning",
+  "intro": "NAS 代表作，推动 AutoML 热潮。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

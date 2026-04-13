@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2601.12560",
+  "category": "ai_agent",
+  "title": "Agentic Artificial Intelligence: Architectures, Taxonomies, and Evaluation",
+  "intro": "总结 agent 架构、taxonomy 与评估框架。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

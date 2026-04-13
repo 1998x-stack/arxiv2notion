@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2206.15378",
+  "category": "reinforcement_learning",
+  "title": "Mastering the Game of Stratego with Model-Free Multiagent Reinforcement Learning",
+  "intro": "DeepNash，多智能体/不完全信息博弈代表成果。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

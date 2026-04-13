@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1710.02298",
+  "category": "reinforcement_learning",
+  "title": "Rainbow: Combining Improvements in Deep Reinforcement Learning",
+  "intro": "Rainbow，把多个 DQN 改进整合成强基线。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

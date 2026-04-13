@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.15654",
+  "category": "ai_agent",
+  "title": "Zombie Agents",
+  "intro": "通过持久控制研究 self-evolving LLM agents 的安全漏洞。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

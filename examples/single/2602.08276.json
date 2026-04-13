@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.08276",
+  "category": "ai_agent",
+  "title": "Toward Formalizing LLM-Based Agent Designs",
+  "intro": "尝试把 agent design 流程形式化并做系统优化。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

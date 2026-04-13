@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1911.08265",
+  "category": "reinforcement_learning",
+  "title": "Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model",
+  "intro": "MuZero，把 learned model 与 planning 结合。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

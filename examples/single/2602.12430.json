@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.12430",
+  "category": "ai_agent",
+  "title": "Agent Skills for Large Language Models",
+  "intro": "聚焦 skills 作为 agent 能力抽象层的架构与安全。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

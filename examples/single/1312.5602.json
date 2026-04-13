@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1312.5602",
+  "category": "reinforcement_learning",
+  "title": "Playing Atari with Deep Reinforcement Learning",
+  "intro": "DQN 最早期版本，首次把像素输入直接接到 RL。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

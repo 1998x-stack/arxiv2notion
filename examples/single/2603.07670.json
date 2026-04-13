@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2603.07670",
+  "category": "ai_agent",
+  "title": "Memory for Autonomous LLM Agents",
+  "intro": "总结 agent memory 的机制、评测方式与开放问题。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

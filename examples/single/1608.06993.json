@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1608.06993",
+  "category": "deep_learning",
+  "title": "Densely Connected Convolutional Networks",
+  "intro": "DenseNet，以密集连接强化特征复用与梯度传播。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

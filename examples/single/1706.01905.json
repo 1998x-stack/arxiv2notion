@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1706.01905",
+  "category": "reinforcement_learning",
+  "title": "Parameter Space Noise for Exploration",
+  "intro": "参数空间加噪探索的代表工作。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1502.05477",
+  "category": "reinforcement_learning",
+  "title": "Trust Region Policy Optimization",
+  "intro": "TRPO，现代 policy optimization 重要起点。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

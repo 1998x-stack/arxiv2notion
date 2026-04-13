@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1512.02595",
+  "category": "deep_learning",
+  "title": "Deep Speech 2",
+  "intro": "端到端 ASR 的代表性工业级成果。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

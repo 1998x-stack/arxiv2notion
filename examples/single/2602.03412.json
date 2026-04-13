@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.03412",
+  "category": "ai_agent",
+  "title": "Verified Critical Step Optimization for LLM Agents",
+  "intro": "对 agent 关键步骤做验证式优化，提升完成率与稳定性。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

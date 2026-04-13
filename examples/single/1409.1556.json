@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1409.1556",
+  "category": "deep_learning",
+  "title": "Very Deep Convolutional Networks for Large-Scale Image Recognition",
+  "intro": "VGG，证明更深但更规整的 CNN 有效。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

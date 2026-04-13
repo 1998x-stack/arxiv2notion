@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1509.02971",
+  "category": "reinforcement_learning",
+  "title": "Continuous control with deep reinforcement learning",
+  "intro": "DDPG，连续动作控制经典算法。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

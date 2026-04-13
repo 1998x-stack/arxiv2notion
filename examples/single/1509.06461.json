@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1509.06461",
+  "category": "reinforcement_learning",
+  "title": "Deep Reinforcement Learning with Double Q-learning",
+  "intro": "Double DQN，缓解 Q 值过估计问题。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

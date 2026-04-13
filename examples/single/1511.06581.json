@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1511.06581",
+  "category": "reinforcement_learning",
+  "title": "Dueling Network Architectures for Deep Reinforcement Learning",
+  "intro": "Dueling DQN，把 state-value 和 advantage 解耦。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

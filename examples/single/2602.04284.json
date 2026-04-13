@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.04284",
+  "category": "ai_agent",
+  "title": "Agent-Omit",
+  "intro": "通过自适应省略冗余 thought/observation 提升 agent 效率。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

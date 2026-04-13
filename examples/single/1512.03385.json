@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1512.03385",
+  "category": "deep_learning",
+  "title": "Deep Residual Learning for Image Recognition",
+  "intro": "ResNet，深层网络训练范式转折点。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

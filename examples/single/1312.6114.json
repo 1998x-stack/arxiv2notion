@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1312.6114",
+  "category": "deep_learning",
+  "title": "Auto-Encoding Variational Bayes",
+  "intro": "VAE 经典论文，奠定变分生成模型的重要路线。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

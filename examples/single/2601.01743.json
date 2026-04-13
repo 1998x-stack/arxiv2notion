@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2601.01743",
+  "category": "ai_agent",
+  "title": "AI Agent Systems: Architectures, Applications, and Evaluation",
+  "intro": "对 AI agent system 的核心组件、应用与评测做综述。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

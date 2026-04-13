@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1207.0580",
+  "category": "deep_learning",
+  "title": "Improving neural networks by preventing co-adaptation of feature detectors",
+  "intro": "Dropout 早期代表作，深度学习正则化里程碑。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

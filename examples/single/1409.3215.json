@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1409.3215",
+  "category": "deep_learning",
+  "title": "Sequence to Sequence Learning with Neural Networks",
+  "intro": "Seq2Seq 经典论文，奠定现代生成式序列建模。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

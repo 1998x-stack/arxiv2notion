@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1506.02438",
+  "category": "reinforcement_learning",
+  "title": "High-Dimensional Continuous Control Using Generalized Advantage Estimation",
+  "intro": "GAE，降低 policy gradient 方差的经典技巧。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

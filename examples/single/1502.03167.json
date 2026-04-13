@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1502.03167",
+  "category": "deep_learning",
+  "title": "Batch Normalization",
+  "intro": "BatchNorm，极大改善深网络训练稳定性。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

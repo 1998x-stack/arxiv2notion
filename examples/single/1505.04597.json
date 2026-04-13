@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1505.04597",
+  "category": "deep_learning",
+  "title": "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+  "intro": "U-Net，医学图像分割最具影响力架构之一。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1406.2661",
+  "category": "deep_learning",
+  "title": "Generative Adversarial Networks",
+  "intro": "GAN 开山作，开启对抗生成模型大潮。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

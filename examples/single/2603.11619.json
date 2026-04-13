@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2603.11619",
+  "category": "ai_agent",
+  "title": "Taming OpenClaw",
+  "intro": "研究自主 LLM agent 的跨阶段系统性安全风险与缓解。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

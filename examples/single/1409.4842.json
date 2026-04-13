@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1409.4842",
+  "category": "deep_learning",
+  "title": "Going Deeper with Convolutions",
+  "intro": "Inception/GoogLeNet，提升 CNN 的计算效率与表达力。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

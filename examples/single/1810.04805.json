@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1810.04805",
+  "category": "deep_learning",
+  "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+  "intro": "预训练语言模型时代的核心里程碑。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

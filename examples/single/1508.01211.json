@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1508.01211",
+  "category": "deep_learning",
+  "title": "Listen, Attend and Spell",
+  "intro": "端到端语音识别的 attention encoder-decoder 经典。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

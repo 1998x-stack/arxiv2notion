@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.18998",
+  "category": "ai_agent",
+  "title": "Benchmark Test-Time Scaling of General LLM Agents",
+  "intro": "提出统一 benchmark，评测通用 agent 的 test-time scaling。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

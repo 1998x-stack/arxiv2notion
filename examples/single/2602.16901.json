@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.16901",
+  "category": "ai_agent",
+  "title": "AgentLAB",
+  "intro": "长时程攻击场景下的 agent 安全 benchmark。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1511.05952",
+  "category": "reinforcement_learning",
+  "title": "Prioritized Experience Replay",
+  "intro": "PER，让更关键的经验被优先采样。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

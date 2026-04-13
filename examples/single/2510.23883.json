@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2510.23883",
+  "category": "ai_agent",
+  "title": "Agentic AI Security",
+  "intro": "梳理 agentic AI 安全威胁、防御与评测。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

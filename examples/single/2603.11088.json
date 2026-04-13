@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2603.11088",
+  "category": "ai_agent",
+  "title": "The Attack and Defense Landscape of Agentic AI",
+  "intro": "系统梳理 Agentic AI 的攻击面、防御方法与安全研究空白。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1602.01783",
+  "category": "reinforcement_learning",
+  "title": "Asynchronous Methods for Deep Reinforcement Learning",
+  "intro": "A3C，异步 actor-critic 经典。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

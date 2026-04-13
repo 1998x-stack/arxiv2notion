@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1710.10044",
+  "category": "reinforcement_learning",
+  "title": "Distributional Reinforcement Learning with Quantile Regression",
+  "intro": "QR-DQN，distributional RL 重要推进。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

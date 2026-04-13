@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.11964",
+  "category": "ai_agent",
+  "title": "Gaia2",
+  "intro": "面向动态、异步环境的 agent benchmark。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

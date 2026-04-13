@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2603.20639",
+  "category": "ai_agent",
+  "title": "Agentic AI and the next intelligence explosion",
+  "intro": "从社会化思维/institutional alignment视角讨论 agentic AI。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

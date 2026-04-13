@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1706.03762",
+  "category": "deep_learning",
+  "title": "Attention Is All You Need",
+  "intro": "Transformer 原始论文，现代大模型基石。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

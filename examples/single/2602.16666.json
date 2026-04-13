@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.16666",
+  "category": "ai_agent",
+  "title": "Towards a Science of AI Agent Reliability",
+  "intro": "面向 AI agent 可靠性的科学化方法论。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1706.10295",
+  "category": "reinforcement_learning",
+  "title": "Noisy Networks for Exploration",
+  "intro": "NoisyNet，用参数噪声替代传统探索启发式。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

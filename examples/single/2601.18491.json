@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2601.18491",
+  "category": "ai_agent",
+  "title": "AgentDoG",
+  "intro": "面向 agent 轨迹级别的安全/不合理行为诊断 guardrail。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

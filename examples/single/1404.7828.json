@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1404.7828",
+  "category": "deep_learning",
+  "title": "Deep Learning in Neural Networks: An Overview",
+  "intro": "Schmidhuber 的深度学习历史与方法总览。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

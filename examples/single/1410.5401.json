@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1410.5401",
+  "category": "deep_learning",
+  "title": "Neural Turing Machines",
+  "intro": "外部可微记忆结构的经典工作。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

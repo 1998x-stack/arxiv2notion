@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2602.20021",
+  "category": "ai_agent",
+  "title": "Agents of Chaos",
+  "intro": "通过真实交互案例分析 agent 在自治、工具使用下的失败模式。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

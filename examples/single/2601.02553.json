@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2601.02553",
+  "category": "ai_agent",
+  "title": "SimpleMem",
+  "intro": "提出高效 lifelong memory 机制，降低冗余与 token 成本。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 15
+  }
+}

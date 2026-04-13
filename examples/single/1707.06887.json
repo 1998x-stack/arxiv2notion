@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1707.06887",
+  "category": "reinforcement_learning",
+  "title": "A Distributional Perspective on Reinforcement Learning",
+  "intro": "Distributional RL 奠基论文。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

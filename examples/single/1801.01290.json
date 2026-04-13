@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1801.01290",
+  "category": "reinforcement_learning",
+  "title": "Soft Actor-Critic",
+  "intro": "SAC，连续控制里非常稳健的经典算法。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

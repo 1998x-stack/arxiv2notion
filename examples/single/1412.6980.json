@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1412.6980",
+  "category": "deep_learning",
+  "title": "Adam: A Method for Stochastic Optimization",
+  "intro": "最常用优化器之一 Adam 的原始论文。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

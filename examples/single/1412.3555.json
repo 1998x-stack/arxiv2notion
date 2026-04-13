@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1412.3555",
+  "category": "deep_learning",
+  "title": "Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling",
+  "intro": "GRU 早期代表论文，RNN gating 经典。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

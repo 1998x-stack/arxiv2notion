@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1707.06347",
+  "category": "reinforcement_learning",
+  "title": "Proximal Policy Optimization Algorithms",
+  "intro": "PPO，最流行的 policy gradient 算法之一。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

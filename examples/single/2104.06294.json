@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "2104.06294",
+  "category": "reinforcement_learning",
+  "title": "Online and Offline Reinforcement Learning by Planning with a Learned Model",
+  "intro": "Reanalyse，MuZero 路线的重要延展。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

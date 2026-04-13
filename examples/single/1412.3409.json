@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1412.3409",
+  "category": "reinforcement_learning",
+  "title": "Teaching Deep Convolutional Neural Networks to Play Go",
+  "intro": "深度方法在 Go 上的重要前奏工作。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}

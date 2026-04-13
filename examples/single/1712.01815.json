@@ -1,0 +1,11 @@
+{
+  "arxiv_id": "1712.01815",
+  "category": "reinforcement_learning",
+  "title": "Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm",
+  "intro": "AlphaZero，自博弈强化学习代表作。",
+  "import_options": {
+    "with_refs": true,
+    "annotate": true,
+    "max_refs": 20
+  }
+}
