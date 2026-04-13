@@ -654,7 +654,7 @@ class NotionConverter:
 
     def _format_arxiv_reference(self, ref: "Reference") -> Dict[str, Any]:
         """Format a single arXiv reference as a paragraph with rich text."""
-        from reference_resolver import ReferenceExtractor
+        from process.reference_resolver import ReferenceExtractor
         extractor = ReferenceExtractor()
         ref = extractor.extract_info(ref)
 

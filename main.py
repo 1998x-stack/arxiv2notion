@@ -22,14 +22,14 @@ from tqdm import tqdm
 
 from config import AppConfig, NotionConfig, CacheConfig, ReferenceConfig
 from models import PaperData, PaperStatus, Reference
-from arxiv_api import ArxivApiClient
-from ar5iv_extractor import Ar5ivExtractor
-from reference_resolver import ReferenceResolver
-from notion_converter import NotionConverter
-from notion_creator import NotionCreator
+from fetch.arxiv_api import ArxivApiClient
+from fetch.ar5iv_extractor import Ar5ivExtractor
+from process.reference_resolver import ReferenceResolver
+from notion.converter import NotionConverter
+from notion.creator import NotionCreator
 from utils import setup_logging, normalize_arxiv_id, format_exception
-from file_manager import FileManager
-from qwen_annotator import QwenAnnotator
+from storage.file_manager import FileManager
+from process.qwen_annotator import QwenAnnotator
 
 
 def _detect_category(primary_category: str) -> str:

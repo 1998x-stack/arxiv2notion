@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 from loguru import logger
 
 from config import QwenConfig
-from file_manager import FileManager
+from storage.file_manager import FileManager
 from models import Ar5ivContent, ParagraphAnnotation
 
 

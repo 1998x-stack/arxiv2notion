@@ -72,7 +72,7 @@ def sample_annotations():
 
 class TestAcademicPremiumHeader:
     def test_header_contains_blue_callout(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_header(sample_paper)
         callouts = find_blocks(blocks, "callout")
@@ -80,7 +80,7 @@ class TestAcademicPremiumHeader:
         assert callouts[0]["callout"]["color"] == "blue_background"
 
     def test_header_callout_contains_published_and_authors(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_header(sample_paper)
         callout_text = blocks[0]["callout"]["rich_text"][0]["text"]["content"]
@@ -88,7 +88,7 @@ class TestAcademicPremiumHeader:
         assert "Vaswani" in callout_text
 
     def test_header_contains_links_paragraph(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_header(sample_paper)
         paras = find_blocks(blocks, "paragraph")
@@ -97,14 +97,14 @@ class TestAcademicPremiumHeader:
 
 class TestAbstractAndTLDR:
     def test_abstract_uses_quote_block(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_abstract(sample_paper, tldr=None)
         quotes = find_blocks(blocks, "quote")
         assert len(quotes) == 1
 
     def test_tldr_callout_shown_when_provided(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         from models import ParagraphAnnotation
         conv = NotionConverter()
         tldr = ParagraphAnnotation(
@@ -124,7 +124,7 @@ class TestAbstractAndTLDR:
 
 class TestSectionsWithAnnotations:
     def test_paragraph_followed_by_toggle(self, sample_paper, sample_annotations):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         section = sample_paper.content.sections[0]
         blocks = conv._convert_section(section, annotations=sample_annotations)
@@ -136,7 +136,7 @@ class TestSectionsWithAnnotations:
         assert toggle_idx == para_idx + 1
 
     def test_toggle_label_is_ai_reading_notes(self, sample_paper, sample_annotations):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         section = sample_paper.content.sections[0]
         blocks = conv._convert_section(section, annotations=sample_annotations)
@@ -145,7 +145,7 @@ class TestSectionsWithAnnotations:
         assert any("AI 阅读笔记" in t for t in toggle_texts)
 
     def test_no_toggle_when_no_annotations(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         section = sample_paper.content.sections[0]
         blocks = conv._convert_section(section, annotations=[])
@@ -154,7 +154,7 @@ class TestSectionsWithAnnotations:
 
 class TestReferenceFormatting:
     def test_arxiv_refs_formatted_with_link(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_references_section(sample_paper.content.references)
         paras_with_link = []
@@ -167,7 +167,7 @@ class TestReferenceFormatting:
         assert len(paras_with_link) >= 1
 
     def test_non_arxiv_refs_in_toggle(self, sample_paper):
-        from notion_converter import NotionConverter
+        from notion.converter import NotionConverter
         conv = NotionConverter()
         blocks = conv._create_references_section(sample_paper.content.references)
         toggles = find_blocks(blocks, "toggle")

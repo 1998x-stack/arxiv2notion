@@ -8,13 +8,13 @@ import pytest
 
 class TestFileManagerPaperDir:
     def test_get_paper_dir_returns_correct_path(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         p = fm.get_paper_dir("1706.03762", "deep_learning")
         assert p == tmp_path / "papers" / "deep_learning" / "1706.03762"
 
     def test_save_metadata_creates_file(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         from models import ArxivMetadata, Author
         fm = FileManager(base_dir=tmp_path)
         meta = ArxivMetadata(
@@ -35,7 +35,7 @@ class TestFileManagerPaperDir:
         assert data["title"] == "Attention Is All You Need"
 
     def test_save_content_md_creates_readable_file(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         from models import Ar5ivContent, Section
         fm = FileManager(base_dir=tmp_path)
         content = Ar5ivContent(
@@ -57,12 +57,12 @@ class TestFileManagerPaperDir:
 
 class TestFileManagerAnnotations:
     def test_has_annotations_false_when_no_file(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         assert fm.has_annotations("1706.03762", "deep_learning") is False
 
     def test_save_and_load_annotations_roundtrip(self, tmp_path, sample_annotation):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         fm.save_annotations("1706.03762", "deep_learning", [sample_annotation])
         assert fm.has_annotations("1706.03762", "deep_learning") is True
@@ -75,7 +75,7 @@ class TestFileManagerAnnotations:
 
 class TestFileManagerLogs:
     def test_log_import_appends_jsonl(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         fm.log_import({"arxiv_id": "1706.03762", "status": "completed"})
         fm.log_import({"arxiv_id": "1810.04805", "status": "failed"})
@@ -86,14 +86,14 @@ class TestFileManagerLogs:
         assert json.loads(lines[0])["arxiv_id"] == "1706.03762"
 
     def test_log_error_appends_jsonl(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         fm.log_error({"arxiv_id": "1706.03762", "stage": "ar5iv_extract", "error_type": "TimeoutError"})
         log_path = tmp_path / "logs" / "errors.jsonl"
         assert log_path.exists()
 
     def test_log_llm_call_appends_jsonl(self, tmp_path):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         fm = FileManager(base_dir=tmp_path)
         fm.log_llm_call({"arxiv_id": "1706.03762", "tokens_in": 200, "tokens_out": 80})
         log_path = tmp_path / "logs" / "llm_calls.jsonl"

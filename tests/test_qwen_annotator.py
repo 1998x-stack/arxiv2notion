@@ -30,8 +30,8 @@ def qwen_config():
 
 class TestQwenAnnotatorParsing:
     def test_parse_response_extracts_explanation_and_key_points(self, qwen_config, tmp_path):
-        from file_manager import FileManager
-        from qwen_annotator import QwenAnnotator
+        from storage.file_manager import FileManager
+        from process.qwen_annotator import QwenAnnotator
         fm = FileManager(base_dir=tmp_path)
         annotator = QwenAnnotator(config=qwen_config, file_manager=fm)
 
@@ -45,8 +45,8 @@ class TestQwenAnnotatorParsing:
         assert points == ["第一点。", "第二点。"]
 
     def test_parse_response_handles_missing_points_gracefully(self, qwen_config, tmp_path):
-        from file_manager import FileManager
-        from qwen_annotator import QwenAnnotator
+        from storage.file_manager import FileManager
+        from process.qwen_annotator import QwenAnnotator
         fm = FileManager(base_dir=tmp_path)
         annotator = QwenAnnotator(config=qwen_config, file_manager=fm)
 
@@ -61,8 +61,8 @@ class TestQwenAnnotatorAPI:
     async def test_annotate_paragraph_calls_api_and_returns_annotation(
         self, qwen_config, tmp_path, mock_openai_response
     ):
-        from file_manager import FileManager
-        from qwen_annotator import QwenAnnotator
+        from storage.file_manager import FileManager
+        from process.qwen_annotator import QwenAnnotator
 
         fm = FileManager(base_dir=tmp_path)
         annotator = QwenAnnotator(config=qwen_config, file_manager=fm)
@@ -82,9 +82,9 @@ class TestQwenAnnotatorAPI:
 
     @pytest.mark.asyncio
     async def test_annotate_paper_loads_cache_if_exists(self, qwen_config, tmp_path, sample_annotation):
-        from file_manager import FileManager
+        from storage.file_manager import FileManager
         from models import Ar5ivContent, Section
-        from qwen_annotator import QwenAnnotator
+        from process.qwen_annotator import QwenAnnotator
 
         fm = FileManager(base_dir=tmp_path)
         # Pre-populate cache

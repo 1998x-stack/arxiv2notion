@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "1207.0580v1",
+  "title": "Improving neural networks by preventing co-adaptation of feature detectors",
+  "authors": [
+    "Geoffrey E. Hinton",
+    "Nitish Srivastava",
+    "Alex Krizhevsky",
+    "Ilya Sutskever",
+    "Ruslan R. Salakhutdinov"
+  ],
+  "abstract": "When a large feedforward neural network is trained on a small training set, it typically performs poorly on held-out test data. This \"overfitting\" is greatly reduced by randomly omitting half of the feature detectors on each training case. This prevents complex co-adaptations in which a feature detector is only helpful in the context of several other specific feature detectors. Instead, each neuron learns to detect a feature that is generally helpful for producing the correct answer given the combinatorially large variety of internal contexts in which it must operate. Random \"dropout\" gives big improvements on many benchmark tasks and sets new records for speech and object recognition.",
+  "categories": [
+    "cs.NE",
+    "cs.CV",
+    "cs.LG"
+  ],
+  "primary_category": "cs.NE",
+  "published": "2012-07-03T06:35:15+00:00",
+  "updated": "2012-07-03T06:35:15+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1207.0580v1.pdf"
+}

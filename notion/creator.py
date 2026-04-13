@@ -22,7 +22,7 @@ from models import (
     ProcessingStats,
     ArxivMetadata,
 )
-from notion_converter import NotionConverter
+from notion.converter import NotionConverter
 from utils import format_exception, get_category_emoji, truncate_text
 
 

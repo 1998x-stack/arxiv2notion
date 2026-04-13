@@ -49,7 +49,7 @@ class TestClientTimeout:
         """_fetch_page must pass a ClientTimeout object, not a raw int."""
         import inspect
         import aiohttp
-        from ar5iv_extractor import Ar5ivExtractor
+        from fetch.ar5iv_extractor import Ar5ivExtractor
         source = inspect.getsource(Ar5ivExtractor._fetch_page)
         assert "ClientTimeout" in source, "_fetch_page must use aiohttp.ClientTimeout"
 
@@ -57,7 +57,7 @@ class TestClientTimeout:
 class TestDeadRateLimitWait:
     def test_rate_limit_wait_method_removed(self):
         """_rate_limit_wait dead async method must not exist on NotionCreator."""
-        from notion_creator import NotionCreator
+        from notion.creator import NotionCreator
         assert not hasattr(NotionCreator, "_rate_limit_wait"), \
             "_rate_limit_wait is dead code and should be removed"
 

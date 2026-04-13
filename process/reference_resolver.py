@@ -13,7 +13,7 @@ from loguru import logger
 
 from config import ReferenceConfig
 from models import Reference, ArxivMetadata
-from arxiv_api import ArxivApiClient
+from fetch.arxiv_api import ArxivApiClient
 from utils import (
     extract_arxiv_ids,
     calculate_similarity,
