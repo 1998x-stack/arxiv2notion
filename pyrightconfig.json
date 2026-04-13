@@ -1,0 +1,5 @@
+{
+  "pythonPath": "/opt/homebrew/Caskroom/miniconda/base/bin/python",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false
+}
