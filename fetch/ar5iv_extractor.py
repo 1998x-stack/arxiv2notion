@@ -338,13 +338,44 @@ class Ar5ivExtractor:
             ordered_content=ordered_content,
         )
     
+    def _math_to_marker(self, math_node: Tag) -> str:
+        """
+        Convert a <math> element to a $...$ or $$...$$ LaTeX marker.
+
+        Priority:
+          1. alttext attribute  — LaTeXML always sets this
+          2. <annotation encoding="application/x-tex"> — fallback inside <semantics>
+          3. Empty string       — can't render without LaTeX source
+        """
+        latex = (math_node.get("alttext") or "").strip()
+
+        if not latex:
+            ann = math_node.find(
+                "annotation", attrs={"encoding": "application/x-tex"}
+            )
+            if ann:
+                latex = ann.get_text().strip()
+
+        if not latex:
+            return ""
+
+        display = (math_node.get("display") or "inline").lower()
+        return f" $${latex}$$ " if display == "block" else f"${latex}$"
+
+    # CSS classes on <span> wrappers that are purely math containers —
+    # we skip their non-math text children (those are visual/ARIA rendering artifacts)
+    _MATH_WRAPPER_CLASSES = {"ltx_Math", "ltx_eqn_cell", "ltx_eqn_display"}
+    # CSS classes on tags whose entire subtree is non-semantic (equation numbers, labels)
+    _SKIP_CLASSES = {"ltx_tag", "ltx_tag_equation", "ltx_tag_ref", "ltx_rule"}
+
     def _extract_para_with_math(self, elem: Tag) -> str:
         """
-        Extract text from a paragraph element, preserving math as markers:
-        - Inline math (<math display="inline">) → $latex$
-        - Display/block math (<math display="block">) → $$latex$$
+        Extract paragraph text, preserving math as $...$ / $$...$$ markers.
 
-        Falls back to alttext; if missing, uses visible text.
+        Handles the common ar5iv HTML pattern where <math> is wrapped inside
+        <span class="ltx_Math">. That span may also contain visual rendering
+        artifacts (plain text, aria-hidden spans) — those are skipped so that
+        only the clean LaTeX marker is emitted.
         """
         from bs4 import NavigableString
 
@@ -352,22 +383,34 @@ class Ar5ivExtractor:
         for node in elem.children:
             if isinstance(node, NavigableString):
                 parts.append(str(node))
-            elif node.name == "math":
-                latex = (node.get("alttext") or "").strip()
-                if not latex:
-                    # No alttext — use visible text as fallback
-                    parts.append(node.get_text())
-                    continue
-                display = (node.get("display") or "inline").lower()
-                if display == "block":
-                    parts.append(f" $${latex}$$ ")
-                else:
-                    parts.append(f"${latex}$")
+                continue
+
+            if not hasattr(node, "name") or not node.name:
+                continue
+
+            node_classes = set(node.get("class") or [])
+
+            # ── Direct <math> element ──────────────────────────────────────
+            if node.name == "math":
+                parts.append(self._math_to_marker(node))
+
+            # ── <span class="ltx_Math"> (and similar wrappers) ────────────
+            # These wrap a <math> but also carry visual/ARIA text nodes that
+            # are rendering artifacts. Go straight to the inner <math>.
+            elif node_classes & self._MATH_WRAPPER_CLASSES:
+                math_node = node.find("math")
+                if math_node:
+                    parts.append(self._math_to_marker(math_node))
+                # If no inner <math> found, skip — the wrapper has no useful text
+
+            # ── Tags that are purely decorative (equation numbers, etc.) ──
+            elif node_classes & self._SKIP_CLASSES:
+                pass  # intentionally dropped
+
+            # ── Everything else: recurse (strong, em, a, sub, sup, …) ─────
             else:
-                # Recurse into spans, strong, em, etc.
                 parts.append(self._extract_para_with_math(node))
 
-        # Join and normalise whitespace without collapsing $ markers
         text = "".join(parts)
         text = re.sub(r"[ \t]+", " ", text).strip()
         return text

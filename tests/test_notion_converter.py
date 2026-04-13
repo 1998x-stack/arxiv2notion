@@ -248,3 +248,57 @@ class TestMathRendering:
         extractor = Ar5ivExtractor()
         text = extractor._extract_para_with_math(para)
         assert "$$E=mc^2$$" in text
+
+    def test_extract_para_ltx_math_span_no_artifact_text(self):
+        """
+        The <span class="ltx_Math"> wrapper pattern used by ar5iv must NOT leak
+        the visual/ARIA rendering text (e.g. 'dmodel512subscript') into the output.
+        Only the clean $alttext$ marker should appear.
+        """
+        from bs4 import BeautifulSoup
+        from fetch.ar5iv_extractor import Ar5ivExtractor
+        # Simulates ar5iv HTML: span wrapper contains both artifact text AND <math>
+        html = (
+            '<p class="ltx_p">The dimensionality is '
+            '<span class="ltx_Math">'
+            'dmodel512'                            # ← artifact text (should be dropped)
+            '<math display="inline" alttext="d_{\\text{model}}=512">'
+            '<semantics><mrow><msub><mi>d</mi><mtext>model</mtext></msub>'
+            '<mo>=</mo><mn>512</mn></mrow>'
+            '<annotation encoding="application/x-tex">d_{\\text{model}}=512</annotation>'
+            '</semantics></math>'
+            '</span>'
+            ', and the inner-layer has dimensionality '
+            '<span class="ltx_Math">dff2048'
+            '<math display="inline" alttext="d_{ff}=2048"></math>'
+            '</span>.'
+            '</p>'
+        )
+        soup = BeautifulSoup(html, "lxml")
+        para = soup.select_one("p.ltx_p")
+        extractor = Ar5ivExtractor()
+        text = extractor._extract_para_with_math(para)
+
+        # Must contain the correct LaTeX markers
+        assert "$d_{\\text{model}}=512$" in text
+        assert "$d_{ff}=2048$" in text
+        # Must NOT contain the garbled artifact text
+        assert "dmodel512" not in text
+        assert "dff2048" not in text
+        assert "subscript" not in text.lower()
+
+    def test_math_to_marker_uses_annotation_fallback(self):
+        """_math_to_marker falls back to <annotation> when alttext is absent."""
+        from bs4 import BeautifulSoup
+        from fetch.ar5iv_extractor import Ar5ivExtractor
+        html = (
+            '<math display="inline">'
+            '<semantics><mrow><mi>x</mi></mrow>'
+            '<annotation encoding="application/x-tex">x^2</annotation>'
+            '</semantics></math>'
+        )
+        soup = BeautifulSoup(html, "lxml")
+        math_node = soup.find("math")
+        extractor = Ar5ivExtractor()
+        marker = extractor._math_to_marker(math_node)
+        assert marker == "$x^2$"
