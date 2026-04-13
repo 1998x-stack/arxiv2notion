@@ -209,25 +209,27 @@ class NotionCreator:
     def create_paper_page(
         self,
         paper: PaperData,
-        parent_id: Optional[str] = None
+        parent_id: Optional[str] = None,
+        annotations: Optional[list] = None,
     ) -> CreationResult:
         """
         创建论文页面
-        
+
         Args:
             paper: 论文数据
             parent_id: 父页面 ID（默认使用配置中的 root_page_id）
-            
+            annotations: 段落注解列表（可选）
+
         Returns:
             创建结果
         """
         parent_id = parent_id or self.config.root_page_id
-        
+
         logger.info(f"创建论文页面: {paper.title}")
-        
+
         try:
             # 转换内容
-            blocks = self.converter.convert_paper(paper)
+            blocks = self.converter.convert_paper(paper, annotations=annotations)
             logger.debug(f"转换完成: {len(blocks)} blocks")
             
             # 确定图标
@@ -327,26 +329,28 @@ class NotionCreator:
         self,
         paper: PaperData,
         ref_metadata: Optional[Dict[str, ArxivMetadata]] = None,
-        max_ref_pages: int = 20
+        max_ref_pages: int = 20,
+        annotations: Optional[list] = None,
     ) -> CreationResult:
         """
         创建论文页面并为引用创建子页面
-        
+
         Args:
             paper: 论文数据
             ref_metadata: 参考文献元数据映射
             max_ref_pages: 最大参考文献子页面数
-            
+            annotations: 段落注解列表（可选）
+
         Returns:
             创建结果
         """
         ref_metadata = ref_metadata or {}
-        
+
         self.stats.start_time = datetime.now()
         self._report_progress(f"创建论文页面: {paper.title}", 0, 1)
-        
+
         # 1. 创建主页面
-        main_result = self.create_paper_page(paper)
+        main_result = self.create_paper_page(paper, annotations=annotations)
         
         if not main_result.success:
             return main_result

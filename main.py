@@ -28,6 +28,20 @@ from reference_resolver import ReferenceResolver
 from notion_converter import NotionConverter
 from notion_creator import NotionCreator
 from utils import setup_logging, normalize_arxiv_id, format_exception
+from file_manager import FileManager
+from qwen_annotator import QwenAnnotator
+
+
+def _detect_category(primary_category: str) -> str:
+    """Map an arXiv primary category to a file system category folder."""
+    c = primary_category.lower()
+    if any(k in c for k in ["cs.ai", "cs.ma", "cs.ro"]):
+        return "ai_agent"
+    if any(k in c for k in ["cs.cv", "cs.cl", "cs.lg", "stat.ml", "cs.ne"]):
+        return "deep_learning"
+    if any(k in c for k in ["cs.gt", "cs.sy"]):
+        return "reinforcement_learning"
+    return "other"
 
 
 class Ar5ivToNotion:
@@ -40,28 +54,20 @@ class Ar5ivToNotion:
     def __init__(self, config: AppConfig):
         """
         初始化处理器
-        
+
         Args:
             config: 应用配置
         """
         self.config = config
-        
-        # 初始化各模块
-        self.arxiv_client = ArxivApiClient(
-            config=config.arxiv,
-            cache_config=config.cache
-        )
-        
-        self.ar5iv_extractor = Ar5ivExtractor(
-            config=config.arxiv,
-            cache_config=config.cache
-        )
-        
-        self.ref_resolver = ReferenceResolver(
-            config=config.reference,
-            arxiv_client=self.arxiv_client
-        )
-        
+
+        self.arxiv_client = ArxivApiClient(config=config.arxiv, cache_config=config.cache)
+        self.ar5iv_extractor = Ar5ivExtractor(config=config.arxiv, cache_config=config.cache)
+        self.ref_resolver = ReferenceResolver(config=config.reference, arxiv_client=self.arxiv_client)
+
+        # File manager and annotator (new)
+        self.file_manager = FileManager(base_dir=Path("."))
+        self.annotator = QwenAnnotator(config=config.qwen, file_manager=self.file_manager)
+
         self.converter = NotionConverter(
             max_text_length=config.content.max_text_length,
             include_equations=config.content.include_equations,
@@ -69,136 +75,158 @@ class Ar5ivToNotion:
             include_tables=config.content.include_tables,
             max_sections=config.content.max_sections,
         )
-        
-        self.notion_creator = NotionCreator(
-            config=config.notion,
-            converter=self.converter
-        )
+        self.notion_creator = NotionCreator(config=config.notion, converter=self.converter)
     
     async def process_paper(
         self,
         arxiv_id: str,
+        category: str = "",
         with_references: bool = True,
         use_cache: bool = True,
-        max_ref_pages: int = 20
+        max_ref_pages: int = 20,
+        annotate: bool = True,
     ) -> PaperData:
-        """
-        处理单篇论文
-        
-        Args:
-            arxiv_id: arXiv ID
-            with_references: 是否处理参考文献
-            use_cache: 是否使用缓存
-            max_ref_pages: 最大参考文献子页面数
-            
-        Returns:
-            论文数据
-        """
+        import time as _time
         arxiv_id = normalize_arxiv_id(arxiv_id)
-        logger.info(f"开始处理论文: {arxiv_id}")
-        
+        logger.info(f"Processing: {arxiv_id}")
+
         paper = PaperData(arxiv_id=arxiv_id, status=PaperStatus.FETCHING)
-        
+        start_ms = int(_time.time() * 1000)
+
         try:
-            # 1. 获取 arXiv 元数据
-            logger.info("获取 arXiv 元数据...")
+            # 1. Fetch arXiv metadata
             paper.metadata = await self.arxiv_client.get_paper(arxiv_id, use_cache)
-            
             if not paper.metadata:
                 paper.status = PaperStatus.FAILED
-                paper.error = "无法获取 arXiv 元数据"
+                paper.error = "Could not fetch arXiv metadata"
                 return paper
-            
-            logger.info(f"标题: {paper.metadata.title}")
-            
-            # 2. 提取 ar5iv 内容
-            logger.info("提取 ar5iv 内容...")
+
+            logger.info(f"Title: {paper.metadata.title}")
+
+            # Auto-detect category from arXiv primary category if not provided
+            if not category:
+                category = _detect_category(paper.metadata.primary_category)
+
+            # 2. Extract ar5iv content
             paper.status = PaperStatus.PARSING
             paper.content = await self.ar5iv_extractor.extract_paper(arxiv_id, use_cache)
-            
             if not paper.content:
-                logger.warning("ar5iv 内容提取失败，将只使用元数据")
-            else:
-                logger.info(
-                    f"内容提取完成: {len(paper.content.sections)} 章节, "
-                    f"{len(paper.content.references)} 参考文献"
-                )
-            
-            # 3. 解析参考文献
+                logger.warning("ar5iv extraction failed — using metadata only")
+
+            # 3. Annotate with Qwen (skipped if --no-annotate or key not set)
+            annotations = []
+            if annotate and self.config.qwen.enabled and paper.content:
+                if not self.config.qwen.api_key:
+                    logger.warning("DASHSCOPE_API_KEY not set — skipping annotation")
+                else:
+                    annotations = await self.annotator.annotate_paper(
+                        paper.content, arxiv_id, category
+                    )
+
+            # 4. Save to file system
+            if paper.metadata:
+                self.file_manager.save_metadata(arxiv_id, category, paper.metadata)
+            if paper.content:
+                self.file_manager.save_content_md(arxiv_id, category, paper.content)
+                self.file_manager.save_content_json(arxiv_id, category, paper.content)
+
+            # 5. Resolve references
             ref_metadata = {}
             if with_references and paper.content and paper.content.references:
-                logger.info("解析参考文献...")
                 paper.resolved_references = await self.ref_resolver.resolve_references(
                     paper.content.references
                 )
-                
-                # 获取有 arXiv ID 的参考文献的元数据
                 arxiv_refs = self.ref_resolver.get_arxiv_references(paper.resolved_references)
-                logger.info(f"找到 {len(arxiv_refs)} 个 arXiv 参考文献")
-                
+                logger.info(f"Found {len(arxiv_refs)} arXiv references")
                 if arxiv_refs:
-                    arxiv_ids = [r.arxiv_id for r in arxiv_refs[:max_ref_pages] if r.arxiv_id]
-                    ref_metadata = await self.arxiv_client.get_papers_batch(arxiv_ids, use_cache)
-            
-            # 4. 创建 Notion 页面
-            logger.info("创建 Notion 页面...")
+                    ids = [r.arxiv_id for r in arxiv_refs[:max_ref_pages] if r.arxiv_id]
+                    ref_metadata = await self.arxiv_client.get_papers_batch(ids, use_cache)
+
+            # 6. Create Notion pages
             paper.status = PaperStatus.CREATING
-            
             result = self.notion_creator.create_paper_with_references(
-                paper,
-                ref_metadata,
-                max_ref_pages
+                paper, ref_metadata, max_ref_pages, annotations=annotations
             )
-            
+
             if result.success:
                 paper.status = PaperStatus.COMPLETED
                 paper.notion_page_id = result.page_id
-                logger.info(f"✅ 创建成功: {result.url}")
-                logger.info(f"   主页面 + {result.children_pages} 参考文献页面")
+                logger.info(f"✅ Created: {result.url}  ({result.children_pages} ref pages)")
+                duration_ms = int(_time.time() * 1000) - start_ms
+                self.file_manager.log_import({
+                    "arxiv_id": arxiv_id,
+                    "category": category,
+                    "status": "completed",
+                    "notion_page_id": result.page_id,
+                    "notion_url": result.url,
+                    "duration_ms": duration_ms,
+                    "blocks_created": result.blocks_created,
+                    "ref_pages_created": result.children_pages,
+                    "annotated_paragraphs": len(annotations),
+                })
             else:
                 paper.status = PaperStatus.FAILED
                 paper.error = result.error
-                logger.error(f"❌ 创建失败: {result.error}")
-            
+                logger.error(f"❌ Failed: {result.error}")
+                self.file_manager.log_error({
+                    "arxiv_id": arxiv_id,
+                    "stage": "notion_create",
+                    "error_type": "APIError",
+                    "message": result.error or "",
+                })
+
             return paper
-            
+
         except Exception:
-            error_message = format_exception()
-            logger.error(f"处理失败: {error_message}")
+            error_msg = format_exception()
+            logger.error(f"Processing failed: {error_msg}")
             paper.status = PaperStatus.FAILED
-            paper.error = error_message
+            paper.error = error_msg
+            self.file_manager.log_error({
+                "arxiv_id": arxiv_id,
+                "stage": "process_paper",
+                "error_type": "Exception",
+                "message": str(error_msg)[:500],
+            })
             return paper
     
     async def process_papers(
         self,
         arxiv_ids: List[str],
         with_references: bool = True,
-        use_cache: bool = True
+        use_cache: bool = True,
+        annotate: bool = True,
     ) -> List[PaperData]:
         """
         批量处理论文
-        
+
         Args:
             arxiv_ids: arXiv ID 列表
             with_references: 是否处理参考文献
             use_cache: 是否使用缓存
-            
+            annotate: 是否使用 Qwen 注解
+
         Returns:
             论文数据列表
         """
         results = []
-        
+
         for i, arxiv_id in enumerate(arxiv_ids):
             logger.info(f"\n{'='*50}")
             logger.info(f"处理 [{i+1}/{len(arxiv_ids)}]: {arxiv_id}")
-            
-            paper = await self.process_paper(arxiv_id, with_references, use_cache)
+
+            paper = await self.process_paper(
+                arxiv_id,
+                with_references=with_references,
+                use_cache=use_cache,
+                annotate=annotate,
+            )
             results.append(paper)
-            
+
             # 批次间延迟
             if i < len(arxiv_ids) - 1:
                 await asyncio.sleep(2)
-        
+
         return results
     
     def get_stats(self) -> Dict:
@@ -243,28 +271,41 @@ async def main_async(args):
         logger.error(f"配置加载失败: {e}")
         sys.exit(1)
     
+    # Handle --from-file
+    if getattr(args, 'from_file', None):
+        import json as _json
+        cfg = _json.loads(Path(args.from_file).read_text())
+        args.arxiv_ids = [cfg["arxiv_id"]]
+        args.category = cfg.get("category", getattr(args, 'category', ""))
+        opts = cfg.get("import_options", {})
+        args.with_refs = opts.get("with_refs", args.with_refs)
+        args.no_annotate = not opts.get("annotate", True)
+        args.max_refs = opts.get("max_refs", args.max_refs)
+
     # 规范化 arXiv IDs
     arxiv_ids = [normalize_arxiv_id(id_) for id_ in args.arxiv_ids]
     arxiv_ids = [id_ for id_ in arxiv_ids if id_]
-    
+
     if not arxiv_ids:
         logger.error("没有有效的 arXiv ID")
         sys.exit(1)
-    
+
     logger.info(f"准备处理 {len(arxiv_ids)} 篇论文")
-    
+
     # 创建处理器
     processor = Ar5ivToNotion(config)
-    
+
     # 处理论文
     if len(arxiv_ids) == 1:
         paper = await processor.process_paper(
             arxiv_ids[0],
+            category=getattr(args, 'category', ""),
             with_references=args.with_refs,
             use_cache=not args.no_cache,
-            max_ref_pages=args.max_refs
+            max_ref_pages=args.max_refs,
+            annotate=not getattr(args, 'no_annotate', False),
         )
-        
+
         if paper.status == PaperStatus.COMPLETED:
             logger.info(f"\n✅ 成功! 页面 ID: {paper.notion_page_id}")
         else:
@@ -274,7 +315,8 @@ async def main_async(args):
         results = await processor.process_papers(
             arxiv_ids,
             with_references=args.with_refs,
-            use_cache=not args.no_cache
+            use_cache=not args.no_cache,
+            annotate=not getattr(args, 'no_annotate', False),
         )
         
         # 统计
@@ -355,7 +397,27 @@ def main():
         "--log-file",
         help="日志文件路径"
     )
-    
+
+    parser.add_argument(
+        "--category",
+        default="",
+        help="File system category folder (default: auto-detect from arXiv primary category)",
+    )
+
+    parser.add_argument(
+        "--no-annotate",
+        dest="no_annotate",
+        action="store_true",
+        help="Skip Qwen LLM annotation step",
+    )
+
+    parser.add_argument(
+        "--from-file",
+        dest="from_file",
+        metavar="PATH",
+        help="Load paper config from a JSON file (see examples/single/)",
+    )
+
     args = parser.parse_args()
     
     # 处理 --no-refs 参数
