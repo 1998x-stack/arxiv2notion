@@ -1,240 +1,201 @@
-# ar5iv-to-notion
+# arxiv2notion
 
-将 arXiv 论文导入 Notion，创建丰富的页面结构，包括完整内容和参考文献子页面。
+> One command to turn any arXiv paper into a beautifully structured Notion page — with AI reading notes.
 
-## ✨ 特性
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![License MIT](https://img.shields.io/badge/license-MIT-green)
+![arXiv](https://img.shields.io/badge/arXiv-API-red)
+![Notion API](https://img.shields.io/badge/Notion-API-black)
 
-### 📄 论文内容提取
-- 通过 **arXiv API** 获取元数据（标题、作者、摘要、分类等）
-- 通过 **ar5iv** 提取完整内容（章节、图片、表格、公式、参考文献）
-- 智能缓存，避免重复请求
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  📄  Attention Is All You Need                                   │
+│ ─────────────────────────────────────────────────────────────── │
+│  ℹ️  [Callout]  Authors · 2017 · cs.CL                          │
+│      arXiv: 1706.03762 | PDF | ar5iv                            │
+│ ─────────────────────────────────────────────────────────────── │
+│  " The dominant sequence transduction models are based on ...   │
+│    [Abstract quote block]                                       │
+│ ─────────────────────────────────────────────────────────────── │
+│  📑  Table of Contents                                          │
+│ ─────────────────────────────────────────────────────────────── │
+│  1. Introduction                                                │
+│  2. Background                                                  │
+│  3. Model Architecture                                          │
+│     ▶  [AI Reading Notes]  核心思想：用自注意力替代循环...        │
+│  4. Why Self-Attention                                          │
+│     ▶  [AI Reading Notes]  作者从三个维度对比了...               │
+│  ...                                                            │
+│ ─────────────────────────────────────────────────────────────── │
+│  📚  References                                                 │
+│      └─ 📎 [1409.0473] Neural Machine Translation ...           │
+│      └─ 📎 [1412.6980] Adam: A Method for ...                   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-### 🎨 丰富的 Notion 元素
-| 元素 | 用途 |
-|------|------|
-| `heading_1/2/3` | 章节标题 |
-| `paragraph` | 段落（支持富文本：粗体、斜体、链接等） |
-| `callout` | 论文信息、提示框 |
-| `quote` | 摘要、引用 |
-| `code` | 代码块 |
-| `equation` | LaTeX 数学公式 |
-| `table` | 表格 |
-| `bulleted_list_item` | 无序列表 |
-| `numbered_list_item` | 有序列表 |
-| `divider` | 分隔线 |
-| `toggle` | 可折叠内容 |
-| `image` | 图片 |
-| `bookmark` | 链接预览 |
-| `table_of_contents` | 自动目录 |
+## Features
 
-### 📚 参考文献处理
-- 自动提取参考文献中的 **arXiv ID**
-- 可选：通过 arXiv API **搜索**未找到 ID 的论文
-- 为每个 arXiv 参考文献创建**子页面**
-- 子页面包含元数据和摘要
+- **Full paper extraction** — fetches metadata from the arXiv API and full structured content (sections, figures, tables, equations, references) from ar5iv (the HTML version of arXiv papers)
+- **AI reading notes** — annotates every substantive paragraph in Chinese using Qwen3 LLM via DashScope, embedded as collapsible toggles in Notion
+- **Rich Notion layout** — creates pages with an Academic Premium structure: blue info callout, table of contents, quote-style abstract, section headings, and reference sub-pages
+- **Reference sub-pages** — automatically resolves arXiv IDs from the reference list and creates linked child pages with metadata and abstracts
+- **Local file cache** — saves all content to `papers/{category}/{arxiv_id}/` and caches HTTP responses; re-importing a paper reuses the cache and skips redundant LLM calls
+- **60 curated examples** — ready-to-import paper lists covering deep learning, reinforcement learning, and AI agents
 
-## 🚀 快速开始
-
-### 1. 安装
+## Quick Start
 
 ```bash
-# 克隆项目
-git clone https://github.com/yourusername/ar5iv-to-notion.git
-cd ar5iv-to-notion
+# 1. Clone and install
+git clone https://github.com/yourusername/arxiv2notion.git
+cd arxiv2notion
+pip install -r requirements.txt
 
-# 创建虚拟环境
+# 2. Configure
+cp .env.example .env
+# Edit .env: set NOTION_TOKEN and NOTION_ROOT_PAGE_ID
+
+# 3. Import a paper
+python main.py 1706.03762
+```
+
+## Installation
+
+```bash
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或 venv\Scripts\activate  # Windows
-
-# 安装依赖
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. 配置
+Requires **Python 3.10+**.
 
-#### 获取 Notion API Token
+## Configuration
 
-1. 访问 [Notion Integrations](https://www.notion.so/my-integrations)
-2. 点击 "New integration"
-3. 填写名称，选择工作区
-4. 复制 "Internal Integration Token"
+Copy `.env.example` to `.env` and fill in the values.
 
-#### 获取根页面 ID
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `NOTION_TOKEN` | Yes | — | Notion internal integration token |
+| `NOTION_ROOT_PAGE_ID` | Yes | — | ID of the Notion page that will contain all papers |
+| `DASHSCOPE_API_KEY` | No | — | DashScope API key for Qwen AI reading notes |
+| `QWEN_MODEL` | No | `qwen-plus` | DashScope model ID |
+| `QWEN_ENABLED` | No | `true` | Set to `false` to disable annotation globally |
+| `ARXIV_REQUEST_DELAY` | No | `3.0` | Seconds between arXiv API requests (min 3 s) |
+| `CACHE_ENABLED` | No | `true` | Enable HTTP and content caching |
+| `CACHE_DIR` | No | `./cache` | Cache directory path |
+| `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`) |
 
-1. 在 Notion 中创建或选择一个页面
-2. 点击右上角 "..." → "Copy link"
-3. 从链接提取 page_id：`https://notion.so/xxx/<page_id>?v=xxx`
-
-#### 授权 Integration
-
-1. 打开目标页面
-2. 点击右上角 "..." → "Connections"
-3. 添加你创建的 Integration
-
-#### 创建配置文件
+## Usage
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填写 NOTION_TOKEN 和 NOTION_ROOT_PAGE_ID
-```
-
-### 3. 使用
-
-```bash
-# 导入单篇论文
+# Import a single paper
 python main.py 1706.03762
 
-# 导入论文及其参考文献
-python main.py 1706.03762 --with-refs
+# Import with reference sub-pages (up to 20, enabled by default)
+python main.py 1706.03762 --with-refs --max-refs 20
 
-# 限制参考文献数量
-python main.py 1706.03762 --with-refs --max-refs 10
+# Skip AI annotation
+python main.py 1706.03762 --no-annotate
 
-# 搜索未知 arXiv ID 的参考文献
-python main.py 1706.03762 --with-refs --search-refs
-
-# 批量导入
+# Import multiple papers in sequence
 python main.py 1706.03762 1810.04805 2301.08362
 
-# 详细日志
+# Import from a JSON config file (see examples/single/)
+python main.py --from-file examples/single/1706.03762.json
+
+# Batch import from the curated list (60 papers)
+python examples/batch_import.py --category deep_learning --limit 5
+
+# Verbose output
 python main.py 1706.03762 -v
 
-# 不使用缓存
+# Bypass cache
 python main.py 1706.03762 --no-cache
 ```
 
-## 📁 项目结构
+### All CLI options
+
+| Flag | Default | Description |
+|---|---|---|
+| `arxiv_ids` | (required) | One or more arXiv IDs |
+| `--with-refs` | enabled | Create reference sub-pages |
+| `--no-refs` | — | Skip reference sub-pages |
+| `--max-refs N` | 20 | Maximum number of reference sub-pages |
+| `--search-refs` | — | Search arXiv for references without an ID |
+| `--no-annotate` | — | Skip Qwen LLM annotation |
+| `--no-cache` | — | Ignore existing cache |
+| `--category` | auto | File system category folder |
+| `--from-file PATH` | — | Load config from JSON file |
+| `--log-file PATH` | — | Write logs to a file |
+| `-v` / `--verbose` | — | Debug-level output |
+
+## Notion Page Structure
 
 ```
-ar5iv-to-notion/
-├── config.py              # 配置管理
-├── models.py              # 数据模型
-├── utils.py               # 工具函数
-├── arxiv_api.py           # arXiv API 客户端
-├── ar5iv_extractor.py     # ar5iv 内容提取
-├── reference_resolver.py  # 参考文献解析
-├── notion_converter.py    # Notion blocks 转换
-├── notion_creator.py      # Notion 页面创建
-├── main.py               # 主程序入口
-├── requirements.txt      # 依赖清单
-├── .env.example          # 环境变量示例
-└── README.md            # 本文档
+📄  <Paper Title>
+├── ℹ️  [Callout]  Authors · Year · Category · arXiv / PDF / ar5iv links
+├── "  [Quote]    Abstract
+├── 📑  Table of Contents
+├── 1.  Introduction
+│       ▶  AI Reading Notes  (toggle)
+├── 2.  Background
+│       ▶  AI Reading Notes  (toggle)
+├── ...
+├── ──  [Divider]
+└── 📚  References
+        ├── 📎  [Child page]  [1409.0473] Neural Machine Translation ...
+        └── 📎  [Child page]  [1412.6980] Adam: A Method for ...
 ```
 
-## 🔧 模块说明
-
-### arxiv_api.py
-- 通过 arXiv API 获取论文元数据
-- 支持按 ID 查询和标题搜索
-- 遵守 arXiv API 速率限制（3秒间隔）
-
-### ar5iv_extractor.py
-- 从 ar5iv HTML 页面提取完整内容
-- 支持章节、图片、表格、公式、参考文献
-
-### reference_resolver.py
-- 从参考文献文本提取 arXiv ID
-- 可选：通过 arXiv API 搜索匹配论文
-
-### notion_converter.py
-- 将论文内容转换为 Notion blocks
-- 支持 15+ 种 Notion 元素
-
-### notion_creator.py
-- 创建 Notion 页面
-- 分批添加 blocks（解决 100 blocks 限制）
-- 为参考文献创建子页面
-
-## 📖 命令行参数
+## File System Output
 
 ```
-positional arguments:
-  arxiv_ids            arXiv ID（如 1706.03762）
+papers/
+└── deep_learning/
+    └── 1706.03762/
+        ├── metadata.json       # arXiv metadata (title, authors, abstract, ...)
+        ├── content.md          # Full paper as Markdown
+        ├── content.json        # Structured content (sections, figures, refs)
+        └── llm_annotations.jsonl  # Qwen paragraph annotations (cached)
 
-optional arguments:
-  -h, --help           显示帮助信息
-  -v, --verbose        显示详细日志
-  --with-refs          处理参考文献（默认启用）
-  --no-refs            不处理参考文献
-  --search-refs        搜索未知 arXiv ID 的参考文献
-  --max-refs N         最大参考文献子页面数（默认 20）
-  --no-cache           不使用缓存
-  --log-file PATH      日志文件路径
+logs/
+├── import.jsonl    # One entry per successful import (timestamps, URLs, stats)
+├── llm_calls.jsonl # One entry per Qwen API call
+└── errors.jsonl    # One entry per error
 ```
 
-## 🔍 示例输出
-
-导入 "Attention Is All You Need" 论文后，Notion 页面结构：
+## Project Structure
 
 ```
-📄 Attention Is All You Need
-├── 📋 论文信息 (callout)
-├── 🔗 链接 (arXiv, PDF, ar5iv)
-├── 📝 Abstract (quote)
-├── 📑 Table of Contents
-├── 📖 Introduction
-├── 📖 Background
-├── 📖 Model Architecture
-│   ├── Encoder and Decoder Stacks
-│   ├── Attention
-│   └── ...
-├── 📊 Tables
-├── 🖼️ Figures
-├── 📚 References
-│   ├── 📎 [1706.03762] Attention paper...
-│   ├── 📎 [1409.0473] Neural machine...
-│   └── ...
+arxiv2notion/
+├── main.py                  # Entry point; Ar5ivToNotion orchestrator
+├── config.py                # Config dataclasses (NotionConfig, QwenConfig, ...)
+├── models.py                # Data models (PaperData, ParagraphAnnotation, ...)
+├── utils.py                 # Logging setup, ID normalisation helpers
+├── fetch/
+│   ├── arxiv_api.py         # arXiv API client (metadata, batch queries)
+│   └── ar5iv_extractor.py   # ar5iv HTML extractor (sections, figures, tables)
+├── process/
+│   ├── reference_resolver.py  # arXiv ID extraction from reference lists
+│   └── qwen_annotator.py      # Qwen3 paragraph annotation via DashScope
+├── storage/
+│   └── file_manager.py        # papers/ tree and logs/ JSONL writer
+├── notion/
+│   ├── converter.py           # Paper content → Notion block trees
+│   └── creator.py             # Notion API page creation (batched)
+├── examples/
+│   ├── papers.json            # 60 curated papers (deep_learning, rl, ai_agent)
+│   ├── batch_import.py        # Batch import script
+│   └── single/                # Per-paper JSON configs
+├── requirements.txt
+└── .env.example
 ```
 
-## ⚠️ 注意事项
+## Rate Limits
 
-### arXiv API 限制
-- 请求间隔至少 3 秒
-- 批量查询建议使用较小的并发数
+- **arXiv API**: 3-second delay between requests (enforced automatically)
+- **Notion API**: 0.35-second delay between block writes; 100-block batching handled automatically
+- **DashScope**: subject to your plan limits; ~500-1500 tokens per annotated paragraph
 
-### Notion API 限制
-- 每次请求最多 100 个 blocks
-- 本工具自动分批处理
+## License
 
-### ar5iv 可用性
-- 部分旧论文可能没有 ar5iv 版本
-- 此时只使用 arXiv API 元数据
-
-## 🐛 常见问题
-
-### Q: 论文页面内容不完整？
-A: ar5iv 可能未收录该论文。程序会回退到仅使用 arXiv 元数据。
-
-### Q: 参考文献解析不准确？
-A: 参考文献格式多样，部分可能无法正确解析。启用 `--search-refs` 可提高匹配率。
-
-### Q: API 被限制？
-A: 程序会自动重试。如果频繁遇到，增加请求间隔或减少并发。
-
-## 📝 开发
-
-### 运行测试
-```bash
-pytest tests/ -v
-```
-
-### 代码格式化
-```bash
-black .
-```
-
-### 类型检查
-```bash
-mypy .
-```
-
-## 📄 License
-
-MIT License
-
-## 🙏 致谢
-
-- [arXiv](https://arxiv.org/) - 论文元数据
-- [ar5iv](https://ar5iv.labs.arxiv.org/) - HTML 版论文
-- [Notion](https://www.notion.so/) - 页面托管
+MIT
