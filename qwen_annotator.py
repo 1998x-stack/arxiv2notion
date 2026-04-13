@@ -68,7 +68,7 @@ class QwenAnnotator:
         Returns the raw completion response.
         """
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _sync_call():
             return client.chat.completions.create(
@@ -140,11 +140,13 @@ class QwenAnnotator:
             explanation, key_points = self._parse_response(raw)
 
             # Log the API call
+            tokens_in = response.usage.prompt_tokens if response.usage else 0
+            tokens_out = response.usage.completion_tokens if response.usage else 0
             self.fm.log_llm_call({
                 "section_title": section_title,
                 "para_idx": para_idx,
-                "tokens_in": response.usage.prompt_tokens,
-                "tokens_out": response.usage.completion_tokens,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
                 "latency_ms": latency_ms,
                 "model": self.config.model,
                 "cached": False,
