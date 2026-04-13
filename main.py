@@ -113,30 +113,37 @@ class Ar5ivToNotion:
             if not paper.content:
                 logger.warning("ar5iv extraction failed — using metadata only")
 
-            # 3. Annotate with Qwen (skipped if --no-annotate or key not set)
-            annotations = []
-            if annotate and self.config.qwen.enabled and paper.content:
+            # 3 + 5 (concurrent). Annotation and reference resolution run at the same time.
+            async def _do_annotation() -> list:
+                if not (annotate and self.config.qwen.enabled and paper.content):
+                    return []
                 if not self.config.qwen.api_key:
                     logger.warning("DASHSCOPE_API_KEY not set — skipping annotation")
-                else:
-                    annotations = await self.annotator.annotate_paper(
-                        paper.content, arxiv_id, category
-                    )
+                    return []
+                return await self.annotator.annotate_paper(paper.content, arxiv_id, category)
 
-            # 4. Save to file system
+            async def _do_resolve_refs() -> list:
+                if not (with_references and paper.content and paper.content.references):
+                    return []
+                return await self.ref_resolver.resolve_references(paper.content.references)
+
+            logger.info("Annotating paragraphs and resolving references concurrently...")
+            annotations, resolved_refs = await asyncio.gather(
+                _do_annotation(), _do_resolve_refs()
+            )
+            paper.resolved_references = resolved_refs
+
+            # 4. Save to file system (after annotation so annotations are available)
             if paper.metadata:
                 self.file_manager.save_metadata(arxiv_id, category, paper.metadata)
             if paper.content:
                 self.file_manager.save_content_md(arxiv_id, category, paper.content)
                 self.file_manager.save_content_json(arxiv_id, category, paper.content)
 
-            # 5. Resolve references
+            # Fetch arXiv metadata for resolved references (must be after resolution)
             ref_metadata = {}
-            if with_references and paper.content and paper.content.references:
-                paper.resolved_references = await self.ref_resolver.resolve_references(
-                    paper.content.references
-                )
-                arxiv_refs = self.ref_resolver.get_arxiv_references(paper.resolved_references)
+            if resolved_refs:
+                arxiv_refs = self.ref_resolver.get_arxiv_references(resolved_refs)
                 logger.info(f"Found {len(arxiv_refs)} arXiv references")
                 if arxiv_refs:
                     ids = [r.arxiv_id for r in arxiv_refs[:max_ref_pages] if r.arxiv_id]
