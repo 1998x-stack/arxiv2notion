@@ -90,7 +90,8 @@ class Section:
     figures: List[Figure] = field(default_factory=list)
     tables: List[Table] = field(default_factory=list)
     equations: List[Equation] = field(default_factory=list)
-    
+    ordered_content: List[Dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "title": self.title,
@@ -99,7 +100,8 @@ class Section:
             "subsections": [s.to_dict() for s in self.subsections],
             "figures": [f.to_dict() for f in self.figures],
             "tables": [t.to_dict() for t in self.tables],
-            "equations": [e.to_dict() for e in self.equations]
+            "equations": [e.to_dict() for e in self.equations],
+            "ordered_content": self.ordered_content,
         }
 
 

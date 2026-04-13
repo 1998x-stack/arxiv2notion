@@ -234,55 +234,99 @@ class Ar5ivExtractor:
         if re.match(r"^(references|bibliography|appendix|acknowledgement)", title, re.I):
             return None
         
-        # 提取段落（保留行内数学公式标记）
+        # Collect content in document order by iterating direct children
+        ordered_content = []
         paragraphs = []
-        for para in elem.find_all("p", class_="ltx_p", recursive=False):
-            text = self._extract_para_with_math(para)
-            if text and len(text) > 10:
-                paragraphs.append(text)
+        figures = []
+        tables = []
+        equations = []
 
-        # 如果没有直接段落，查找 ltx_para 容器
-        if not paragraphs:
+        for child in elem.children:
+            if not hasattr(child, "name") or not child.name:
+                continue
+            classes = child.get("class") or []
+
+            if "ltx_para" in classes:
+                # Paragraph container — may hold multiple <p class="ltx_p">
+                for para in child.find_all("p", class_="ltx_p"):
+                    text = self._extract_para_with_math(para)
+                    if text and len(text) > 10:
+                        ordered_content.append({"type": "para", "data": text})
+                        paragraphs.append(text)
+
+            elif child.name == "figure":
+                if "ltx_figure" in classes or "ltx_table" in classes:
+                    if child.select_one("img"):
+                        # Image figure
+                        fig = self._parse_figure(child)
+                        if fig:
+                            ordered_content.append({"type": "figure", "data": fig.to_dict()})
+                            figures.append(fig)
+                    else:
+                        # Table figure (table inside a <figure> wrapper)
+                        tbl_elem = child.select_one("table.ltx_tabular")
+                        if tbl_elem:
+                            tbl = self._parse_table(tbl_elem)
+                            if tbl:
+                                # Grab caption from the figure wrapper
+                                cap_elem = child.select_one("figcaption") or child.select_one(".ltx_caption")
+                                if cap_elem and not tbl.caption:
+                                    tbl.caption = re.sub(
+                                        r"^Table\s*\d+[:.]\s*", "",
+                                        clean_text(cap_elem.get_text()),
+                                        flags=re.I,
+                                    )
+                                ordered_content.append({"type": "table", "data": tbl.to_dict()})
+                                tables.append(tbl)
+
+            elif "ltx_equation" in classes or "ltx_equationgroup" in classes:
+                eq = self._parse_equation(child)
+                if eq:
+                    ordered_content.append({"type": "equation", "data": eq.to_dict()})
+                    equations.append(eq)
+
+            elif child.name == "table" and "ltx_tabular" in classes:
+                # Bare table not wrapped in <figure>
+                tbl = self._parse_table(child)
+                if tbl:
+                    ordered_content.append({"type": "table", "data": tbl.to_dict()})
+                    tables.append(tbl)
+
+        # Fallback: if no ordered content found via child iteration, use old deep-search approach
+        if not ordered_content:
             for para_container in elem.find_all(class_="ltx_para", recursive=False):
                 for para in para_container.find_all("p", class_="ltx_p"):
                     text = self._extract_para_with_math(para)
                     if text and len(text) > 10:
+                        ordered_content.append({"type": "para", "data": text})
                         paragraphs.append(text)
-        
-        # 提取章节内的图片
-        figures = []
-        for fig in elem.find_all("figure", class_="ltx_figure", recursive=False):
-            figure = self._parse_figure(fig)
-            if figure:
-                figures.append(figure)
-        
-        # 提取章节内的表格
-        tables = []
-        for table in elem.find_all("table", class_="ltx_tabular", recursive=False):
-            table_data = self._parse_table(table)
-            if table_data:
-                tables.append(table_data)
-        
-        # 提取章节内的公式
-        equations = []
-        for eq in elem.find_all(class_=["ltx_equation", "ltx_equationgroup"], recursive=False):
-            equation = self._parse_equation(eq)
-            if equation:
-                equations.append(equation)
-        
-        # 递归处理子章节
+            for fig_elem in elem.find_all("figure", class_="ltx_figure", recursive=False):
+                fig = self._parse_figure(fig_elem)
+                if fig:
+                    ordered_content.append({"type": "figure", "data": fig.to_dict()})
+                    figures.append(fig)
+            for tbl_elem in elem.find_all("table", class_="ltx_tabular", recursive=False):
+                tbl = self._parse_table(tbl_elem)
+                if tbl:
+                    ordered_content.append({"type": "table", "data": tbl.to_dict()})
+                    tables.append(tbl)
+            for eq_elem in elem.find_all(class_=["ltx_equation", "ltx_equationgroup"], recursive=False):
+                eq = self._parse_equation(eq_elem)
+                if eq:
+                    ordered_content.append({"type": "equation", "data": eq.to_dict()})
+                    equations.append(eq)
+
+        # Subsections (always collected separately — they appear as <section> children)
         subsections = []
         for subsection in elem.select("section.ltx_subsection"):
             sub_data = self._parse_section(subsection, level=level + 1)
             if sub_data:
                 subsections.append(sub_data)
-        
-        # 也处理 ltx_subsubsection
         for subsubsection in elem.select("section.ltx_subsubsection"):
             sub_data = self._parse_section(subsubsection, level=level + 2)
             if sub_data:
                 subsections.append(sub_data)
-        
+
         return Section(
             title=title,
             level=level,
@@ -290,7 +334,8 @@ class Ar5ivExtractor:
             subsections=subsections,
             figures=figures,
             tables=tables,
-            equations=equations
+            equations=equations,
+            ordered_content=ordered_content,
         )
     
     def _extract_para_with_math(self, elem: Tag) -> str:
@@ -622,7 +667,8 @@ class Ar5ivExtractor:
                 subsections=[rebuild_section(sub) for sub in s.get('subsections', [])],
                 figures=[Figure(**f) for f in s.get('figures', [])],
                 tables=[Table(**t) for t in s.get('tables', [])],
-                equations=[Equation(**e) for e in s.get('equations', [])]
+                equations=[Equation(**e) for e in s.get('equations', [])],
+                ordered_content=s.get('ordered_content', []),
             )
         
         return Ar5ivContent(

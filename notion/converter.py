@@ -546,12 +546,6 @@ class NotionConverter:
             if paper.content and paper.content.sections:
                 blocks.extend(self._convert_sections(paper.content.sections, annotations))
 
-            if paper.content and paper.content.figures and self.include_figures:
-                blocks.extend(self._create_figures_section(paper.content.figures))
-
-            if paper.content and paper.content.tables and self.include_tables:
-                blocks.extend(self._create_tables_section(paper.content.tables))
-
             if paper.content and paper.content.references:
                 blocks.extend(self._create_references_section(paper.content.references))
 
@@ -679,34 +673,72 @@ class NotionConverter:
         # Build annotation lookup: (section_title, para_idx) → annotation
         ann_map = {(a.section_title, a.para_idx): a for a in annotations}
 
-        for idx, para in enumerate(section.paragraphs):
-            # Render paragraph — inline $...$ → rich_text equations, $$...$$ → equation blocks
-            para_blocks = _para_to_notion_blocks(para, self.builder, self.max_text_length)
-            blocks.extend(para_blocks)
+        if section.ordered_content:
+            # Render content in document order (paragraphs, figures, tables, equations interleaved)
+            para_idx = 0
+            for item in section.ordered_content:
+                itype = item["type"]
 
-            # Add AI reading notes toggle if annotation exists for this paragraph
-            ann = ann_map.get((section.title, idx))
-            if ann and ann.plain_explanation and ann.plain_explanation not in (
-                "（段落过短，跳过注释）", "（注释生成失败）"
-            ):
-                blocks.append(self._make_annotation_toggle(ann))
+                if itype == "para":
+                    para_text = item["data"]
+                    para_blocks = _para_to_notion_blocks(para_text, self.builder, self.max_text_length)
+                    blocks.extend(para_blocks)
+                    # Add AI reading notes toggle
+                    ann = ann_map.get((section.title, para_idx))
+                    if ann and ann.plain_explanation and ann.plain_explanation not in (
+                        "（段落过短，跳过注释）", "（注释生成失败）"
+                    ):
+                        blocks.append(self._make_annotation_toggle(ann))
+                    para_idx += 1
 
-        # Standalone display equations extracted at section level (not inline in any paragraph)
-        if self.include_equations and section.equations:
-            for eq in section.equations[:10]:
-                latex = _clean_latex(eq.latex or "")
-                if latex:
-                    blocks.append(self.builder.equation(latex))
+                elif itype == "figure" and self.include_figures:
+                    src = item["data"].get("src", "")
+                    caption = item["data"].get("caption")
+                    if src.startswith("http"):
+                        blocks.append(self.builder.image(src, caption))
 
-        if self.include_figures and section.figures:
-            for fig in section.figures[:5]:
-                if fig.src and fig.src.startswith("http"):
-                    blocks.append(self.builder.image(fig.src, fig.caption))
+                elif itype == "table" and self.include_tables:
+                    tbl = item["data"]
+                    headers = tbl.get("headers", [])
+                    rows = tbl.get("rows", [])
+                    if tbl.get("caption"):
+                        blocks.append(self.builder.paragraph(tbl["caption"], bold=True))
+                    if headers or rows:
+                        blocks.append(self.builder.table(headers, rows[:20]))
 
-        if self.include_tables and section.tables:
-            for tbl in section.tables[:3]:
-                if tbl.headers or tbl.rows:
-                    blocks.append(self.builder.table(tbl.headers, tbl.rows[:20]))
+                elif itype == "equation" and self.include_equations:
+                    latex = _clean_latex(item["data"].get("latex", ""))
+                    if latex:
+                        blocks.append(self.builder.equation(latex))
+
+        else:
+            # Fallback: old approach for cached content without ordered_content
+            for idx, para in enumerate(section.paragraphs):
+                para_blocks = _para_to_notion_blocks(para, self.builder, self.max_text_length)
+                blocks.extend(para_blocks)
+                ann = ann_map.get((section.title, idx))
+                if ann and ann.plain_explanation and ann.plain_explanation not in (
+                    "（段落过短，跳过注释）", "（注释生成失败）"
+                ):
+                    blocks.append(self._make_annotation_toggle(ann))
+
+            if self.include_equations and section.equations:
+                for eq in section.equations[:10]:
+                    latex = _clean_latex(eq.latex or "")
+                    if latex:
+                        blocks.append(self.builder.equation(latex))
+
+            if self.include_figures and section.figures:
+                for fig in section.figures[:5]:
+                    if fig.src and fig.src.startswith("http"):
+                        blocks.append(self.builder.image(fig.src, fig.caption))
+
+            if self.include_tables and section.tables:
+                for tbl in section.tables[:3]:
+                    if tbl.caption:
+                        blocks.append(self.builder.paragraph(tbl.caption, bold=True))
+                    if tbl.headers or tbl.rows:
+                        blocks.append(self.builder.table(tbl.headers, tbl.rows[:20]))
 
         for sub in section.subsections:
             blocks.extend(self._convert_section(sub, annotations))
