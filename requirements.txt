@@ -2,6 +2,7 @@
 
 # 核心依赖
 aiohttp>=3.9.0         # 异步 HTTP 客户端
+openai>=1.0.0              # DashScope-compatible OpenAI SDK client
 aiofiles>=23.2.1       # 异步文件操作
 beautifulsoup4>=4.12   # HTML 解析
 lxml>=5.1.0            # XML/HTML 解析器
