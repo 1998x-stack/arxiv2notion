@@ -330,13 +330,45 @@ class NotionBlockBuilder:
         }
 
 
+# ── Section heading emoji mapping ─────────────────────────────────────────────
+
+_SECTION_EMOJIS = {
+    "introduction": "📌",
+    "background": "📚",
+    "related": "📚",
+    "method": "🔬",
+    "model": "🔬",
+    "architecture": "🔬",
+    "approach": "🔬",
+    "framework": "🔬",
+    "experiment": "📊",
+    "result": "📊",
+    "evaluation": "📊",
+    "analysis": "📊",
+    "ablation": "📊",
+    "conclusion": "💡",
+    "discussion": "💡",
+    "limitation": "💡",
+    "future": "💡",
+}
+
+
+def _section_emoji(title: str) -> str:
+    """Return an emoji prefix for a section title based on keywords."""
+    lower = title.lower()
+    for keyword, emoji in _SECTION_EMOJIS.items():
+        if keyword in lower:
+            return emoji
+    return "📄"
+
+
 class NotionConverter:
     """
-    Notion 内容转换器
-    
-    将论文数据转换为 Notion blocks
+    Converts PaperData into Notion blocks using the Academic Premium layout.
+
+    Accepts optional List[ParagraphAnnotation] to add AI reading notes toggles.
     """
-    
+
     def __init__(
         self,
         max_text_length: int = 2000,
@@ -345,413 +377,373 @@ class NotionConverter:
         include_tables: bool = True,
         max_sections: int = 50,
     ):
-        """
-        初始化转换器
-        
-        Args:
-            max_text_length: 最大文本长度
-            include_equations: 是否包含公式
-            include_figures: 是否包含图片
-            include_tables: 是否包含表格
-            max_sections: 最大章节数
-        """
         self.max_text_length = max_text_length
         self.include_equations = include_equations
         self.include_figures = include_figures
         self.include_tables = include_tables
         self.max_sections = max_sections
-        
         self.builder = NotionBlockBuilder
-    
-    def convert_paper(self, paper: PaperData) -> List[Dict[str, Any]]:
+
+    def convert_paper(
+        self,
+        paper: "PaperData",
+        annotations: Optional[List["ParagraphAnnotation"]] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        转换完整论文为 Notion blocks
-        
+        Convert a full paper to Notion blocks (Academic Premium layout).
+
         Args:
-            paper: 论文数据
-            
-        Returns:
-            Notion blocks 列表
+            paper: The paper data.
+            annotations: Optional Qwen annotations — each paragraph gets a toggle
+                         with AI reading notes when its annotation is found.
         """
+        annotations = annotations or []
+
+        # TL;DR is the abstract annotation (section_title == "__abstract__", para_idx == -1)
+        tldr = next(
+            (a for a in annotations if a.section_title == "__abstract__" and a.para_idx == -1),
+            None,
+        )
+
         blocks = []
-        
         try:
-            # 1. 元数据头部
             blocks.extend(self._create_header(paper))
-            
-            # 2. 摘要
-            blocks.extend(self._create_abstract(paper))
-            
-            # 3. 目录
+            blocks.extend(self._create_abstract(paper, tldr=tldr))
+
             blocks.append(self.builder.divider())
-            blocks.append(self.builder.heading("📑 Table of Contents", level=2))
+            blocks.append(self.builder.heading("📑 Contents", level=2))
             blocks.append(self.builder.table_of_contents())
             blocks.append(self.builder.divider())
-            
-            # 4. 章节内容
+
             if paper.content and paper.content.sections:
-                blocks.extend(self._convert_sections(paper.content.sections))
-            
-            # 5. 图片（如果有）
+                blocks.extend(self._convert_sections(paper.content.sections, annotations))
+
             if paper.content and paper.content.figures and self.include_figures:
                 blocks.extend(self._create_figures_section(paper.content.figures))
-            
-            # 6. 表格（如果有）
+
             if paper.content and paper.content.tables and self.include_tables:
                 blocks.extend(self._create_tables_section(paper.content.tables))
-            
-            # 7. 参考文献
+
             if paper.content and paper.content.references:
                 blocks.extend(self._create_references_section(paper.content.references))
-            
-            logger.debug(f"转换论文完成: {len(blocks)} blocks")
-            
+
+            logger.debug(f"Converted paper to {len(blocks)} blocks")
         except Exception:
-            error_message = format_exception()
-            logger.error(f"转换论文失败: {error_message}")
-        
+            logger.error(f"Conversion failed: {format_exception()}")
+
         return blocks
-    
-    def _create_header(self, paper: PaperData) -> List[Dict[str, Any]]:
-        """创建论文头部信息"""
+
+    # ── Header ────────────────────────────────────────────────────────────────
+
+    def _create_header(self, paper: "PaperData") -> List[Dict[str, Any]]:
         blocks = []
-        
         metadata = paper.metadata
-        
-        # 基本信息 callout
+
         if metadata:
             category_emoji = get_category_emoji(metadata.primary_category)
-            
-            info_text = (
-                f"📅 Published: {format_date(metadata.published)}\n"
-                f"👥 Authors: {format_authors([str(a) for a in metadata.authors])}\n"
-                f"🏷️ Categories: {', '.join(metadata.categories[:5])}"
-            )
-            
+            authors_str = format_authors([str(a) for a in metadata.authors], max_count=5)
+            categories_str = " · ".join(metadata.categories[:5])
+            info_lines = [
+                f"📅 Published: {format_date(metadata.published)}",
+                f"👥 Authors: {authors_str}",
+                f"🏷️  {categories_str}",
+            ]
             if metadata.doi:
-                info_text += f"\n🔗 DOI: {metadata.doi}"
-            
+                info_lines.append(f"🔗 DOI: {metadata.doi}")
             if metadata.journal_ref:
-                info_text += f"\n📰 Journal: {metadata.journal_ref}"
-            
-            blocks.append(self.builder.callout(info_text, icon=category_emoji, color="blue_background"))
-        else:
-            # 使用 ar5iv 内容
-            if paper.content:
-                info_text = f"👥 Authors: {format_authors(paper.content.authors)}"
-                blocks.append(self.builder.callout(info_text, icon="📄", color="blue_background"))
-        
-        # 链接
-        links_text = []
+                info_lines.append(f"📰 {metadata.journal_ref}")
+
+            blocks.append(
+                self.builder.callout(
+                    "\n".join(info_lines),
+                    icon=category_emoji,
+                    color="blue_background",
+                )
+            )
+        elif paper.content:
+            blocks.append(
+                self.builder.callout(
+                    f"👥 Authors: {format_authors(paper.content.authors)}",
+                    icon="📄",
+                    color="blue_background",
+                )
+            )
+
+        # Links row
         arxiv_url = build_arxiv_url(paper.arxiv_id, "abs")
         pdf_url = build_arxiv_url(paper.arxiv_id, "pdf")
         ar5iv_url = f"https://ar5iv.labs.arxiv.org/html/{paper.arxiv_id}"
-        
-        blocks.append(self.builder.paragraph_with_rich_text([
-            self.builder.rich_text("🔗 Links: ", bold=True),
-            self.builder.rich_text("arXiv", link=arxiv_url, color="blue"),
-            self.builder.rich_text(" | "),
-            self.builder.rich_text("PDF", link=pdf_url, color="blue"),
-            self.builder.rich_text(" | "),
-            self.builder.rich_text("ar5iv", link=ar5iv_url, color="blue"),
-        ]))
-        
+
+        blocks.append(
+            self.builder.paragraph_with_rich_text([
+                self.builder.rich_text("🔗 Links:  ", bold=True),
+                self.builder.rich_text("arXiv", link=arxiv_url, color="blue"),
+                self.builder.rich_text("  |  "),
+                self.builder.rich_text("PDF", link=pdf_url, color="blue"),
+                self.builder.rich_text("  |  "),
+                self.builder.rich_text("ar5iv", link=ar5iv_url, color="blue"),
+            ])
+        )
+
         blocks.append(self.builder.divider())
-        
         return blocks
-    
-    def _create_abstract(self, paper: PaperData) -> List[Dict[str, Any]]:
-        """创建摘要部分"""
+
+    # ── Abstract + TL;DR ──────────────────────────────────────────────────────
+
+    def _create_abstract(
+        self,
+        paper: "PaperData",
+        tldr: Optional["ParagraphAnnotation"] = None,
+    ) -> List[Dict[str, Any]]:
         blocks = []
-        
-        abstract = None
-        if paper.content and paper.content.abstract:
-            abstract = paper.content.abstract
-        elif paper.metadata and paper.metadata.abstract:
-            abstract = paper.metadata.abstract
-        
+
+        abstract = (
+            (paper.content and paper.content.abstract)
+            or (paper.metadata and paper.metadata.abstract)
+        )
+
         if abstract:
             blocks.append(self.builder.heading("📝 Abstract", level=2))
             blocks.append(self.builder.quote(abstract))
-        
+
+        if tldr:
+            blocks.append(
+                self.builder.callout(
+                    f"💡 {tldr.plain_explanation}",
+                    icon="💡",
+                    color="green_background",
+                )
+            )
+
         return blocks
-    
-    def _convert_sections(self, sections: List[Section]) -> List[Dict[str, Any]]:
-        """转换章节内容"""
+
+    # ── Sections ──────────────────────────────────────────────────────────────
+
+    def _convert_sections(
+        self,
+        sections: List["Section"],
+        annotations: List["ParagraphAnnotation"],
+    ) -> List[Dict[str, Any]]:
         blocks = []
-        section_count = 0
-        
-        for section in sections:
-            if section_count >= self.max_sections:
-                blocks.append(self.builder.callout(
-                    f"⚠️ 章节数量超过限制 ({self.max_sections})，部分内容已省略",
-                    icon="⚠️",
-                    color="yellow_background"
-                ))
+        for i, section in enumerate(sections):
+            if i >= self.max_sections:
+                blocks.append(
+                    self.builder.callout(
+                        f"⚠️ Section limit ({self.max_sections}) reached — content truncated.",
+                        icon="⚠️",
+                        color="yellow_background",
+                    )
+                )
                 break
-            
-            section_blocks = self._convert_section(section)
-            blocks.extend(section_blocks)
-            section_count += 1
-        
+            blocks.extend(self._convert_section(section, annotations))
         return blocks
-    
-    def _convert_section(self, section: Section) -> List[Dict[str, Any]]:
-        """转换单个章节"""
+
+    def _convert_section(
+        self,
+        section: "Section",
+        annotations: List["ParagraphAnnotation"],
+    ) -> List[Dict[str, Any]]:
         blocks = []
-        
-        # 标题
+        emoji = _section_emoji(section.title)
         level = min(section.level, 3)
-        blocks.append(self.builder.heading(section.title, level=level))
-        
-        # 段落
-        for para in section.paragraphs:
-            if len(para) > self.max_text_length:
-                # 分割长段落
-                chunks = self._split_text(para)
-                for chunk in chunks:
-                    blocks.append(self.builder.paragraph(chunk))
-            else:
-                blocks.append(self.builder.paragraph(para))
-        
-        # 公式
+        blocks.append(self.builder.heading(f"{emoji} {section.title}", level=level))
+
+        # Build annotation lookup: (section_title, para_idx) → annotation
+        ann_map = {(a.section_title, a.para_idx): a for a in annotations}
+
+        for idx, para in enumerate(section.paragraphs):
+            for chunk in self._split_text(para):
+                blocks.append(self.builder.paragraph(chunk))
+
+            # Add AI reading notes toggle if annotation exists for this paragraph
+            ann = ann_map.get((section.title, idx))
+            if ann and ann.plain_explanation and ann.plain_explanation not in (
+                "（段落过短，跳过注释）", "（注释生成失败）"
+            ):
+                blocks.append(self._make_annotation_toggle(ann))
+
         if self.include_equations and section.equations:
-            for eq in section.equations[:10]:  # 限制数量
+            for eq in section.equations[:10]:
                 if eq.latex:
                     blocks.append(self.builder.equation(eq.latex))
-        
-        # 图片
+
         if self.include_figures and section.figures:
             for fig in section.figures[:5]:
                 if fig.src and fig.src.startswith("http"):
                     blocks.append(self.builder.image(fig.src, fig.caption))
-        
-        # 表格
+
         if self.include_tables and section.tables:
-            for table in section.tables[:3]:
-                if table.headers or table.rows:
-                    blocks.append(self.builder.table(table.headers, table.rows[:20]))
-        
-        # 子章节
-        for subsection in section.subsections:
-            blocks.extend(self._convert_section(subsection))
-        
+            for tbl in section.tables[:3]:
+                if tbl.headers or tbl.rows:
+                    blocks.append(self.builder.table(tbl.headers, tbl.rows[:20]))
+
+        for sub in section.subsections:
+            blocks.extend(self._convert_section(sub, annotations))
+
         return blocks
-    
-    def _create_figures_section(self, figures: List[Figure]) -> List[Dict[str, Any]]:
-        """创建图片部分"""
-        blocks = []
-        
-        blocks.append(self.builder.divider())
-        blocks.append(self.builder.heading("🖼️ Figures", level=2))
-        
-        for i, fig in enumerate(figures[:20]):  # 限制数量
+
+    def _make_annotation_toggle(self, ann: "ParagraphAnnotation") -> Dict[str, Any]:
+        """Build the AI 阅读笔记 toggle with callout + bullet points inside."""
+        inner_blocks = [
+            self.builder.callout(
+                f"💬 通俗解读：{ann.plain_explanation}",
+                icon="💬",
+                color="gray_background",
+            )
+        ]
+        for point in ann.key_points:
+            inner_blocks.append(self.builder.bulleted_list_item(point))
+
+        return self.builder.toggle("🤖 AI 阅读笔记", children=inner_blocks)
+
+    # ── Figures ───────────────────────────────────────────────────────────────
+
+    def _create_figures_section(self, figures: List["Figure"]) -> List[Dict[str, Any]]:
+        blocks = [self.builder.divider(), self.builder.heading("🖼️ Figures", level=2)]
+        for i, fig in enumerate(figures[:20]):
             if fig.src and fig.src.startswith("http"):
-                blocks.append(self.builder.image(fig.src, fig.caption or f"Figure {i+1}"))
-        
+                blocks.append(self.builder.image(fig.src, fig.caption or f"Figure {i + 1}"))
         return blocks
-    
-    def _create_tables_section(self, tables: List[Table]) -> List[Dict[str, Any]]:
-        """创建表格部分"""
-        blocks = []
-        
-        blocks.append(self.builder.divider())
-        blocks.append(self.builder.heading("📊 Tables", level=2))
-        
-        for i, table in enumerate(tables[:10]):
-            if table.caption:
-                blocks.append(self.builder.paragraph(table.caption, bold=True))
-            
-            if table.headers or table.rows:
-                blocks.append(self.builder.table(table.headers, table.rows[:30]))
-        
+
+    # ── Tables ────────────────────────────────────────────────────────────────
+
+    def _create_tables_section(self, tables: List["Table"]) -> List[Dict[str, Any]]:
+        blocks = [self.builder.divider(), self.builder.heading("📊 Tables", level=2)]
+        for tbl in tables[:10]:
+            if tbl.caption:
+                blocks.append(self.builder.paragraph(tbl.caption, bold=True))
+            if tbl.headers or tbl.rows:
+                blocks.append(self.builder.table(tbl.headers, tbl.rows[:30]))
         return blocks
-    
-    def _create_references_section(self, references: List[Reference]) -> List[Dict[str, Any]]:
-        """创建参考文献部分"""
-        blocks = []
-        
-        blocks.append(self.builder.divider())
-        blocks.append(self.builder.heading("📚 References", level=2))
-        
-        # 分组：有 arXiv ID 的和没有的
+
+    # ── References ────────────────────────────────────────────────────────────
+
+    def _create_references_section(self, references: List["Reference"]) -> List[Dict[str, Any]]:
+        blocks = [self.builder.divider(), self.builder.heading("📚 参考文献 (References)", level=2)]
+
         arxiv_refs = [r for r in references if r.arxiv_id]
         other_refs = [r for r in references if not r.arxiv_id]
-        
+
         if arxiv_refs:
-            blocks.append(self.builder.callout(
-                f"🔗 Found {len(arxiv_refs)} arXiv references (can create sub-pages)",
-                icon="📄",
-                color="green_background"
-            ))
-        
-        # 显示参考文献列表
-        for ref in references[:100]:  # 限制数量
-            ref_text = ref.raw_text
-            if len(ref_text) > 500:
-                ref_text = ref_text[:497] + "..."
-            
-            if ref.arxiv_id:
-                # 有 arXiv ID 的显示链接
-                arxiv_url = build_arxiv_url(ref.arxiv_id)
-                blocks.append(self.builder.paragraph_with_rich_text([
-                    self.builder.rich_text(f"[{ref.citation_key or '?'}] ", bold=True),
-                    self.builder.rich_text(ref_text[:200] + "... ", italic=True),
-                    self.builder.rich_text(f"[arXiv:{ref.arxiv_id}]", link=arxiv_url, color="blue"),
-                ]))
-            else:
-                blocks.append(self.builder.bulleted_list_item(f"[{ref.citation_key or '?'}] {ref_text}"))
-        
+            blocks.append(
+                self.builder.callout(
+                    f"✅ 找到 {len(arxiv_refs)} 篇 arXiv 论文，已创建子页面",
+                    icon="✅",
+                    color="green_background",
+                )
+            )
+
+        for ref in arxiv_refs[:100]:
+            blocks.append(self._format_arxiv_reference(ref))
+
+        if other_refs:
+            other_items = []
+            for ref in other_refs[:100]:
+                text = truncate_text(ref.raw_text, 300)
+                other_items.append(
+                    self.builder.bulleted_list_item(f"[{ref.citation_key or '?'}]  {text}")
+                )
+            blocks.append(
+                self.builder.toggle(
+                    f"📎 其他参考文献 ({len(other_refs)} 篇)",
+                    children=other_items,
+                )
+            )
+
         return blocks
-    
-    def _split_text(self, text: str) -> List[str]:
-        """分割长文本"""
-        if len(text) <= self.max_text_length:
-            return [text]
-        
-        chunks = []
-        remaining = text
-        
-        while remaining:
-            if len(remaining) <= self.max_text_length:
-                chunks.append(remaining)
-                break
-            
-            chunk = remaining[:self.max_text_length]
-            
-            # 尝试在句子边界分割
-            last_period = max(
-                chunk.rfind('. '),
-                chunk.rfind('。'),
-                chunk.rfind('! '),
-                chunk.rfind('? '),
-            )
-            
-            if last_period > self.max_text_length * 0.5:
-                chunk = chunk[:last_period + 1]
-            
-            chunks.append(chunk.strip())
-            remaining = remaining[len(chunk):].strip()
-        
-        return chunks
-    
-    def create_reference_page_blocks(self, ref: Reference, metadata: Optional[ArxivMetadata] = None) -> List[Dict[str, Any]]:
-        """
-        为参考文献创建子页面内容
-        
-        Args:
-            ref: 参考文献
-            metadata: arXiv 元数据（如果有）
-            
-        Returns:
-            Notion blocks 列表
-        """
+
+    def _format_arxiv_reference(self, ref: "Reference") -> Dict[str, Any]:
+        """Format a single arXiv reference as a paragraph with rich text."""
+        from reference_resolver import ReferenceExtractor
+        extractor = ReferenceExtractor()
+        ref = extractor.extract_info(ref)
+
+        parts = []
+        if ref.authors:
+            authors_str = ", ".join(ref.authors[:3])
+            if len(ref.authors) > 3:
+                authors_str += " et al."
+            parts.append(authors_str)
+        if ref.year:
+            parts.append(f"({ref.year}).")
+        if ref.title:
+            parts.append(f"{ref.title}.")
+        if ref.venue:
+            parts.append(f"{ref.venue}.")
+
+        display = "  ".join(parts) if parts else truncate_text(ref.raw_text, 200)
+        key_str = f"[{ref.citation_key or '?'}]  " if ref.citation_key else ""
+        arxiv_url = build_arxiv_url(ref.arxiv_id, "abs")
+
+        return self.builder.paragraph_with_rich_text([
+            self.builder.rich_text(key_str, bold=True),
+            self.builder.rich_text(display + "  "),
+            self.builder.rich_text(f"→ arXiv:{ref.arxiv_id}", link=arxiv_url, color="blue"),
+        ])
+
+    # ── Reference sub-page ────────────────────────────────────────────────────
+
+    def create_reference_page_blocks(
+        self, ref: "Reference", metadata: Optional["ArxivMetadata"] = None
+    ) -> List[Dict[str, Any]]:
         blocks = []
-        
         if metadata:
-            # 使用元数据创建丰富内容
             category_emoji = get_category_emoji(metadata.primary_category)
-            
-            info_text = (
+            authors_str = format_authors([str(a) for a in metadata.authors], max_count=5)
+            info = (
                 f"📅 Published: {format_date(metadata.published)}\n"
-                f"👥 Authors: {format_authors([str(a) for a in metadata.authors])}\n"
-                f"🏷️ Categories: {', '.join(metadata.categories[:5])}"
+                f"👥 Authors: {authors_str}\n"
+                f"🏷️  {', '.join(metadata.categories[:5])}"
             )
-            
-            blocks.append(self.builder.callout(info_text, icon=category_emoji, color="blue_background"))
-            
-            # 链接
+            blocks.append(self.builder.callout(info, icon=category_emoji, color="blue_background"))
+
             arxiv_url = build_arxiv_url(ref.arxiv_id, "abs")
             pdf_url = build_arxiv_url(ref.arxiv_id, "pdf")
-            
             blocks.append(self.builder.paragraph_with_rich_text([
-                self.builder.rich_text("🔗 Links: ", bold=True),
+                self.builder.rich_text("🔗 ", bold=True),
                 self.builder.rich_text("arXiv", link=arxiv_url, color="blue"),
-                self.builder.rich_text(" | "),
+                self.builder.rich_text("  |  "),
                 self.builder.rich_text("PDF", link=pdf_url, color="blue"),
             ]))
-            
             blocks.append(self.builder.divider())
-            
-            # 摘要
+
             if metadata.abstract:
                 blocks.append(self.builder.heading("📝 Abstract", level=2))
                 blocks.append(self.builder.quote(metadata.abstract))
         else:
-            # 只有原始引用文本
-            blocks.append(self.builder.callout(
-                "ℹ️ This reference was found in the paper but detailed metadata could not be retrieved.",
-                icon="ℹ️",
-                color="gray_background"
-            ))
-            
+            blocks.append(
+                self.builder.callout(
+                    "ℹ️ Metadata not available for this reference.",
+                    icon="ℹ️",
+                    color="gray_background",
+                )
+            )
             blocks.append(self.builder.heading("Original Citation", level=2))
             blocks.append(self.builder.paragraph(ref.raw_text))
-            
             if ref.arxiv_id:
-                arxiv_url = build_arxiv_url(ref.arxiv_id)
-                blocks.append(self.builder.bookmark(arxiv_url, f"arXiv:{ref.arxiv_id}"))
-        
+                blocks.append(
+                    self.builder.bookmark(build_arxiv_url(ref.arxiv_id), f"arXiv:{ref.arxiv_id}")
+                )
+
         return blocks
 
+    # ── Text splitting ────────────────────────────────────────────────────────
 
-def test_notion_converter():
-    """测试 Notion 转换器"""
-    from utils import setup_logging
-    
-    setup_logging(level="DEBUG")
-    
-    # 创建测试数据
-    from datetime import datetime
-    from models import Author
-    
-    metadata = ArxivMetadata(
-        arxiv_id="1706.03762",
-        title="Attention Is All You Need",
-        authors=[Author(name="Vaswani, A."), Author(name="Shazeer, N.")],
-        abstract="The dominant sequence transduction models are based on complex recurrent or convolutional neural networks...",
-        categories=["cs.CL", "cs.LG"],
-        primary_category="cs.CL",
-        published=datetime(2017, 6, 12),
-        updated=datetime(2017, 12, 6),
-    )
-    
-    content = Ar5ivContent(
-        paper_id="1706.03762",
-        title="Attention Is All You Need",
-        authors=["Ashish Vaswani", "Noam Shazeer"],
-        abstract="The dominant sequence transduction models...",
-        sections=[
-            Section(
-                title="Introduction",
-                level=2,
-                paragraphs=["This is the introduction paragraph..."],
-            ),
-            Section(
-                title="Background",
-                level=2,
-                paragraphs=["Background information here..."],
-            ),
-        ],
-        references=[
-            Reference(raw_text="[1] Some reference arXiv:1234.5678", arxiv_id="1234.5678", citation_key="1"),
-            Reference(raw_text="[2] Another reference without arXiv", citation_key="2"),
-        ],
-    )
-    
-    paper = PaperData(
-        arxiv_id="1706.03762",
-        metadata=metadata,
-        content=content,
-    )
-    
-    converter = NotionConverter()
-    blocks = converter.convert_paper(paper)
-    
-    logger.info(f"生成了 {len(blocks)} 个 blocks")
-    for i, block in enumerate(blocks[:10]):
-        logger.info(f"  Block {i+1}: {block['type']}")
-
-
-if __name__ == "__main__":
-    test_notion_converter()
+    def _split_text(self, text: str) -> List[str]:
+        if len(text) <= self.max_text_length:
+            return [text]
+        chunks, remaining = [], text
+        while remaining:
+            if len(remaining) <= self.max_text_length:
+                chunks.append(remaining)
+                break
+            chunk = remaining[: self.max_text_length]
+            last_break = max(
+                chunk.rfind(". "), chunk.rfind("。"),
+                chunk.rfind("! "), chunk.rfind("? ")
+            )
+            if last_break > self.max_text_length * 0.5:
+                chunk = chunk[: last_break + 1]
+            chunks.append(chunk.strip())
+            remaining = remaining[len(chunk):].strip()
+        return chunks
