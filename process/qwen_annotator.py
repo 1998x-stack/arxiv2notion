@@ -5,7 +5,10 @@ Responsibility: Call Qwen via DashScope to generate Chinese reading notes for ea
 import asyncio
 import re
 import time
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletion
 
 from loguru import logger
 from tqdm.asyncio import tqdm as async_tqdm
@@ -70,7 +73,7 @@ class QwenAnnotator:
             )
         return self._client
 
-    async def _call_api(self, messages: list) -> object:
+    async def _call_api(self, messages: list) -> "ChatCompletion":
         """
         Call the Qwen API (synchronous under the hood, wrapped in executor).
         Returns the raw completion response.
