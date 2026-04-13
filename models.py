@@ -302,3 +302,35 @@ class ProcessingStats:
             "created_blocks": self.created_blocks,
             "duration_seconds": self.get_duration()
         }
+
+
+@dataclass
+class ParagraphAnnotation:
+    """Qwen LLM annotation for a single paragraph."""
+    section_title: str
+    para_idx: int           # index within the section's paragraph list
+    para_text: str          # first 200 chars of original paragraph (for verification)
+    plain_explanation: str  # Chinese plain-language summary
+    key_points: List[str]   # 2-3 Chinese bullet points
+    cached: bool = False    # True if loaded from disk, not generated via API
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "section_title": self.section_title,
+            "para_idx": self.para_idx,
+            "para_text": self.para_text,
+            "plain_explanation": self.plain_explanation,
+            "key_points": self.key_points,
+            "cached": self.cached,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ParagraphAnnotation":
+        return cls(
+            section_title=d["section_title"],
+            para_idx=d["para_idx"],
+            para_text=d["para_text"],
+            plain_explanation=d["plain_explanation"],
+            key_points=d["key_points"],
+            cached=d.get("cached", True),
+        )

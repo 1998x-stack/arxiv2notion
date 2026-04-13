@@ -67,10 +67,6 @@ class NotionCreator:
             percentage = (current / total * 100) if total > 0 else 0
             logger.info(f"[{percentage:.1f}%] {message}")
     
-    async def _rate_limit_wait(self):
-        """等待速率限制"""
-        await asyncio.sleep(self.config.rate_limit_delay)
-    
     def _create_page_sync(
         self,
         parent_id: str,

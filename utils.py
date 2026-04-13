@@ -51,14 +51,12 @@ def setup_logging(
 
 def format_exception() -> str:
     """
-    格式化当前异常信息
-    
+    Format the current exception as a clean traceback string.
+
     Returns:
-        格式化的异常字符串
+        Human-readable traceback string.
     """
-    exc_type, exc_value, exc_traceback = sys.exc_info()
-    error_message = repr(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    return error_message
+    return traceback.format_exc()
 
 
 def clean_text(text: str) -> str:

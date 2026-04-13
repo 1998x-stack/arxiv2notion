@@ -54,22 +54,26 @@ class CacheConfig:
     """缓存配置"""
     enabled: bool = True
     cache_dir: Path = field(default_factory=lambda: Path("./cache"))
-    arxiv_cache_dir: Path = field(default_factory=lambda: Path("./cache/arxiv"))
-    ar5iv_cache_dir: Path = field(default_factory=lambda: Path("./cache/ar5iv"))
-    
+    # Computed in __post_init__ from cache_dir — do NOT set independently
+    arxiv_cache_dir: Path = field(init=False)
+    ar5iv_cache_dir: Path = field(init=False)
+
+    def __post_init__(self):
+        self.arxiv_cache_dir = self.cache_dir / "arxiv"
+        self.ar5iv_cache_dir = self.cache_dir / "ar5iv"
+        self.ensure_directories()
+
     def ensure_directories(self):
-        """确保缓存目录存在"""
+        """Ensure cache directories exist."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.arxiv_cache_dir.mkdir(parents=True, exist_ok=True)
         self.ar5iv_cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def get_arxiv_cache_file(self, arxiv_id: str) -> Path:
-        """获取 arXiv 元数据缓存文件路径"""
         safe_id = arxiv_id.replace("/", "_").replace(":", "_")
         return self.arxiv_cache_dir / f"{safe_id}.json"
-    
+
     def get_ar5iv_cache_file(self, arxiv_id: str) -> Path:
-        """获取 ar5iv 内容缓存文件路径"""
         safe_id = arxiv_id.replace("/", "_").replace(":", "_")
         return self.ar5iv_cache_dir / f"{safe_id}.json"
 

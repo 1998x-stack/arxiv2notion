@@ -87,7 +87,8 @@ class Ar5ivExtractor:
         }
         
         try:
-            async with session.get(url, headers=headers, timeout=self.config.timeout) as response:
+            timeout = aiohttp.ClientTimeout(total=self.config.timeout)
+            async with session.get(url, headers=headers, timeout=timeout) as response:
                 if response.status == 200:
                     content = await response.read()
                     try:
