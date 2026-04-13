@@ -62,6 +62,23 @@ class TestDeadRateLimitWait:
             "_rate_limit_wait is dead code and should be removed"
 
 
+class TestQwenConfig:
+    def test_qwen_config_defaults(self):
+        from config import QwenConfig
+        cfg = QwenConfig()
+        assert cfg.model == "qwen-plus"
+        assert cfg.enabled is True
+        assert cfg.min_para_length == 100
+        assert cfg.max_para_length == 1500
+
+    def test_app_config_has_qwen_field(self):
+        from config import get_test_config
+        cfg = get_test_config()
+        assert hasattr(cfg, "qwen")
+        from config import QwenConfig
+        assert isinstance(cfg.qwen, QwenConfig)
+
+
 class TestParagraphAnnotation:
     def test_can_import_and_instantiate(self):
         from models import ParagraphAnnotation

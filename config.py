@@ -105,6 +105,19 @@ class ContentConfig:
 
 
 @dataclass
+class QwenConfig:
+    """Qwen LLM annotation configuration."""
+    api_key: str = field(default_factory=lambda: os.getenv("DASHSCOPE_API_KEY", ""))
+    model: str = "qwen-plus"            # DashScope model ID — verify at platform.dashscope.com
+    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    enabled: bool = True
+    min_para_length: int = 100          # paragraphs shorter than this are skipped
+    max_para_length: int = 1500         # truncate input to this before sending
+    temperature: float = 0.3
+    max_tokens: int = 512
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     notion: NotionConfig
@@ -112,12 +125,13 @@ class AppConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
     reference: ReferenceConfig = field(default_factory=ReferenceConfig)
     content: ContentConfig = field(default_factory=ContentConfig)
-    
+    qwen: QwenConfig = field(default_factory=QwenConfig)
+
     # 日志配置
     log_level: str = "INFO"
     log_file: Optional[Path] = None
     verbose: bool = False
-    
+
     # 用户代理
     user_agent: str = "ar5iv-to-notion/1.0 (Academic Research Tool)"
     
@@ -144,6 +158,11 @@ class AppConfig:
                 search_missing_ids=os.getenv("SEARCH_MISSING_IDS", "true").lower() == "true",
                 create_ref_pages=os.getenv("CREATE_REF_PAGES", "true").lower() == "true",
                 max_ref_depth=int(os.getenv("MAX_REF_DEPTH", "1"))
+            ),
+            qwen=QwenConfig(
+                api_key=os.getenv("DASHSCOPE_API_KEY", ""),
+                model=os.getenv("QWEN_MODEL", "qwen-plus"),
+                enabled=os.getenv("QWEN_ENABLED", "true").lower() == "true",
             ),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             verbose=os.getenv("VERBOSE", "false").lower() == "true"
