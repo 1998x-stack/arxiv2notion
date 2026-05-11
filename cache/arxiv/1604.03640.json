@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "1604.03640v2",
+  "title": "Bridging the Gaps Between Residual Learning, Recurrent Neural Networks and Visual Cortex",
+  "authors": [
+    "Qianli Liao",
+    "Tomaso Poggio"
+  ],
+  "abstract": "We discuss relations between Residual Networks (ResNet), Recurrent Neural Networks (RNNs) and the primate visual cortex. We begin with the observation that a special type of shallow RNN is exactly equivalent to a very deep ResNet with weight sharing among the layers. A direct implementation of such a RNN, although having orders of magnitude fewer parameters, leads to a performance similar to the corresponding ResNet. We propose 1) a generalization of both RNN and ResNet architectures and 2) the conjecture that a class of moderately deep RNNs is a biologically-plausible model of the ventral stream in visual cortex. We demonstrate the effectiveness of the architectures by testing them on the CIFAR-10 and ImageNet dataset.",
+  "categories": [
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2016-04-13T02:59:34+00:00",
+  "updated": "2020-12-31T21:10:49+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "This version was written in Sept. 2016. For April 2016 version see v1 below",
+  "pdf_url": "https://arxiv.org/pdf/1604.03640v2.pdf"
+}

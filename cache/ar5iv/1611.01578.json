@@ -1,0 +1,1535 @@
+{
+  "paper_id": "1611.01578",
+  "title": "Neural Architecture Search with Reinforcement Learning",
+  "authors": [
+    "Barret Zoph, Quoc V. Le Google Brain {barretzoph,qvl}@google.com"
+  ],
+  "affiliations": [],
+  "abstract": "Neural networks are powerful and flexible models that work well for many difficult learning tasks in image, speech and natural language understanding. Despite their success, neural networks are still hard to design. In this paper, we use a recurrent network to generate the model descriptions of neural networks and train this RNN with reinforcement learning to maximize the expected accuracy of the generated architectures on a validation set. On the CIFAR-10 dataset, our method, starting from scratch, can design a novel network architecture that rivals the best human-invented architecture in terms of test set accuracy. Our CIFAR-10 model achieves a test error rate of 3.653.653.65, which is 0.090.090.09 percent better and 1.05x faster than the previous state-of-the-art model that used a similar architectural scheme. On the Penn Treebank dataset, our model can compose a novel recurrent cell that outperforms the widely-used LSTM cell, and other state-of-the-art baselines. Our cell achieves a test set perplexity of 62.4 on the Penn Treebank, which is 3.6 perplexity better than the previous state-of-the-art model. The cell can also be transferred to the character language modeling task on PTB and achieves a state-of-the-art perplexity of 1.214.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "The last few years have seen much success of deep neural networks in many challenging applications, such as speech recognition (Hinton et al., 2012), image recognition (LeCun et al., 1998; Krizhevsky et al., 2012) and machine translation (Sutskever et al., 2014; Bahdanau et al., 2015; Wu et al., 2016). Along with this success is a paradigm shift from feature designing to architecture designing, i.e., from SIFT (Lowe, 1999), and HOG (Dalal & Triggs, 2005), to AlexNet (Krizhevsky et al., 2012), VGGNet (Simonyan & Zisserman, 2014), GoogleNet (Szegedy et al., 2015), and ResNet (He et al., 2016a). Although it has become easier, designing architectures still requires a lot of expert knowledge and takes ample time.",
+        "This paper presents Neural Architecture Search, a gradient-based method for finding good architectures (see Figure 1) . Our work is based on the observation that the structure and connectivity of a neural network can be typically specified by a variable-length string. It is therefore possible to use a recurrent network – the controller – to generate such string. Training the network specified by the string – the “child network” – on the real data will result in an accuracy on a validation set. Using this accuracy as the reward signal, we can compute the policy gradient to update the controller. As a result, in the next iteration, the controller will give higher probabilities to architectures that receive high accuracies. In other words, the controller will learn to improve its search over time.",
+        "Our experiments show that Neural Architecture Search can design good models from scratch, an achievement considered not possible with other methods. On image recognition with CIFAR-10, Neural Architecture Search can find a novel ConvNet model that is better than most human-invented architectures. Our CIFAR-10 model achieves a 3.65 test set error, while being 1.05x faster than the current best model. On language modeling with Penn Treebank, Neural Architecture Search can design a novel recurrent cell that is also better than previous RNN and LSTM architectures. The cell that our model found achieves a test set perplexity of 62.4 on the Penn Treebank dataset, which is 3.6 perplexity better than the previous state-of-the-art."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "An overview of Neural Architecture Search.",
+          "label": "S1.F1"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The last few years have seen much success of deep neural networks in many challenging applications, such as speech recognition (Hinton et al., 2012), image recognition (LeCun et al., 1998; Krizhevsky et al., 2012) and machine translation (Sutskever et al., 2014; Bahdanau et al., 2015; Wu et al., 2016). Along with this success is a paradigm shift from feature designing to architecture designing, i.e., from SIFT (Lowe, 1999), and HOG (Dalal & Triggs, 2005), to AlexNet (Krizhevsky et al., 2012), VGGNet (Simonyan & Zisserman, 2014), GoogleNet (Szegedy et al., 2015), and ResNet (He et al., 2016a). Although it has become easier, designing architectures still requires a lot of expert knowledge and takes ample time."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x1.png",
+            "alt": "Refer to caption",
+            "caption": "An overview of Neural Architecture Search.",
+            "label": "S1.F1"
+          }
+        },
+        {
+          "type": "para",
+          "data": "This paper presents Neural Architecture Search, a gradient-based method for finding good architectures (see Figure 1) . Our work is based on the observation that the structure and connectivity of a neural network can be typically specified by a variable-length string. It is therefore possible to use a recurrent network – the controller – to generate such string. Training the network specified by the string – the “child network” – on the real data will result in an accuracy on a validation set. Using this accuracy as the reward signal, we can compute the policy gradient to update the controller. As a result, in the next iteration, the controller will give higher probabilities to architectures that receive high accuracies. In other words, the controller will learn to improve its search over time."
+        },
+        {
+          "type": "para",
+          "data": "Our experiments show that Neural Architecture Search can design good models from scratch, an achievement considered not possible with other methods. On image recognition with CIFAR-10, Neural Architecture Search can find a novel ConvNet model that is better than most human-invented architectures. Our CIFAR-10 model achieves a 3.65 test set error, while being 1.05x faster than the current best model. On language modeling with Penn Treebank, Neural Architecture Search can design a novel recurrent cell that is also better than previous RNN and LSTM architectures. The cell that our model found achieves a test set perplexity of 62.4 on the Penn Treebank dataset, which is 3.6 perplexity better than the previous state-of-the-art."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [
+        "Hyperparameter optimization is an important research topic in machine learning, and is widely used in practice (Bergstra et al., 2011; Bergstra & Bengio, 2012; Snoek et al., 2012; 2015; Saxena & Verbeek, 2016). Despite their success, these methods are still limited in that they only search models from a fixed-length space. In other words, it is difficult to ask them to generate a variable-length configuration that specifies the structure and connectivity of a network. In practice, these methods often work better if they are supplied with a good initial model (Bergstra & Bengio, 2012; Snoek et al., 2012; 2015). There are Bayesian optimization methods that allow to search non fixed length architectures (Bergstra et al., 2013; Mendoza et al., 2016), but they are less general and less flexible than the method proposed in this paper.",
+        "Modern neuro-evolution algorithms, e.g., Wierstra et al. (2005); Floreano et al. (2008); Stanley et al. (2009), on the other hand, are much more flexible for composing novel models, yet they are usually less practical at a large scale. Their limitations lie in the fact that they are search-based methods, thus they are slow or require many heuristics to work well.",
+        "Neural Architecture Search has some parallels to program synthesis and inductive programming, the idea of searching a program from examples (Summers, 1977; Biermann, 1978). In machine learning, probabilistic program induction has been used successfully in many settings, such as learning to solve simple Q&A (Liang et al., 2010; Neelakantan et al., 2015; Andreas et al., 2016), sort a list of numbers (Reed & de Freitas, 2015), and learning with very few examples (Lake et al., 2015).",
+        "The controller in Neural Architecture Search is auto-regressive, which means it predicts hyperparameters one a time, conditioned on previous predictions. This idea is borrowed from the decoder in end-to-end sequence to sequence learning (Sutskever et al., 2014). Unlike sequence to sequence learning, our method optimizes a non-differentiable metric, which is the accuracy of the child network. It is therefore similar to the work on BLEU optimization in Neural Machine Translation (Ranzato et al., 2015; Shen et al., 2016). Unlike these approaches, our method learns directly from the reward signal without any supervised bootstrapping.",
+        "Also related to our work is the idea of learning to learn or meta-learning (Thrun & Pratt, 2012), a general framework of using information learned in one task to improve a future task. More closely related is the idea of using a neural network to learn the gradient descent updates for another network (Andrychowicz et al., 2016) and the idea of using reinforcement learning to find update policies for another network (Li & Malik, 2016)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Hyperparameter optimization is an important research topic in machine learning, and is widely used in practice (Bergstra et al., 2011; Bergstra & Bengio, 2012; Snoek et al., 2012; 2015; Saxena & Verbeek, 2016). Despite their success, these methods are still limited in that they only search models from a fixed-length space. In other words, it is difficult to ask them to generate a variable-length configuration that specifies the structure and connectivity of a network. In practice, these methods often work better if they are supplied with a good initial model (Bergstra & Bengio, 2012; Snoek et al., 2012; 2015). There are Bayesian optimization methods that allow to search non fixed length architectures (Bergstra et al., 2013; Mendoza et al., 2016), but they are less general and less flexible than the method proposed in this paper."
+        },
+        {
+          "type": "para",
+          "data": "Modern neuro-evolution algorithms, e.g., Wierstra et al. (2005); Floreano et al. (2008); Stanley et al. (2009), on the other hand, are much more flexible for composing novel models, yet they are usually less practical at a large scale. Their limitations lie in the fact that they are search-based methods, thus they are slow or require many heuristics to work well."
+        },
+        {
+          "type": "para",
+          "data": "Neural Architecture Search has some parallels to program synthesis and inductive programming, the idea of searching a program from examples (Summers, 1977; Biermann, 1978). In machine learning, probabilistic program induction has been used successfully in many settings, such as learning to solve simple Q&A (Liang et al., 2010; Neelakantan et al., 2015; Andreas et al., 2016), sort a list of numbers (Reed & de Freitas, 2015), and learning with very few examples (Lake et al., 2015)."
+        },
+        {
+          "type": "para",
+          "data": "The controller in Neural Architecture Search is auto-regressive, which means it predicts hyperparameters one a time, conditioned on previous predictions. This idea is borrowed from the decoder in end-to-end sequence to sequence learning (Sutskever et al., 2014). Unlike sequence to sequence learning, our method optimizes a non-differentiable metric, which is the accuracy of the child network. It is therefore similar to the work on BLEU optimization in Neural Machine Translation (Ranzato et al., 2015; Shen et al., 2016). Unlike these approaches, our method learns directly from the reward signal without any supervised bootstrapping."
+        },
+        {
+          "type": "para",
+          "data": "Also related to our work is the idea of learning to learn or meta-learning (Thrun & Pratt, 2012), a general framework of using information learned in one task to improve a future task. More closely related is the idea of using a neural network to learn the gradient descent updates for another network (Andrychowicz et al., 2016) and the idea of using reinforcement learning to find update policies for another network (Li & Malik, 2016)."
+        }
+      ]
+    },
+    {
+      "title": "Methods",
+      "level": 2,
+      "paragraphs": [
+        "In the following section, we will first describe a simple method of using a recurrent network to generate convolutional architectures. We will show how the recurrent network can be trained with a policy gradient method to maximize the expected accuracy of the sampled architectures. We will present several improvements of our core approach such as forming skip connections to increase model complexity and using a parameter server approach to speed up training. In the last part of the section, we will focus on generating recurrent architectures, which is another key contribution of our paper."
+      ],
+      "subsections": [
+        {
+          "title": "Generate Model Descriptions with a Controller Recurrent Neural Network",
+          "level": 3,
+          "paragraphs": [
+            "In Neural Architecture Search, we use a controller to generate architectural hyperparameters of neural networks. To be flexible, the controller is implemented as a recurrent neural network. Let’s suppose we would like to predict feedforward neural networks with only convolutional layers, we can use the controller to generate their hyperparameters as a sequence of tokens:",
+            "In our experiments, the process of generating an architecture stops if the number of layers exceeds a certain value. This value follows a schedule where we increase it as training progresses. Once the controller RNN finishes generating an architecture, a neural network with this architecture is built and trained. At convergence, the accuracy of the network on a held-out validation set is recorded. The parameters of the controller RNN, $\\theta_{c}$, are then optimized in order to maximize the expected validation accuracy of the proposed architectures. In the next section, we will describe a policy gradient method which we use to update parameters $\\theta_{c}$ so that the controller RNN generates better architectures over time."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x2.png",
+              "alt": "Refer to caption",
+              "caption": "How our controller recurrent neural network samples a simple convolutional network. It predicts filter height, filter width, stride height, stride width, and number of filters for one layer and repeats. Every prediction is carried out by a softmax classifier and then fed into the next time step as input.",
+              "label": "S3.F2"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In Neural Architecture Search, we use a controller to generate architectural hyperparameters of neural networks. To be flexible, the controller is implemented as a recurrent neural network. Let’s suppose we would like to predict feedforward neural networks with only convolutional layers, we can use the controller to generate their hyperparameters as a sequence of tokens:"
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x2.png",
+                "alt": "Refer to caption",
+                "caption": "How our controller recurrent neural network samples a simple convolutional network. It predicts filter height, filter width, stride height, stride width, and number of filters for one layer and repeats. Every prediction is carried out by a softmax classifier and then fed into the next time step as input.",
+                "label": "S3.F2"
+              }
+            },
+            {
+              "type": "para",
+              "data": "In our experiments, the process of generating an architecture stops if the number of layers exceeds a certain value. This value follows a schedule where we increase it as training progresses. Once the controller RNN finishes generating an architecture, a neural network with this architecture is built and trained. At convergence, the accuracy of the network on a held-out validation set is recorded. The parameters of the controller RNN, $\\theta_{c}$, are then optimized in order to maximize the expected validation accuracy of the proposed architectures. In the next section, we will describe a policy gradient method which we use to update parameters $\\theta_{c}$ so that the controller RNN generates better architectures over time."
+            }
+          ]
+        },
+        {
+          "title": "Training with REINFORCE",
+          "level": 3,
+          "paragraphs": [
+            "The list of tokens that the controller predicts can be viewed as a list of actions $a_{1:T}$ to design an architecture for a child network. At convergence, this child network will achieve an accuracy $R$ on a held-out dataset. We can use this accuracy $R$ as the reward signal and use reinforcement learning to train the controller. More concretely, to find the optimal architecture, we ask our controller to maximize its expected reward, represented by $J(\\theta_{c})$:",
+            "Since the reward signal $R$ is non-differentiable, we need to use a policy gradient method to iteratively update $\\theta_{c}$. In this work, we use the REINFORCE rule from Williams (1992):",
+            "An empirical approximation of the above quantity is:",
+            "Where $m$ is the number of different architectures that the controller samples in one batch and $T$ is the number of hyperparameters our controller has to predict to design a neural network architecture. The validation accuracy that the $k$-th neural network architecture achieves after being trained on a training dataset is $R_{k}$.",
+            "The above update is an unbiased estimate for our gradient, but has a very high variance. In order to reduce the variance of this estimate we employ a baseline function:",
+            "As long as the baseline function $b$ does not depend on the on the current action, then this is still an unbiased gradient estimate. In this work, our baseline $b$ is an exponential moving average of the previous architecture accuracies."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The list of tokens that the controller predicts can be viewed as a list of actions $a_{1:T}$ to design an architecture for a child network. At convergence, this child network will achieve an accuracy $R$ on a held-out dataset. We can use this accuracy $R$ as the reward signal and use reinforcement learning to train the controller. More concretely, to find the optimal architecture, we ask our controller to maximize its expected reward, represented by $J(\\theta_{c})$:"
+            },
+            {
+              "type": "para",
+              "data": "Since the reward signal $R$ is non-differentiable, we need to use a policy gradient method to iteratively update $\\theta_{c}$. In this work, we use the REINFORCE rule from Williams (1992):"
+            },
+            {
+              "type": "para",
+              "data": "An empirical approximation of the above quantity is:"
+            },
+            {
+              "type": "para",
+              "data": "Where $m$ is the number of different architectures that the controller samples in one batch and $T$ is the number of hyperparameters our controller has to predict to design a neural network architecture. The validation accuracy that the $k$-th neural network architecture achieves after being trained on a training dataset is $R_{k}$."
+            },
+            {
+              "type": "para",
+              "data": "The above update is an unbiased estimate for our gradient, but has a very high variance. In order to reduce the variance of this estimate we employ a baseline function:"
+            },
+            {
+              "type": "para",
+              "data": "As long as the baseline function $b$ does not depend on the on the current action, then this is still an unbiased gradient estimate. In this work, our baseline $b$ is an exponential moving average of the previous architecture accuracies."
+            }
+          ]
+        },
+        {
+          "title": "Increase Architecture Complexity with Skip Connections and Other Layer Types",
+          "level": 3,
+          "paragraphs": [
+            "In Section 3.1,\nthe search space does not have skip connections, or branching layers used in modern architectures such as GoogleNet (Szegedy et al., 2015), and Residual Net (He et al., 2016a). In this section we introduce a method that allows our controller to propose skip connections or branching layers, thereby widening the search space.",
+            "To enable the controller to predict such connections, we use a set-selection type attention (Neelakantan et al., 2015) which was built upon the attention mechanism (Bahdanau et al., 2015; Vinyals et al., 2015). At layer $N$, we add an anchor point which has $N-1$ content-based sigmoids to indicate the previous layers that need to be connected. Each sigmoid is a function of the current hiddenstate of the controller and the previous hiddenstates of the previous $N-1$ anchor points:",
+            "where $h_{j}$ represents the hiddenstate of the controller at anchor point for the $j$-th layer, where $j$ ranges from $0$ to $N-1$. We then sample from these sigmoids to decide what previous layers to be used as inputs to the current layer. The matrices $W_{prev}$, $W_{curr}$ and $v$ are trainable parameters. As these connections are also defined by probability distributions, the REINFORCE method still applies without any significant modifications.\nFigure 4 shows how the controller uses skip connections to decide what layers it wants as inputs to the current layer.",
+            "In our framework, if one layer has many input layers then all input layers are concatenated in the depth dimension. Skip connections can cause “compilation failures” where one layer is not compatible with another layer, or one layer may not have any input or output. To circumvent these issues, we employ three simple techniques. First, if a layer is not connected to any input layer then the image is used as the input layer. Second, at the final layer we take all layer outputs that have not been connected and concatenate them before sending this final hiddenstate to the classifier. Lastly, if input layers to be concatenated have different sizes, we pad the small layers with zeros so that the concatenated layers have the same sizes.",
+            "Finally, in Section 3.1, we do not predict the learning rate and we also assume that the architectures consist of only convolutional layers, which is also quite restrictive. It is possible to add the learning rate as one of the predictions. Additionally, it is also possible to predict pooling, local contrast normalization (Jarrett et al., 2009; Krizhevsky et al., 2012), and batchnorm (Ioffe & Szegedy, 2015) in the architectures. To be able to add more types of layers, we need to add an additional step in the controller RNN to predict the layer type, then other hyperparameters associated with it."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x4.png",
+              "alt": "Refer to caption",
+              "caption": "The controller uses anchor points, and set-selection attention to form skip connections.",
+              "label": "S3.F4"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In Section 3.1,\nthe search space does not have skip connections, or branching layers used in modern architectures such as GoogleNet (Szegedy et al., 2015), and Residual Net (He et al., 2016a). In this section we introduce a method that allows our controller to propose skip connections or branching layers, thereby widening the search space."
+            },
+            {
+              "type": "para",
+              "data": "To enable the controller to predict such connections, we use a set-selection type attention (Neelakantan et al., 2015) which was built upon the attention mechanism (Bahdanau et al., 2015; Vinyals et al., 2015). At layer $N$, we add an anchor point which has $N-1$ content-based sigmoids to indicate the previous layers that need to be connected. Each sigmoid is a function of the current hiddenstate of the controller and the previous hiddenstates of the previous $N-1$ anchor points:"
+            },
+            {
+              "type": "para",
+              "data": "where $h_{j}$ represents the hiddenstate of the controller at anchor point for the $j$-th layer, where $j$ ranges from $0$ to $N-1$. We then sample from these sigmoids to decide what previous layers to be used as inputs to the current layer. The matrices $W_{prev}$, $W_{curr}$ and $v$ are trainable parameters. As these connections are also defined by probability distributions, the REINFORCE method still applies without any significant modifications.\nFigure 4 shows how the controller uses skip connections to decide what layers it wants as inputs to the current layer."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x4.png",
+                "alt": "Refer to caption",
+                "caption": "The controller uses anchor points, and set-selection attention to form skip connections.",
+                "label": "S3.F4"
+              }
+            },
+            {
+              "type": "para",
+              "data": "In our framework, if one layer has many input layers then all input layers are concatenated in the depth dimension. Skip connections can cause “compilation failures” where one layer is not compatible with another layer, or one layer may not have any input or output. To circumvent these issues, we employ three simple techniques. First, if a layer is not connected to any input layer then the image is used as the input layer. Second, at the final layer we take all layer outputs that have not been connected and concatenate them before sending this final hiddenstate to the classifier. Lastly, if input layers to be concatenated have different sizes, we pad the small layers with zeros so that the concatenated layers have the same sizes."
+            },
+            {
+              "type": "para",
+              "data": "Finally, in Section 3.1, we do not predict the learning rate and we also assume that the architectures consist of only convolutional layers, which is also quite restrictive. It is possible to add the learning rate as one of the predictions. Additionally, it is also possible to predict pooling, local contrast normalization (Jarrett et al., 2009; Krizhevsky et al., 2012), and batchnorm (Ioffe & Szegedy, 2015) in the architectures. To be able to add more types of layers, we need to add an additional step in the controller RNN to predict the layer type, then other hyperparameters associated with it."
+            }
+          ]
+        },
+        {
+          "title": "Generate Recurrent Cell Architectures",
+          "level": 3,
+          "paragraphs": [
+            "In this section, we will modify the above method to generate recurrent cells. At every time step $t$, the controller needs to find a functional form for $h_{t}$ that takes $x_{t}$ and $h_{t-1}$ as inputs. The simplest way is to have $h_{t}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$, which is the formulation of a basic recurrent cell. A more complicated formulation is the widely-used LSTM recurrent cell (Hochreiter & Schmidhuber, 1997).",
+            "The computations for basic RNN and LSTM cells can be generalized as a tree of steps that take $x_{t}$ and $h_{t-1}$ as inputs and produce $h_{t}$ as final output. The controller RNN needs to label each node in the tree with a combination method (addition, elementwise multiplication, etc.) and an activation function ($\\tanh$, $\\mathrm{sigmoid}$, etc.) to merge two inputs and produce one output. Two outputs are then fed as inputs to the next node in the tree. To allow the controller RNN to select these methods and functions, we index the nodes in the tree in an order so that the controller RNN can visit each node one by one and label the needed hyperparameters.",
+            "Inspired by the construction of the LSTM cell (Hochreiter & Schmidhuber, 1997), we also need cell variables $c_{t-1}$ and $c_{t}$ to represent the memory states. To incorporate these variables, we need the controller RNN to predict what nodes in the tree to connect these two variables to. These predictions can be done in the last two blocks of the controller RNN.",
+            "To make this process more clear, we show an example in Figure 5, for a tree structure that has two leaf nodes and one internal node. The leaf nodes are indexed by 0 and 1, and the internal node is indexed by 2. The controller RNN needs to first predict 3 blocks, each block specifying a combination method and an activation function for each tree index. After that it needs to predict the last 2 blocks that specify how to connect $c_{t}$ and $c_{t-1}$ to temporary variables inside the tree. Specifically, according to the predictions of the controller RNN in this example, the following computation steps will occur:",
+            "The controller predicts $Add$ and $Tanh$ for tree index 0, this means we need to compute $a_{0}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$.",
+            "The controller predicts $ElemMult$ and $ReLU$ for tree index 1, this means we need to compute $a_{1}=\\mathrm{ReLU}\\big{(}(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})\\big{)}$.",
+            "The controller predicts 0 for the second element of the “Cell Index”, $Add$ and $ReLU$ for elements in “Cell Inject”, which means we need to compute $a_{0}^{new}=\\mathrm{ReLU}(a_{0}+c_{t-1})$. Notice that we don’t have any learnable parameters for the internal nodes of the tree.",
+            "The controller predicts $ElemMult$ and $Sigmoid$ for tree index 2, this means we need to compute $a_{2}=\\mathrm{sigmoid}(a_{0}^{new}\\odot a_{1})$. Since the maximum index in the tree is 2, $h_{t}$ is set to $a_{2}$.",
+            "The controller RNN predicts 1 for the first element of the “Cell Index”, this means that we should set $c_{t}$ to the output of the tree at index 1 before the activation, i.e., $c_{t}=(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})$.",
+            "In the above example, the tree has two leaf nodes, thus it is called a “base 2” architecture. In our experiments, we use a base number of 8 to make sure that the cell is expressive."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x5.png",
+              "alt": "Refer to caption",
+              "caption": "An example of a recurrent cell constructed from a tree that has two leaf nodes (base 2) and one internal node. Left: the tree that defines the computation steps to be predicted by controller. Center: an example set of predictions made by the controller for each computation step in the tree. Right: the computation graph of the recurrent cell constructed from example predictions of the controller.",
+              "label": "S3.F5"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In this section, we will modify the above method to generate recurrent cells. At every time step $t$, the controller needs to find a functional form for $h_{t}$ that takes $x_{t}$ and $h_{t-1}$ as inputs. The simplest way is to have $h_{t}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$, which is the formulation of a basic recurrent cell. A more complicated formulation is the widely-used LSTM recurrent cell (Hochreiter & Schmidhuber, 1997)."
+            },
+            {
+              "type": "para",
+              "data": "The computations for basic RNN and LSTM cells can be generalized as a tree of steps that take $x_{t}$ and $h_{t-1}$ as inputs and produce $h_{t}$ as final output. The controller RNN needs to label each node in the tree with a combination method (addition, elementwise multiplication, etc.) and an activation function ($\\tanh$, $\\mathrm{sigmoid}$, etc.) to merge two inputs and produce one output. Two outputs are then fed as inputs to the next node in the tree. To allow the controller RNN to select these methods and functions, we index the nodes in the tree in an order so that the controller RNN can visit each node one by one and label the needed hyperparameters."
+            },
+            {
+              "type": "para",
+              "data": "Inspired by the construction of the LSTM cell (Hochreiter & Schmidhuber, 1997), we also need cell variables $c_{t-1}$ and $c_{t}$ to represent the memory states. To incorporate these variables, we need the controller RNN to predict what nodes in the tree to connect these two variables to. These predictions can be done in the last two blocks of the controller RNN."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x5.png",
+                "alt": "Refer to caption",
+                "caption": "An example of a recurrent cell constructed from a tree that has two leaf nodes (base 2) and one internal node. Left: the tree that defines the computation steps to be predicted by controller. Center: an example set of predictions made by the controller for each computation step in the tree. Right: the computation graph of the recurrent cell constructed from example predictions of the controller.",
+                "label": "S3.F5"
+              }
+            },
+            {
+              "type": "para",
+              "data": "To make this process more clear, we show an example in Figure 5, for a tree structure that has two leaf nodes and one internal node. The leaf nodes are indexed by 0 and 1, and the internal node is indexed by 2. The controller RNN needs to first predict 3 blocks, each block specifying a combination method and an activation function for each tree index. After that it needs to predict the last 2 blocks that specify how to connect $c_{t}$ and $c_{t-1}$ to temporary variables inside the tree. Specifically, according to the predictions of the controller RNN in this example, the following computation steps will occur:"
+            },
+            {
+              "type": "para",
+              "data": "The controller predicts $Add$ and $Tanh$ for tree index 0, this means we need to compute $a_{0}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$."
+            },
+            {
+              "type": "para",
+              "data": "The controller predicts $ElemMult$ and $ReLU$ for tree index 1, this means we need to compute $a_{1}=\\mathrm{ReLU}\\big{(}(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})\\big{)}$."
+            },
+            {
+              "type": "para",
+              "data": "The controller predicts 0 for the second element of the “Cell Index”, $Add$ and $ReLU$ for elements in “Cell Inject”, which means we need to compute $a_{0}^{new}=\\mathrm{ReLU}(a_{0}+c_{t-1})$. Notice that we don’t have any learnable parameters for the internal nodes of the tree."
+            },
+            {
+              "type": "para",
+              "data": "The controller predicts $ElemMult$ and $Sigmoid$ for tree index 2, this means we need to compute $a_{2}=\\mathrm{sigmoid}(a_{0}^{new}\\odot a_{1})$. Since the maximum index in the tree is 2, $h_{t}$ is set to $a_{2}$."
+            },
+            {
+              "type": "para",
+              "data": "The controller RNN predicts 1 for the first element of the “Cell Index”, this means that we should set $c_{t}$ to the output of the tree at index 1 before the activation, i.e., $c_{t}=(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})$."
+            },
+            {
+              "type": "para",
+              "data": "In the above example, the tree has two leaf nodes, thus it is called a “base 2” architecture. In our experiments, we use a base number of 8 to make sure that the cell is expressive."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In the following section, we will first describe a simple method of using a recurrent network to generate convolutional architectures. We will show how the recurrent network can be trained with a policy gradient method to maximize the expected accuracy of the sampled architectures. We will present several improvements of our core approach such as forming skip connections to increase model complexity and using a parameter server approach to speed up training. In the last part of the section, we will focus on generating recurrent architectures, which is another key contribution of our paper."
+        }
+      ]
+    },
+    {
+      "title": "Experiments and Results",
+      "level": 2,
+      "paragraphs": [
+        "We apply our method to an image classification task with CIFAR-10 and a language modeling task with Penn Treebank, two of the most benchmarked datasets in deep learning. On CIFAR-10, our goal is to find a good convolutional architecture whereas on Penn Treebank our goal is to find a good recurrent cell. On each dataset, we have a separate held-out validation dataset to compute the reward signal. The reported performance on the test set is computed only once for the network that achieves the best result on the held-out validation dataset. More details about our experimental procedures and results are as follows."
+      ],
+      "subsections": [
+        {
+          "title": "Learning Convolutional Architectures for CIFAR-10",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Learning Recurrent Cells for Penn Treebank",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We apply our method to an image classification task with CIFAR-10 and a language modeling task with Penn Treebank, two of the most benchmarked datasets in deep learning. On CIFAR-10, our goal is to find a good convolutional architecture whereas on Penn Treebank our goal is to find a good recurrent cell. On each dataset, we have a separate held-out validation dataset to compute the reward signal. The reported performance on the test set is computed only once for the network that achieves the best result on the held-out validation dataset. More details about our experimental procedures and results are as follows."
+        }
+      ]
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "In this paper we introduce Neural Architecture Search, an idea of using a recurrent neural network to compose neural network architectures. By using recurrent network as the controller, our method is flexible so that it can search variable-length architecture space. Our method has strong empirical performance on very challenging benchmarks and presents a new research direction for automatically finding good neural network architectures. The code for running the models found by the controller on CIFAR-10 and PTB will be released at https://github.com/tensorflow/models . Additionally, we have added the RNN cell found using our method under the name NASCell into TensorFlow, so others can easily use it."
+      ],
+      "subsections": [
+        {
+          "title": "Acknowledgments",
+          "level": 4,
+          "paragraphs": [
+            "We thank Greg Corrado, Jeff Dean, David Ha, Lukasz Kaiser and the Google Brain team for their help with the project."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We thank Greg Corrado, Jeff Dean, David Ha, Lukasz Kaiser and the Google Brain team for their help with the project."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this paper we introduce Neural Architecture Search, an idea of using a recurrent neural network to compose neural network architectures. By using recurrent network as the controller, our method is flexible so that it can search variable-length architecture space. Our method has strong empirical performance on very challenging benchmarks and presents a new research direction for automatically finding good neural network architectures. The code for running the models found by the controller on CIFAR-10 and PTB will be released at https://github.com/tensorflow/models . Additionally, we have added the RNN cell found using our method under the name NASCell into TensorFlow, so others can easily use it."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "An overview of Neural Architecture Search.",
+      "label": "S1.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "How our controller recurrent neural network samples a simple convolutional network. It predicts filter height, filter width, stride height, stride width, and number of filters for one layer and repeats. Every prediction is carried out by a softmax classifier and then fed into the next time step as input.",
+      "label": "S3.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Distributed training for Neural Architecture Search. We use a set of SSS parameter servers to store and send parameters to KKK controller replicas. Each controller replica then samples mmm architectures and run the multiple child models in parallel. The accuracy of each child model is recorded to compute the gradients with respect to θcsubscriptθc\\theta_{c}, which are then sent back to the parameter servers.",
+      "label": "S3.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "The controller uses anchor points, and set-selection attention to form skip connections.",
+      "label": "S3.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "An example of a recurrent cell constructed from a tree that has two leaf nodes (base 2) and one internal node. Left: the tree that defines the computation steps to be predicted by controller. Center: an example set of predictions made by the controller for each computation step in the tree. Right: the computation graph of the recurrent cell constructed from example predictions of the controller.",
+      "label": "S3.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Improvement of Neural Architecture Search over random search over time. We plot the difference between the average of the top kkk models our controller finds vs. random search every 400 models run.",
+      "label": "S4.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "Convolutional architecture discovered by our method, when the search space does not have strides or pooling layers. FH is filter height, FW is filter width and N is number of filters. Note that the skip connections are not residual connections. If one layer has many input layers then all input layers are concatenated in the depth dimension.",
+      "label": "A1.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1611.01578/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "A comparison of the original LSTM cell vs. two good cells our model found. Top left: LSTM cell. Top right: Cell found by our model when the search space does not include m​a​xmaxmax and s​i​nsinsin. Bottom: Cell found by our model when the search space includes m​a​xmaxmax and s​i​nsinsin (the controller did not choose to use the s​i​nsinsin function).",
+      "label": "A1.F8"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 5: An example of a recurrent cell constructed from a tree that has two leaf nodes (base 2) and one internal node. Left: the tree that defines the computation steps to be predicted by controller. Center: an example set of predictions made by the controller for each computation step in the tree. Right: the computation graph of the recurrent cell constructed from example predictions of the controller.",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Depth",
+          "Parameters",
+          "Error rate (%)"
+        ],
+        [
+          "Network in Network (Lin et al., 2013)",
+          "-",
+          "-",
+          "8.81"
+        ],
+        [
+          "All-CNN (Springenberg et al., 2014)",
+          "-",
+          "-",
+          "7.25"
+        ],
+        [
+          "Deeply Supervised Net (Lee et al., 2015)",
+          "-",
+          "-",
+          "7.97"
+        ],
+        [
+          "Highway Network (Srivastava et al., 2015)",
+          "-",
+          "-",
+          "7.72"
+        ],
+        [
+          "Scalable Bayesian Optimization (Snoek et al., 2015)",
+          "-",
+          "-",
+          "6.37"
+        ],
+        [
+          "FractalNet (Larsson et al., 2016)",
+          "21",
+          "38.6M",
+          "5.22"
+        ],
+        [
+          "with Dropout/Drop-path",
+          "21",
+          "38.6M",
+          "4.60"
+        ],
+        [
+          "ResNet (He et al., 2016a)",
+          "110",
+          "1.7M",
+          "6.61"
+        ],
+        [
+          "ResNet (reported by Huang et al. (2016c))",
+          "110",
+          "1.7M",
+          "6.41"
+        ],
+        [
+          "ResNet with Stochastic Depth (Huang et al., 2016c)",
+          "110",
+          "1.7M",
+          "5.23"
+        ],
+        [
+          "",
+          "1202",
+          "10.2M",
+          "4.91"
+        ],
+        [
+          "Wide ResNet (Zagoruyko & Komodakis, 2016)",
+          "16",
+          "11.0M",
+          "4.81"
+        ],
+        [
+          "",
+          "28",
+          "36.5M",
+          "4.17"
+        ],
+        [
+          "ResNet (pre-activation) (He et al., 2016b)",
+          "164",
+          "1.7M",
+          "5.46"
+        ],
+        [
+          "",
+          "1001",
+          "10.2M",
+          "4.62"
+        ],
+        [
+          "DenseNet (L=40,k=12)formulae-sequenceL40k12(L=40,k=12) Huang et al. (2016a)",
+          "40",
+          "1.0M",
+          "5.24"
+        ],
+        [
+          "DenseNet(L=100,k=12)formulae-sequenceL100k12(L=100,k=12) Huang et al. (2016a)",
+          "100",
+          "7.0M",
+          "4.10"
+        ],
+        [
+          "DenseNet (L=100,k=24)formulae-sequenceL100k24(L=100,k=24) Huang et al. (2016a)",
+          "100",
+          "27.2M",
+          "3.74"
+        ],
+        [
+          "DenseNet-BC (L=100,k=40)formulae-sequenceL100k40(L=100,k=40) Huang et al. (2016b)",
+          "190",
+          "25.6M",
+          "3.46"
+        ],
+        [
+          "Neural Architecture Search v1 no stride or pooling",
+          "15",
+          "4.2M",
+          "5.50"
+        ],
+        [
+          "Neural Architecture Search v2 predicting strides",
+          "20",
+          "2.5M",
+          "6.01"
+        ],
+        [
+          "Neural Architecture Search v3 max pooling",
+          "39",
+          "7.1M",
+          "4.47"
+        ],
+        [
+          "Neural Architecture Search v3 max pooling + more filters",
+          "39",
+          "37.4M",
+          "3.65"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Performance of Neural Architecture Search and other state-of-the-art models on CIFAR-10.",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Parameters",
+          "Test Perplexity"
+        ],
+        [
+          "Mikolov & Zweig (2012) - KN-5",
+          "2M‡",
+          "141.2141.2141.2"
+        ],
+        [
+          "Mikolov & Zweig (2012) - KN5 + cache",
+          "2M‡",
+          "125.7125.7125.7"
+        ],
+        [
+          "Mikolov & Zweig (2012) - RNN",
+          "6M‡",
+          "124.7124.7124.7"
+        ],
+        [
+          "Mikolov & Zweig (2012) - RNN-LDA",
+          "7M‡",
+          "113.7113.7113.7"
+        ],
+        [
+          "Mikolov & Zweig (2012) - RNN-LDA + KN-5 + cache",
+          "9M‡",
+          "92.092.092.0"
+        ],
+        [
+          "Pascanu et al. (2013) - Deep RNN",
+          "6M",
+          "107.5107.5107.5"
+        ],
+        [
+          "Cheng et al. (2014) - Sum-Prod Net",
+          "5M‡",
+          "100.0100.0100.0"
+        ],
+        [
+          "Zaremba et al. (2014) - LSTM (medium)",
+          "20M",
+          "82.782.782.7"
+        ],
+        [
+          "Zaremba et al. (2014) - LSTM (large)",
+          "66M",
+          "78.478.478.4"
+        ],
+        [
+          "Gal (2015) - Variational LSTM (medium, untied)",
+          "20M",
+          "79.779.779.7"
+        ],
+        [
+          "Gal (2015) - Variational LSTM (medium, untied, MC)",
+          "20M",
+          "78.678.678.6"
+        ],
+        [
+          "Gal (2015) - Variational LSTM (large, untied)",
+          "66M",
+          "75.275.275.2"
+        ],
+        [
+          "Gal (2015) - Variational LSTM (large, untied, MC)",
+          "66M",
+          "73.473.473.4"
+        ],
+        [
+          "Kim et al. (2015) - CharCNN",
+          "19M",
+          "78.978.978.9"
+        ],
+        [
+          "Press & Wolf (2016) - Variational LSTM, shared embeddings",
+          "51M",
+          "73.273.273.2"
+        ],
+        [
+          "Merity et al. (2016) - Zoneout + Variational LSTM (medium)",
+          "20M",
+          "80.680.680.6"
+        ],
+        [
+          "Merity et al. (2016) - Pointer Sentinel-LSTM (medium)",
+          "21M",
+          "70.970.970.9"
+        ],
+        [
+          "Inan et al. (2016) - VD-LSTM + REAL (large)",
+          "51M",
+          "68.568.568.5"
+        ],
+        [
+          "Zilly et al. (2016) - Variational RHN, shared embeddings",
+          "24M",
+          "66.066.066.0"
+        ],
+        [
+          "Neural Architecture Search with base 8",
+          "32M",
+          "67.967.967.9"
+        ],
+        [
+          "Neural Architecture Search with base 8 and shared embeddings",
+          "25M",
+          "64.064.064.0"
+        ],
+        [
+          "Neural Architecture Search with base 8 and shared embeddings",
+          "54M",
+          "62.462.462.4"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Single model perplexity on the test set of the Penn Treebank language modeling task. Parameter numbers with ‡ are estimates with reference to Merity et al. (2016).",
+      "headers": [],
+      "rows": [
+        [
+          "Parameters",
+          "Test Bits Per Character"
+        ],
+        [
+          "4.92M",
+          "1.250"
+        ],
+        [
+          "5.06M",
+          "1.233"
+        ],
+        [
+          "14.41M",
+          "1.219"
+        ],
+        [
+          "6.57M",
+          "1.243"
+        ],
+        [
+          "6.57M",
+          "1.228"
+        ],
+        [
+          "16.28M",
+          "1.214"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "J(\\theta_{c})=E_{P(a_{1:T};\\theta_{c})}[R]",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "J(\\theta_{c})=E_{P(a_{1:T};\\theta_{c})}[R]",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\bigtriangledown_{\\theta_{c}}J(\\theta_{c})=\\sum_{t=1}^{T}E_{P(a_{1:T};\\theta_{c})}\\big{[}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})R\\big{]}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\bigtriangledown_{\\theta_{c}}J(\\theta_{c})=\\sum_{t=1}^{T}E_{P(a_{1:T};\\theta_{c})}\\big{[}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})R\\big{]}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\frac{1}{m}\\sum_{k=1}^{m}\\sum_{t=1}^{T}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})R_{k}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\frac{1}{m}\\sum_{k=1}^{m}\\sum_{t=1}^{T}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})R_{k}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\frac{1}{m}\\sum_{k=1}^{m}\\sum_{t=1}^{T}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})(R_{k}-b)",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\frac{1}{m}\\sum_{k=1}^{m}\\sum_{t=1}^{T}\\bigtriangledown_{\\theta_{c}}\\log P(a_{t}|a_{(t-1):1};\\theta_{c})(R_{k}-b)",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathrm{P(Layer\\ j\\ is\\ an\\ input\\ to\\ layer\\ i)=\\ }\\mathrm{sigmoid}(v^{\\mathrm{T}}\\mathrm{tanh}(W_{prev}*h_{j}+W_{curr}*h_{i})),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathrm{P(Layer\\ j\\ is\\ an\\ input\\ to\\ layer\\ i)=\\ }\\mathrm{sigmoid}(v^{\\mathrm{T}}\\mathrm{tanh}(W_{prev}*h_{j}+W_{curr}*h_{i})),",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Andreas et al. (2016) Jacob Andreas, Marcus Rohrbach, Trevor Darrell, and Dan Klein. Learning to compose neural networks for question answering. In NAACL, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Andreas et al. (2016)"
+    },
+    {
+      "raw_text": "Andrychowicz et al. (2016) Marcin Andrychowicz, Misha Denil, Sergio Gomez, Matthew W Hoffman, David Pfau, Tom Schaul, and Nando de Freitas. Learning to learn by gradient descent by gradient descent. arXiv preprint arXiv:1606.04474, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1606.04474",
+      "doi": null,
+      "url": null,
+      "citation_key": "Andrychowicz et al. (2016)"
+    },
+    {
+      "raw_text": "Bahdanau et al. (2015) Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. Neural machine translation by jointly learning to align and translate. In ICLR, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bahdanau et al. (2015)"
+    },
+    {
+      "raw_text": "Bengio et al. (2003) Yoshua Bengio, Réjean Ducharme, Pascal Vincent, and Christian Jauvin. A neural probabilistic language model. JMLR, 2003.",
+      "title": null,
+      "authors": [],
+      "year": "2003",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bengio et al. (2003)"
+    },
+    {
+      "raw_text": "Bergstra & Bengio (2012) James Bergstra and Yoshua Bengio. Random search for hyper-parameter optimization. JMLR, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra & Bengio (2012)"
+    },
+    {
+      "raw_text": "Bergstra et al. (2011) James Bergstra, Rémi Bardenet, Yoshua Bengio, and Balázs Kégl. Algorithms for hyper-parameter optimization. In NIPS, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra et al. (2011)"
+    },
+    {
+      "raw_text": "Bergstra et al. (2013) James Bergstra, Daniel Yamins, and David D Cox. Making a science of model search: Hyperparameter optimization in hundreds of dimensions for vision architectures. ICML, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra et al. (2013)"
+    },
+    {
+      "raw_text": "Biermann (1978) Alan W. Biermann. The inference of regular LISP programs from examples. IEEE transactions on Systems, Man, and Cybernetics, 1978.",
+      "title": null,
+      "authors": [],
+      "year": "1978",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Biermann (1978)"
+    },
+    {
+      "raw_text": "Cheng et al. (2014) Wei-Chen Cheng, Stanley Kok, Hoai Vu Pham, Hai Leong Chieu, and Kian Ming Adam Chai. Language modeling with sum-product networks. In INTERSPEECH, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Cheng et al. (2014)"
+    },
+    {
+      "raw_text": "Dalal & Triggs (2005) Navneet Dalal and Bill Triggs. Histograms of oriented gradients for human detection. In CVPR, 2005.",
+      "title": null,
+      "authors": [],
+      "year": "2005",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dalal & Triggs (2005)"
+    },
+    {
+      "raw_text": "Dean et al. (2012) Jeffrey Dean, Greg Corrado, Rajat Monga, Kai Chen, Matthieu Devin, Mark Mao, Andrew Senior, Paul Tucker, Ke Yang, Quoc V. Le, et al. Large scale distributed deep networks. In NIPS, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dean et al. (2012)"
+    },
+    {
+      "raw_text": "Floreano et al. (2008) Dario Floreano, Peter Dürr, and Claudio Mattiussi. Neuroevolution: from architectures to learning. Evolutionary Intelligence, 2008.",
+      "title": null,
+      "authors": [],
+      "year": "2008",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Floreano et al. (2008)"
+    },
+    {
+      "raw_text": "Gal (2015) Yarin Gal. A theoretically grounded application of dropout in recurrent neural networks. arXiv preprint arXiv:1512.05287, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1512.05287",
+      "doi": null,
+      "url": null,
+      "citation_key": "Gal (2015)"
+    },
+    {
+      "raw_text": "Ha et al. (2016) David Ha, Andrew Dai, and Quoc V. Le. Hypernetworks. arXiv preprint arXiv:1609.09106, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1609.09106",
+      "doi": null,
+      "url": null,
+      "citation_key": "Ha et al. (2016)"
+    },
+    {
+      "raw_text": "He et al. (2016a) Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In CVPR, 2016a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "He et al. (2016a)"
+    },
+    {
+      "raw_text": "He et al. (2016b) Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual networks. arXiv preprint arXiv:1603.05027, 2016b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1603.05027",
+      "doi": null,
+      "url": null,
+      "citation_key": "He et al. (2016b)"
+    },
+    {
+      "raw_text": "Hinton et al. (2012) Geoffrey Hinton, Li Deng, Dong Yu, George E. Dahl, Abdel-rahman Mohamed, Navdeep Jaitly, Andrew Senior, Vincent Vanhoucke, Patrick Nguyen, Tara N. Sainath, et al. Deep neural networks for acoustic modeling in speech recognition: The shared views of four research groups. IEEE Signal Processing Magazine, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hinton et al. (2012)"
+    },
+    {
+      "raw_text": "Hochreiter & Schmidhuber (1997) Sepp Hochreiter and Juergen Schmidhuber. Long short-term memory. Neural Computation, 1997.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hochreiter & Schmidhuber (1997)"
+    },
+    {
+      "raw_text": "Huang et al. (2016a) Gao Huang, Zhuang Liu, and Kilian Q. Weinberger. Densely connected convolutional networks. arXiv preprint arXiv:1608.06993, 2016a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1608.06993",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2016a)"
+    },
+    {
+      "raw_text": "Huang et al. (2016b) Gao Huang, Zhuang Liu, Kilian Q. Weinberger, and Laurens van der Maaten. Densely connected convolutional networks. arXiv preprint arXiv:1608.06993, 2016b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1608.06993",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2016b)"
+    },
+    {
+      "raw_text": "Huang et al. (2016c) Gao Huang, Yu Sun, Zhuang Liu, Daniel Sedra, and Kilian Weinberger. Deep networks with stochastic depth. arXiv preprint arXiv:1603.09382, 2016c.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "1603.09382",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2016c)"
+    },
+    {
+      "raw_text": "Inan et al. (2016) Hakan Inan, Khashayar Khosravi, and Richard Socher. Tying word vectors and word classifiers: A loss framework for language modeling. arXiv preprint arXiv:1611.01462, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1611.01462",
+      "doi": null,
+      "url": null,
+      "citation_key": "Inan et al. (2016)"
+    },
+    {
+      "raw_text": "Ioffe & Szegedy (2015) Sergey Ioffe and Christian Szegedy. Batch normalization: Accelerating deep network training by reducing internal covariate shift. In ICML, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Ioffe & Szegedy (2015)"
+    },
+    {
+      "raw_text": "Jarrett et al. (2009) Kevin Jarrett, Koray Kavukcuoglu, Yann Lecun, et al. What is the best multi-stage architecture for object recognition? In ICCV, 2009.",
+      "title": null,
+      "authors": [],
+      "year": "2009",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Jarrett et al. (2009)"
+    },
+    {
+      "raw_text": "Jozefowicz et al. (2015) Rafal Jozefowicz, Wojciech Zaremba, and Ilya Sutskever. An empirical exploration of recurrent network architectures. In ICML, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Jozefowicz et al. (2015)"
+    },
+    {
+      "raw_text": "Kim et al. (2015) Yoon Kim, Yacine Jernite, David Sontag, and Alexander M. Rush. Character-aware neural language models. arXiv preprint arXiv:1508.06615, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1508.06615",
+      "doi": null,
+      "url": null,
+      "citation_key": "Kim et al. (2015)"
+    },
+    {
+      "raw_text": "Kingma & Ba (2015) Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In ICLR, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kingma & Ba (2015)"
+    },
+    {
+      "raw_text": "Krizhevsky et al. (2012) Alex Krizhevsky, Ilya Sutskever, and Geoffrey E. Hinton. Imagenet classification with deep convolutional neural networks. In NIPS, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Krizhevsky et al. (2012)"
+    },
+    {
+      "raw_text": "Lake et al. (2015) Brenden M. Lake, Ruslan Salakhutdinov, and Joshua B. Tenenbaum. Human-level concept learning through probabilistic program induction. Science, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lake et al. (2015)"
+    },
+    {
+      "raw_text": "Larsson et al. (2016) Gustav Larsson, Michael Maire, and Gregory Shakhnarovich. Fractalnet: Ultra-deep neural networks without residuals. arXiv preprint arXiv:1605.07648, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1605.07648",
+      "doi": null,
+      "url": null,
+      "citation_key": "Larsson et al. (2016)"
+    },
+    {
+      "raw_text": "LeCun et al. (1998) Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to document recognition. Proceedings of the IEEE, 1998.",
+      "title": null,
+      "authors": [],
+      "year": "1998",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "LeCun et al. (1998)"
+    },
+    {
+      "raw_text": "Lee et al. (2015) Chen-Yu Lee, Saining Xie, Patrick Gallagher, Zhengyou Zhang, and Zhuowen Tu. Deeply-supervised nets. In AISTATS, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lee et al. (2015)"
+    },
+    {
+      "raw_text": "Li & Malik (2016) Ke Li and Jitendra Malik. Learning to optimize. arXiv preprint arXiv:1606.01885, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1606.01885",
+      "doi": null,
+      "url": null,
+      "citation_key": "Li & Malik (2016)"
+    },
+    {
+      "raw_text": "Liang et al. (2010) Percy Liang, Michael I. Jordan, and Dan Klein. Learning programs: A hierarchical Bayesian approach. In ICML, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Liang et al. (2010)"
+    },
+    {
+      "raw_text": "Lin et al. (2013) Min Lin, Qiang Chen, and Shuicheng Yan. Network in network. In ICLR, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lin et al. (2013)"
+    },
+    {
+      "raw_text": "Lowe (1999) David G. Lowe. Object recognition from local scale-invariant features. In CVPR, 1999.",
+      "title": null,
+      "authors": [],
+      "year": "1999",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lowe (1999)"
+    },
+    {
+      "raw_text": "Mendoza et al. (2016) Hector Mendoza, Aaron Klein, Matthias Feurer, Jost Tobias Springenberg, and Frank Hutter. Towards automatically-tuned neural networks. In Proceedings of the 2016 Workshop on Automatic Machine Learning, pp. 58–65, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mendoza et al. (2016)"
+    },
+    {
+      "raw_text": "Merity et al. (2016) Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture models. arXiv preprint arXiv:1609.07843, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1609.07843",
+      "doi": null,
+      "url": null,
+      "citation_key": "Merity et al. (2016)"
+    },
+    {
+      "raw_text": "Mikolov & Zweig (2012) Tomas Mikolov and Geoffrey Zweig. Context dependent recurrent neural network language model. In SLT, pp. 234–239, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mikolov & Zweig (2012)"
+    },
+    {
+      "raw_text": "Mnih & Hinton (2007) Andriy Mnih and Geoffrey Hinton. Three new graphical models for statistical language modelling. In ICML, 2007.",
+      "title": null,
+      "authors": [],
+      "year": "2007",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mnih & Hinton (2007)"
+    },
+    {
+      "raw_text": "Nair & Hinton (2010) Vinod Nair and Geoffrey E. Hinton. Rectified linear units improve restricted Boltzmann machines. In ICML, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Nair & Hinton (2010)"
+    },
+    {
+      "raw_text": "Neelakantan et al. (2015) Arvind Neelakantan, Quoc V. Le, and Ilya Sutskever. Neural programmer: Inducing latent programs with gradient descent. In ICLR, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Neelakantan et al. (2015)"
+    },
+    {
+      "raw_text": "Pascanu et al. (2013) Razvan Pascanu, Caglar Gulcehre, Kyunghyun Cho, and Yoshua Bengio. How to construct deep recurrent neural networks. arXiv preprint arXiv:1312.6026, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1312.6026",
+      "doi": null,
+      "url": null,
+      "citation_key": "Pascanu et al. (2013)"
+    },
+    {
+      "raw_text": "Press & Wolf (2016) Ofir Press and Lior Wolf. Using the output embedding to improve language models. arXiv preprint arXiv:1608.05859, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1608.05859",
+      "doi": null,
+      "url": null,
+      "citation_key": "Press & Wolf (2016)"
+    },
+    {
+      "raw_text": "Ranzato et al. (2015) Marc’Aurelio Ranzato, Sumit Chopra, Michael Auli, and Wojciech Zaremba. Sequence level training with recurrent neural networks. arXiv preprint arXiv:1511.06732, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1511.06732",
+      "doi": null,
+      "url": null,
+      "citation_key": "Ranzato et al. (2015)"
+    },
+    {
+      "raw_text": "Reed & de Freitas (2015) Scott Reed and Nando de Freitas. Neural programmer-interpreters. In ICLR, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Reed & de Freitas (2015)"
+    },
+    {
+      "raw_text": "Saxena & Verbeek (2016) Shreyas Saxena and Jakob Verbeek. Convolutional neural fabrics. In NIPS, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Saxena & Verbeek (2016)"
+    },
+    {
+      "raw_text": "Shen et al. (2016) Shiqi Shen, Yong Cheng, Zhongjun He, Wei He, Hua Wu, Maosong Sun, and Yang Liu. Minimum risk training for neural machine translation. In ACL, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Shen et al. (2016)"
+    },
+    {
+      "raw_text": "Simonyan & Zisserman (2014) Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition. arXiv preprint arXiv:1409.1556, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1409.1556",
+      "doi": null,
+      "url": null,
+      "citation_key": "Simonyan & Zisserman (2014)"
+    },
+    {
+      "raw_text": "Snoek et al. (2012) Jasper Snoek, Hugo Larochelle, and Ryan P. Adams. Practical Bayesian optimization of machine learning algorithms. In NIPS, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Snoek et al. (2012)"
+    },
+    {
+      "raw_text": "Snoek et al. (2015) Jasper Snoek, Oren Rippel, Kevin Swersky, Ryan Kiros, Nadathur Satish, Narayanan Sundaram, Mostofa Patwary, Mostofa Ali, Ryan P. Adams, et al. Scalable bayesian optimization using deep neural networks. In ICML, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Snoek et al. (2015)"
+    },
+    {
+      "raw_text": "Springenberg et al. (2014) Jost Tobias Springenberg, Alexey Dosovitskiy, Thomas Brox, and Martin Riedmiller. Striving for simplicity: The all convolutional net. arXiv preprint arXiv:1412.6806, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1412.6806",
+      "doi": null,
+      "url": null,
+      "citation_key": "Springenberg et al. (2014)"
+    },
+    {
+      "raw_text": "Srivastava et al. (2015) Rupesh Kumar Srivastava, Klaus Greff, and Jürgen Schmidhuber. Highway networks. arXiv preprint arXiv:1505.00387, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1505.00387",
+      "doi": null,
+      "url": null,
+      "citation_key": "Srivastava et al. (2015)"
+    },
+    {
+      "raw_text": "Stanley et al. (2009) Kenneth O. Stanley, David B. D’Ambrosio, and Jason Gauci. A hypercube-based encoding for evolving large-scale neural networks. Artificial Life, 2009.",
+      "title": null,
+      "authors": [],
+      "year": "2009",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Stanley et al. (2009)"
+    },
+    {
+      "raw_text": "Summers (1977) Phillip D. Summers. A methodology for LISP program construction from examples. Journal of the ACM, 1977.",
+      "title": null,
+      "authors": [],
+      "year": "1977",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Summers (1977)"
+    },
+    {
+      "raw_text": "Sutskever et al. (2013) Ilya Sutskever, James Martens, George Dahl, and Geoffrey Hinton. On the importance of initialization and momentum in deep learning. In ICML, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Sutskever et al. (2013)"
+    },
+    {
+      "raw_text": "Sutskever et al. (2014) Ilya Sutskever, Oriol Vinyals, and Quoc V. Le. Sequence to sequence learning with neural networks. In NIPS, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Sutskever et al. (2014)"
+    },
+    {
+      "raw_text": "Szegedy et al. (2015) Christian Szegedy, Wei Liu, Yangqing Jia, Pierre Sermanet, Scott Reed, Dragomir Anguelov, Dumitru Erhan, Vincent Vanhoucke, and Andrew Rabinovich. Going deeper with convolutions. In CVPR, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Szegedy et al. (2015)"
+    },
+    {
+      "raw_text": "Thrun & Pratt (2012) Sebastian Thrun and Lorien Pratt. Learning to learn. Springer Science & Business Media, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Thrun & Pratt (2012)"
+    },
+    {
+      "raw_text": "Vinyals et al. (2015) Oriol Vinyals, Meire Fortunato, and Navdeep Jaitly. Pointer networks. In NIPS, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Vinyals et al. (2015)"
+    },
+    {
+      "raw_text": "Wierstra et al. (2005) Daan Wierstra, Faustino J Gomez, and Jürgen Schmidhuber. Modeling systems with internal state using evolino. In GECCO, 2005.",
+      "title": null,
+      "authors": [],
+      "year": "2005",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wierstra et al. (2005)"
+    },
+    {
+      "raw_text": "Williams (1992) Ronald J. Williams. Simple statistical gradient-following algorithms for connectionist reinforcement learning. In Machine Learning, 1992.",
+      "title": null,
+      "authors": [],
+      "year": "1992",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Williams (1992)"
+    },
+    {
+      "raw_text": "Wu et al. (2016) Yonghui Wu, Mike Schuster, Zhifeng Chen, Quoc V. Le, Mohammad Norouzi, et al. Google’s neural machine translation system: Bridging the gap between human and machine translation. arXiv preprint arXiv:1609.08144, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1609.08144",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wu et al. (2016)"
+    },
+    {
+      "raw_text": "Zagoruyko & Komodakis (2016) Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In BMVC, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zagoruyko & Komodakis (2016)"
+    },
+    {
+      "raw_text": "Zaremba et al. (2014) Wojciech Zaremba, Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization. arXiv preprint arXiv:1409.2329, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1409.2329",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zaremba et al. (2014)"
+    },
+    {
+      "raw_text": "Zilly et al. (2016) Julian Georg Zilly, Rupesh Kumar Srivastava, Jan Koutník, and Jürgen Schmidhuber. Recurrent highway networks. arXiv preprint arXiv:1607.03474, 2016.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": "1607.03474",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zilly et al. (2016)"
+    }
+  ],
+  "full_text": "## Introduction\n\nThe last few years have seen much success of deep neural networks in many challenging applications, such as speech recognition (Hinton et al., 2012), image recognition (LeCun et al., 1998; Krizhevsky et al., 2012) and machine translation (Sutskever et al., 2014; Bahdanau et al., 2015; Wu et al., 2016). Along with this success is a paradigm shift from feature designing to architecture designing, i.e., from SIFT (Lowe, 1999), and HOG (Dalal & Triggs, 2005), to AlexNet (Krizhevsky et al., 2012), VGGNet (Simonyan & Zisserman, 2014), GoogleNet (Szegedy et al., 2015), and ResNet (He et al., 2016a). Although it has become easier, designing architectures still requires a lot of expert knowledge and takes ample time.\n\nThis paper presents Neural Architecture Search, a gradient-based method for finding good architectures (see Figure 1) . Our work is based on the observation that the structure and connectivity of a neural network can be typically specified by a variable-length string. It is therefore possible to use a recurrent network – the controller – to generate such string. Training the network specified by the string – the “child network” – on the real data will result in an accuracy on a validation set. Using this accuracy as the reward signal, we can compute the policy gradient to update the controller. As a result, in the next iteration, the controller will give higher probabilities to architectures that receive high accuracies. In other words, the controller will learn to improve its search over time.\n\nOur experiments show that Neural Architecture Search can design good models from scratch, an achievement considered not possible with other methods. On image recognition with CIFAR-10, Neural Architecture Search can find a novel ConvNet model that is better than most human-invented architectures. Our CIFAR-10 model achieves a 3.65 test set error, while being 1.05x faster than the current best model. On language modeling with Penn Treebank, Neural Architecture Search can design a novel recurrent cell that is also better than previous RNN and LSTM architectures. The cell that our model found achieves a test set perplexity of 62.4 on the Penn Treebank dataset, which is 3.6 perplexity better than the previous state-of-the-art.\n\n## Related Work\n\nHyperparameter optimization is an important research topic in machine learning, and is widely used in practice (Bergstra et al., 2011; Bergstra & Bengio, 2012; Snoek et al., 2012; 2015; Saxena & Verbeek, 2016). Despite their success, these methods are still limited in that they only search models from a fixed-length space. In other words, it is difficult to ask them to generate a variable-length configuration that specifies the structure and connectivity of a network. In practice, these methods often work better if they are supplied with a good initial model (Bergstra & Bengio, 2012; Snoek et al., 2012; 2015). There are Bayesian optimization methods that allow to search non fixed length architectures (Bergstra et al., 2013; Mendoza et al., 2016), but they are less general and less flexible than the method proposed in this paper.\n\nModern neuro-evolution algorithms, e.g., Wierstra et al. (2005); Floreano et al. (2008); Stanley et al. (2009), on the other hand, are much more flexible for composing novel models, yet they are usually less practical at a large scale. Their limitations lie in the fact that they are search-based methods, thus they are slow or require many heuristics to work well.\n\nNeural Architecture Search has some parallels to program synthesis and inductive programming, the idea of searching a program from examples (Summers, 1977; Biermann, 1978). In machine learning, probabilistic program induction has been used successfully in many settings, such as learning to solve simple Q&A (Liang et al., 2010; Neelakantan et al., 2015; Andreas et al., 2016), sort a list of numbers (Reed & de Freitas, 2015), and learning with very few examples (Lake et al., 2015).\n\nThe controller in Neural Architecture Search is auto-regressive, which means it predicts hyperparameters one a time, conditioned on previous predictions. This idea is borrowed from the decoder in end-to-end sequence to sequence learning (Sutskever et al., 2014). Unlike sequence to sequence learning, our method optimizes a non-differentiable metric, which is the accuracy of the child network. It is therefore similar to the work on BLEU optimization in Neural Machine Translation (Ranzato et al., 2015; Shen et al., 2016). Unlike these approaches, our method learns directly from the reward signal without any supervised bootstrapping.\n\nAlso related to our work is the idea of learning to learn or meta-learning (Thrun & Pratt, 2012), a general framework of using information learned in one task to improve a future task. More closely related is the idea of using a neural network to learn the gradient descent updates for another network (Andrychowicz et al., 2016) and the idea of using reinforcement learning to find update policies for another network (Li & Malik, 2016).\n\n## Methods\n\nIn the following section, we will first describe a simple method of using a recurrent network to generate convolutional architectures. We will show how the recurrent network can be trained with a policy gradient method to maximize the expected accuracy of the sampled architectures. We will present several improvements of our core approach such as forming skip connections to increase model complexity and using a parameter server approach to speed up training. In the last part of the section, we will focus on generating recurrent architectures, which is another key contribution of our paper.\n\n### Generate Model Descriptions with a Controller Recurrent Neural Network\n\nIn Neural Architecture Search, we use a controller to generate architectural hyperparameters of neural networks. To be flexible, the controller is implemented as a recurrent neural network. Let’s suppose we would like to predict feedforward neural networks with only convolutional layers, we can use the controller to generate their hyperparameters as a sequence of tokens:\n\nIn our experiments, the process of generating an architecture stops if the number of layers exceeds a certain value. This value follows a schedule where we increase it as training progresses. Once the controller RNN finishes generating an architecture, a neural network with this architecture is built and trained. At convergence, the accuracy of the network on a held-out validation set is recorded. The parameters of the controller RNN, $\\theta_{c}$, are then optimized in order to maximize the expected validation accuracy of the proposed architectures. In the next section, we will describe a policy gradient method which we use to update parameters $\\theta_{c}$ so that the controller RNN generates better architectures over time.\n\n### Training with REINFORCE\n\nThe list of tokens that the controller predicts can be viewed as a list of actions $a_{1:T}$ to design an architecture for a child network. At convergence, this child network will achieve an accuracy $R$ on a held-out dataset. We can use this accuracy $R$ as the reward signal and use reinforcement learning to train the controller. More concretely, to find the optimal architecture, we ask our controller to maximize its expected reward, represented by $J(\\theta_{c})$:\n\nSince the reward signal $R$ is non-differentiable, we need to use a policy gradient method to iteratively update $\\theta_{c}$. In this work, we use the REINFORCE rule from Williams (1992):\n\nAn empirical approximation of the above quantity is:\n\nWhere $m$ is the number of different architectures that the controller samples in one batch and $T$ is the number of hyperparameters our controller has to predict to design a neural network architecture. The validation accuracy that the $k$-th neural network architecture achieves after being trained on a training dataset is $R_{k}$.\n\nThe above update is an unbiased estimate for our gradient, but has a very high variance. In order to reduce the variance of this estimate we employ a baseline function:\n\nAs long as the baseline function $b$ does not depend on the on the current action, then this is still an unbiased gradient estimate. In this work, our baseline $b$ is an exponential moving average of the previous architecture accuracies.\n\n### Increase Architecture Complexity with Skip Connections and Other Layer Types\n\nIn Section 3.1,\nthe search space does not have skip connections, or branching layers used in modern architectures such as GoogleNet (Szegedy et al., 2015), and Residual Net (He et al., 2016a). In this section we introduce a method that allows our controller to propose skip connections or branching layers, thereby widening the search space.\n\nTo enable the controller to predict such connections, we use a set-selection type attention (Neelakantan et al., 2015) which was built upon the attention mechanism (Bahdanau et al., 2015; Vinyals et al., 2015). At layer $N$, we add an anchor point which has $N-1$ content-based sigmoids to indicate the previous layers that need to be connected. Each sigmoid is a function of the current hiddenstate of the controller and the previous hiddenstates of the previous $N-1$ anchor points:\n\nwhere $h_{j}$ represents the hiddenstate of the controller at anchor point for the $j$-th layer, where $j$ ranges from $0$ to $N-1$. We then sample from these sigmoids to decide what previous layers to be used as inputs to the current layer. The matrices $W_{prev}$, $W_{curr}$ and $v$ are trainable parameters. As these connections are also defined by probability distributions, the REINFORCE method still applies without any significant modifications.\nFigure 4 shows how the controller uses skip connections to decide what layers it wants as inputs to the current layer.\n\nIn our framework, if one layer has many input layers then all input layers are concatenated in the depth dimension. Skip connections can cause “compilation failures” where one layer is not compatible with another layer, or one layer may not have any input or output. To circumvent these issues, we employ three simple techniques. First, if a layer is not connected to any input layer then the image is used as the input layer. Second, at the final layer we take all layer outputs that have not been connected and concatenate them before sending this final hiddenstate to the classifier. Lastly, if input layers to be concatenated have different sizes, we pad the small layers with zeros so that the concatenated layers have the same sizes.\n\nFinally, in Section 3.1, we do not predict the learning rate and we also assume that the architectures consist of only convolutional layers, which is also quite restrictive. It is possible to add the learning rate as one of the predictions. Additionally, it is also possible to predict pooling, local contrast normalization (Jarrett et al., 2009; Krizhevsky et al., 2012), and batchnorm (Ioffe & Szegedy, 2015) in the architectures. To be able to add more types of layers, we need to add an additional step in the controller RNN to predict the layer type, then other hyperparameters associated with it.\n\n### Generate Recurrent Cell Architectures\n\nIn this section, we will modify the above method to generate recurrent cells. At every time step $t$, the controller needs to find a functional form for $h_{t}$ that takes $x_{t}$ and $h_{t-1}$ as inputs. The simplest way is to have $h_{t}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$, which is the formulation of a basic recurrent cell. A more complicated formulation is the widely-used LSTM recurrent cell (Hochreiter & Schmidhuber, 1997).\n\nThe computations for basic RNN and LSTM cells can be generalized as a tree of steps that take $x_{t}$ and $h_{t-1}$ as inputs and produce $h_{t}$ as final output. The controller RNN needs to label each node in the tree with a combination method (addition, elementwise multiplication, etc.) and an activation function ($\\tanh$, $\\mathrm{sigmoid}$, etc.) to merge two inputs and produce one output. Two outputs are then fed as inputs to the next node in the tree. To allow the controller RNN to select these methods and functions, we index the nodes in the tree in an order so that the controller RNN can visit each node one by one and label the needed hyperparameters.\n\nInspired by the construction of the LSTM cell (Hochreiter & Schmidhuber, 1997), we also need cell variables $c_{t-1}$ and $c_{t}$ to represent the memory states. To incorporate these variables, we need the controller RNN to predict what nodes in the tree to connect these two variables to. These predictions can be done in the last two blocks of the controller RNN.\n\nTo make this process more clear, we show an example in Figure 5, for a tree structure that has two leaf nodes and one internal node. The leaf nodes are indexed by 0 and 1, and the internal node is indexed by 2. The controller RNN needs to first predict 3 blocks, each block specifying a combination method and an activation function for each tree index. After that it needs to predict the last 2 blocks that specify how to connect $c_{t}$ and $c_{t-1}$ to temporary variables inside the tree. Specifically, according to the predictions of the controller RNN in this example, the following computation steps will occur:\n\nThe controller predicts $Add$ and $Tanh$ for tree index 0, this means we need to compute $a_{0}=\\tanh(W_{1}*x_{t}+W_{2}*h_{t-1})$.\n\nThe controller predicts $ElemMult$ and $ReLU$ for tree index 1, this means we need to compute $a_{1}=\\mathrm{ReLU}\\big{(}(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})\\big{)}$.\n\nThe controller predicts 0 for the second element of the “Cell Index”, $Add$ and $ReLU$ for elements in “Cell Inject”, which means we need to compute $a_{0}^{new}=\\mathrm{ReLU}(a_{0}+c_{t-1})$. Notice that we don’t have any learnable parameters for the internal nodes of the tree.\n\nThe controller predicts $ElemMult$ and $Sigmoid$ for tree index 2, this means we need to compute $a_{2}=\\mathrm{sigmoid}(a_{0}^{new}\\odot a_{1})$. Since the maximum index in the tree is 2, $h_{t}$ is set to $a_{2}$.\n\nThe controller RNN predicts 1 for the first element of the “Cell Index”, this means that we should set $c_{t}$ to the output of the tree at index 1 before the activation, i.e., $c_{t}=(W_{3}*x_{t})\\odot(W_{4}*h_{t-1})$.\n\nIn the above example, the tree has two leaf nodes, thus it is called a “base 2” architecture. In our experiments, we use a base number of 8 to make sure that the cell is expressive.\n\n## Experiments and Results\n\nWe apply our method to an image classification task with CIFAR-10 and a language modeling task with Penn Treebank, two of the most benchmarked datasets in deep learning. On CIFAR-10, our goal is to find a good convolutional architecture whereas on Penn Treebank our goal is to find a good recurrent cell. On each dataset, we have a separate held-out validation dataset to compute the reward signal. The reported performance on the test set is computed only once for the network that achieves the best result on the held-out validation dataset. More details about our experimental procedures and results are as follows.\n\n### Learning Convolutional Architectures for CIFAR-10\n\n### Learning Recurrent Cells for Penn Treebank\n\n## Conclusion\n\nIn this paper we introduce Neural Architecture Search, an idea of using a recurrent neural network to compose neural network architectures. By using recurrent network as the controller, our method is flexible so that it can search variable-length architecture space. Our method has strong empirical performance on very challenging benchmarks and presents a new research direction for automatically finding good neural network architectures. The code for running the models found by the controller on CIFAR-10 and PTB will be released at https://github.com/tensorflow/models . Additionally, we have added the RNN cell found using our method under the name NASCell into TensorFlow, so others can easily use it.\n\n#### Acknowledgments\n\nWe thank Greg Corrado, Jeff Dean, David Ha, Lukasz Kaiser and the Google Brain team for their help with the project.\n",
+  "extracted_at": "2026-04-13T15:43:36.111084"
+}

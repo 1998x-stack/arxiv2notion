@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2504.11358v4",
+  "title": "DataSentinel: A Game-Theoretic Detection of Prompt Injection Attacks",
+  "authors": [
+    "Yupei Liu",
+    "Yuqi Jia",
+    "Jinyuan Jia",
+    "Dawn Song",
+    "Neil Zhenqiang Gong"
+  ],
+  "abstract": "LLM-integrated applications and agents are vulnerable to prompt injection attacks, where an attacker injects prompts into their inputs to induce attacker-desired outputs. A detection method aims to determine whether a given input is contaminated by an injected prompt. However, existing detection methods have limited effectiveness against state-of-the-art attacks, let alone adaptive ones. In this work, we propose DataSentinel, a game-theoretic method to detect prompt injection attacks. Specifically, DataSentinel fine-tunes an LLM to detect inputs contaminated with injected prompts that are strategically adapted to evade detection. We formulate this as a minimax optimization problem, with the objective of fine-tuning the LLM to detect strong adaptive attacks. Furthermore, we propose a gradient-based method to solve the minimax optimization problem by alternating between the inner max and outer min problems. Our evaluation results on multiple benchmark datasets and LLMs show that DataSentinel effectively detects both existing and adaptive prompt injection attacks.",
+  "categories": [
+    "cs.CR",
+    "cs.AI"
+  ],
+  "primary_category": "cs.CR",
+  "published": "2025-04-15T16:26:21+00:00",
+  "updated": "2025-11-12T08:49:29+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Distinguished Paper Award in IEEE Symposium on Security and Privacy, 2025. For slides, see https://people.duke.edu/~zg70/code/PromptInjection.pdf",
+  "pdf_url": "https://arxiv.org/pdf/2504.11358v4.pdf"
+}

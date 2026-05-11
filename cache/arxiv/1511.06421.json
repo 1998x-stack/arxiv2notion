@@ -1,0 +1,26 @@
+{
+  "arxiv_id": "1511.06421v3",
+  "title": "Deep Manifold Traversal: Changing Labels with Convolutional Features",
+  "authors": [
+    "Jacob R. Gardner",
+    "Paul Upchurch",
+    "Matt J. Kusner",
+    "Yixuan Li",
+    "Kilian Q. Weinberger",
+    "Kavita Bala",
+    "John E. Hopcroft"
+  ],
+  "abstract": "Many tasks in computer vision can be cast as a \"label changing\" problem, where the goal is to make a semantic change to the appearance of an image or some subject in an image in order to alter the class membership. Although successful task-specific methods have been developed for some label changing applications, to date no general purpose method exists. Motivated by this we propose deep manifold traversal, a method that addresses the problem in its most general form: it first approximates the manifold of natural images then morphs a test image along a traversal path away from a source class and towards a target class while staying near the manifold throughout. The resulting algorithm is surprisingly effective and versatile. It is completely data driven, requiring only an example set of images from the desired source and target domains. We demonstrate deep manifold traversal on highly diverse label changing tasks: changing an individual's appearance (age and hair color), changing the season of an outdoor image, and transforming a city skyline towards nighttime.",
+  "categories": [
+    "cs.LG",
+    "cs.CV",
+    "stat.ML"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2015-11-19T22:17:20+00:00",
+  "updated": "2016-03-17T17:57:55+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1511.06421v3.pdf"
+}

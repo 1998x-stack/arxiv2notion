@@ -1,0 +1,19 @@
+{
+  "arxiv_id": "1409.1556v6",
+  "title": "Very Deep Convolutional Networks for Large-Scale Image Recognition",
+  "authors": [
+    "Karen Simonyan",
+    "Andrew Zisserman"
+  ],
+  "abstract": "In this work we investigate the effect of the convolutional network depth on its accuracy in the large-scale image recognition setting. Our main contribution is a thorough evaluation of networks of increasing depth using an architecture with very small (3x3) convolution filters, which shows that a significant improvement on the prior-art configurations can be achieved by pushing the depth to 16-19 weight layers. These findings were the basis of our ImageNet Challenge 2014 submission, where our team secured the first and the second places in the localisation and classification tracks respectively. We also show that our representations generalise well to other datasets, where they achieve state-of-the-art results. We have made our two best-performing ConvNet models publicly available to facilitate further research on the use of deep visual representations in computer vision.",
+  "categories": [
+    "cs.CV"
+  ],
+  "primary_category": "cs.CV",
+  "published": "2014-09-04T19:48:04+00:00",
+  "updated": "2015-04-10T16:25:04+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1409.1556v6.pdf"
+}

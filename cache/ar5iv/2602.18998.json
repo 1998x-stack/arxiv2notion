@@ -1,0 +1,2694 @@
+{
+  "paper_id": "2602.18998",
+  "title": "Benchmark Test-Time Scaling of General LLM Agents",
+  "authors": [
+    "Xiaochuan Li",
+    "Ryan Ming",
+    "Pranav Setlur",
+    "Abhijay Paladugu",
+    "Andy Tang",
+    "Hao Kang",
+    "Shuai Shao",
+    "Rong Jin",
+    "Chenyan Xiong"
+  ],
+  "affiliations": [],
+  "abstract": "LLM agents are increasingly expected to function as general-purpose systems capable of resolving open-ended user requests. While existing benchmarks focus on domain-aware environments for developing specialized agents, evaluating general-purpose agents requires more realistic settings that challenge them to operate across multiple skills and tools within a unified environment. We introduce General AgentBench, a benchmark that provides such a unified framework for evaluating general LLM agents across search, coding, reasoning, and tool-use domains. Using General AgentBench, we systematically study test-time scaling behaviors under sequential scaling (iterative interaction) and parallel scaling (sampling multiple trajectories). Evaluation of ten leading LLM agents reveals a substantial performance degradation when moving from domain-specific evaluations to this general-agent setting. Moreover, we find that neither scaling methodology yields effective performance improvements in practice, due to two fundamental limitations: context ceiling in sequential scaling and verification gap in parallel scaling. Code is publicly available at https://github.com/cxcscmu/General-AgentBench.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Agents powered by large language models (LLMs) are at a turning point, transitioning from domain-specific (Liu et al., 2023b; Yang et al., 2024a; Yue et al., 2024) to general-purpose (Xi et al., 2023; Luo et al., 2025). Real-world user requests are often open-ended and require LLM agents to operate end-to-end through planning (Wang et al., 2023; Erdogan et al., 2025), reasoning (Wei et al., 2022; Yao et al., 2022b; Parmar et al., 2025), and tool use (Schick et al., 2023; Patil et al., 2024) under uncertain and evolving conditions. A capable general agent is expected to compose multiple skills and tools (e.g., search, coding, computation, and MCP APIs) to handle the diversity of realistic requests(Anthropic, 2026), while exhibiting effective test-time scaling abilities to address increasing task complexity and enhance response quality (Wang et al., 2022; Brown et al., 2024; Snell et al., 2024). This shift raises an important evaluation gap: beyond asking “can the model solve a task,” we must assess whether agents can infer user intent, select specific tools, and scale up their performance under a unified evaluation framework across diverse domains.",
+        "Existing agentic benchmarks typically evaluate LLM agents in domain-specific settings, where the environment and available toolsets are explicitly designed for a particular task category (e.g., software engineering with a Docker environment and terminal tools (Jimenez et al., 2023; Aleithan et al., 2024), or web navigation with a browsing interface (Zhou et al., 2023b; He et al., 2024; Wei et al., 2025)). Conversely, actual user interactions are rarely so constrained; they typically involve multi-turn, open-ended requests spanning disparate domains, requiring agents to remain ready across a broad toolset to handle unpredictable queries. As a result, while current benchmarks are informative for domain-specific agent development, they may not fully capture the demands of real-world usage and can overestimate robustness under realistic, multi-domain conditions.",
+        "In this paper, we address this gap by introducing General AgentBench, a benchmark designed to evaluate general-purpose agents across diverse scenarios under a unified framework that more closely reflects real-world user interactions. We consolidate tools from all domains into a shared interface that is consistently exposed to evaluated agents across different tasks, while domain-specific environments and implementations remain hidden. We evaluate ten leading LLM-based agents, each of which must first interpret the user request, then choose suitable tools from a large and diverse tool pool, and iteratively interact with the environment until producing a final response.",
+        "For complex requests that exceed the capabilities of a short interaction horizon, agents can benefit from increased inference-time computation—a strategy known as test-time scaling and extensively studied in the context of non-agentic reasoning (Cobbe et al., 2021; Zelikman et al., 2024; Guo et al., 2025). We focus on two primary scaling strategies: (1) sequential scaling, which extends interaction histories to support continued reasoning, reflection, and exploration; and (2) parallel scaling, which independently samples $K$ candidate trajectories and selects a single candidate to return. More concretely, effective parallel scaling requires agents not only to generate correct solutions, but also to reliably identify and choose the correct one, since real-world agents cannot present multiple responses simultaneously. Together, these settings enable a systematic study of test-time scaling behaviors in general LLM agents.",
+        "Our results lead to three key conclusions. (1) Across ten leading LLMs, we observe a substantial performance drop when moving from domain-specific configurations to the general-agent setting (Figure 1(a)), with pronounced differences in robustness across model families. Among them, Claude exhibits the strongest robustness, while most other models experience performance drops of approximately 30%. (2) Sequential scaling exhibits an effective context length ceiling (context ceiling): while performance improves within a modest range of additional interaction turns, it often fluctuates or degrades thereafter. This suggests that the accumulated history eventually overwhelms the agent’s reasoning capacity, leading to instability in long-horizon tasks. (Figure 1(b)). (3) Although parallel scaling increases the theoretical upper bound of performance (past@$K$), we consistently observe a gap between this upper bound and self-choice accuracy, revealing a substantial verification gap that ultimately limits achievable performance in realistic settings (Figure 1(c)). In summary, our contributions are:",
+        "General AgentBench for Realistic Evaluation.\nWe introduce General AgentBench, a benchmark for evaluating whether agents can compose multiple skills and tools to solve open-ended requests from diverse domains under a unified framework, more closely reflecting real-world user interactions.",
+        "Sequential Test-time Scaling in General Agents.\nWe study the sequential test-time scaling behavior of general agents, showing that performance improvements are bounded by an effective context ceiling, beyond which additional computation often leads to instability and performance degradation. This inherent point varies across models and domains.",
+        "Parallel Test-time Scaling.\nWe analyze parallel test-time scaling and show that, despite increasing the theoretical performance upper bound (past@$K$), its practical gains are limited by a verification gap between generation and model self-choice accuracy."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "(a) Performace comparsion.",
+          "label": "S1.F1"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x1.png",
+            "alt": "Refer to caption",
+            "caption": "(a) Performace comparsion.",
+            "label": "S1.F1"
+          }
+        },
+        {
+          "type": "para",
+          "data": "Agents powered by large language models (LLMs) are at a turning point, transitioning from domain-specific (Liu et al., 2023b; Yang et al., 2024a; Yue et al., 2024) to general-purpose (Xi et al., 2023; Luo et al., 2025). Real-world user requests are often open-ended and require LLM agents to operate end-to-end through planning (Wang et al., 2023; Erdogan et al., 2025), reasoning (Wei et al., 2022; Yao et al., 2022b; Parmar et al., 2025), and tool use (Schick et al., 2023; Patil et al., 2024) under uncertain and evolving conditions. A capable general agent is expected to compose multiple skills and tools (e.g., search, coding, computation, and MCP APIs) to handle the diversity of realistic requests(Anthropic, 2026), while exhibiting effective test-time scaling abilities to address increasing task complexity and enhance response quality (Wang et al., 2022; Brown et al., 2024; Snell et al., 2024). This shift raises an important evaluation gap: beyond asking “can the model solve a task,” we must assess whether agents can infer user intent, select specific tools, and scale up their performance under a unified evaluation framework across diverse domains."
+        },
+        {
+          "type": "para",
+          "data": "Existing agentic benchmarks typically evaluate LLM agents in domain-specific settings, where the environment and available toolsets are explicitly designed for a particular task category (e.g., software engineering with a Docker environment and terminal tools (Jimenez et al., 2023; Aleithan et al., 2024), or web navigation with a browsing interface (Zhou et al., 2023b; He et al., 2024; Wei et al., 2025)). Conversely, actual user interactions are rarely so constrained; they typically involve multi-turn, open-ended requests spanning disparate domains, requiring agents to remain ready across a broad toolset to handle unpredictable queries. As a result, while current benchmarks are informative for domain-specific agent development, they may not fully capture the demands of real-world usage and can overestimate robustness under realistic, multi-domain conditions."
+        },
+        {
+          "type": "para",
+          "data": "In this paper, we address this gap by introducing General AgentBench, a benchmark designed to evaluate general-purpose agents across diverse scenarios under a unified framework that more closely reflects real-world user interactions. We consolidate tools from all domains into a shared interface that is consistently exposed to evaluated agents across different tasks, while domain-specific environments and implementations remain hidden. We evaluate ten leading LLM-based agents, each of which must first interpret the user request, then choose suitable tools from a large and diverse tool pool, and iteratively interact with the environment until producing a final response."
+        },
+        {
+          "type": "para",
+          "data": "For complex requests that exceed the capabilities of a short interaction horizon, agents can benefit from increased inference-time computation—a strategy known as test-time scaling and extensively studied in the context of non-agentic reasoning (Cobbe et al., 2021; Zelikman et al., 2024; Guo et al., 2025). We focus on two primary scaling strategies: (1) sequential scaling, which extends interaction histories to support continued reasoning, reflection, and exploration; and (2) parallel scaling, which independently samples $K$ candidate trajectories and selects a single candidate to return. More concretely, effective parallel scaling requires agents not only to generate correct solutions, but also to reliably identify and choose the correct one, since real-world agents cannot present multiple responses simultaneously. Together, these settings enable a systematic study of test-time scaling behaviors in general LLM agents."
+        },
+        {
+          "type": "para",
+          "data": "Our results lead to three key conclusions. (1) Across ten leading LLMs, we observe a substantial performance drop when moving from domain-specific configurations to the general-agent setting (Figure 1(a)), with pronounced differences in robustness across model families. Among them, Claude exhibits the strongest robustness, while most other models experience performance drops of approximately 30%. (2) Sequential scaling exhibits an effective context length ceiling (context ceiling): while performance improves within a modest range of additional interaction turns, it often fluctuates or degrades thereafter. This suggests that the accumulated history eventually overwhelms the agent’s reasoning capacity, leading to instability in long-horizon tasks. (Figure 1(b)). (3) Although parallel scaling increases the theoretical upper bound of performance (past@$K$), we consistently observe a gap between this upper bound and self-choice accuracy, revealing a substantial verification gap that ultimately limits achievable performance in realistic settings (Figure 1(c)). In summary, our contributions are:"
+        },
+        {
+          "type": "para",
+          "data": "General AgentBench for Realistic Evaluation.\nWe introduce General AgentBench, a benchmark for evaluating whether agents can compose multiple skills and tools to solve open-ended requests from diverse domains under a unified framework, more closely reflecting real-world user interactions."
+        },
+        {
+          "type": "para",
+          "data": "Sequential Test-time Scaling in General Agents.\nWe study the sequential test-time scaling behavior of general agents, showing that performance improvements are bounded by an effective context ceiling, beyond which additional computation often leads to instability and performance degradation. This inherent point varies across models and domains."
+        },
+        {
+          "type": "para",
+          "data": "Parallel Test-time Scaling.\nWe analyze parallel test-time scaling and show that, despite increasing the theoretical performance upper bound (past@$K$), its practical gains are limited by a verification gap between generation and model self-choice accuracy."
+        }
+      ]
+    },
+    {
+      "title": "General AgentBench",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we introduce the construction of General AgentBench (Section 2.1) and the unified evaluation framework (Section 2.2 ). Detailed prompt templates, tool specifications, and the unified policy are deferred to the Appendix E."
+      ],
+      "subsections": [
+        {
+          "title": "Domains and Sources",
+          "level": 3,
+          "paragraphs": [
+            "Our benchmark spans four task domains: Coding, Search, Tool-use, and Reason. These domains reflect common real-world applications such as software engineering, information seeking, service workflows, and analytical reasoning, positioning General AgentBench as an initial step toward evaluating general-purpose agents in open-ended and unified settings. Table 1 summarizes the benchmark composition."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Composition of General AgentBench",
+              "headers": [],
+              "rows": [
+                [
+                  "Domain",
+                  "Dataset",
+                  "Original",
+                  "Sampled"
+                ],
+                [
+                  "Search",
+                  "BrowseComp",
+                  "1266",
+                  "124"
+                ],
+                [
+                  "WebVoyager",
+                  "643",
+                  "65"
+                ],
+                [
+                  "Coding",
+                  "SWE-Bench Verified",
+                  "500",
+                  "50"
+                ],
+                [
+                  "Terminal-Bench",
+                  "230",
+                  "80"
+                ],
+                [
+                  "Reason",
+                  "MathHay",
+                  "602",
+                  "75"
+                ],
+                [
+                  "Tool-Calling",
+                  "Tau2-Bench",
+                  "278",
+                  "50"
+                ],
+                [
+                  "MCP-Bench",
+                  "104",
+                  "52"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Our benchmark spans four task domains: Coding, Search, Tool-use, and Reason. These domains reflect common real-world applications such as software engineering, information seeking, service workflows, and analytical reasoning, positioning General AgentBench as an initial step toward evaluating general-purpose agents in open-ended and unified settings. Table 1 summarizes the benchmark composition."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Composition of General AgentBench",
+                "headers": [],
+                "rows": [
+                  [
+                    "Domain",
+                    "Dataset",
+                    "Original",
+                    "Sampled"
+                  ],
+                  [
+                    "Search",
+                    "BrowseComp",
+                    "1266",
+                    "124"
+                  ],
+                  [
+                    "WebVoyager",
+                    "643",
+                    "65"
+                  ],
+                  [
+                    "Coding",
+                    "SWE-Bench Verified",
+                    "500",
+                    "50"
+                  ],
+                  [
+                    "Terminal-Bench",
+                    "230",
+                    "80"
+                  ],
+                  [
+                    "Reason",
+                    "MathHay",
+                    "602",
+                    "75"
+                  ],
+                  [
+                    "Tool-Calling",
+                    "Tau2-Bench",
+                    "278",
+                    "50"
+                  ],
+                  [
+                    "MCP-Bench",
+                    "104",
+                    "52"
+                  ]
+                ],
+                "label": null
+              }
+            }
+          ]
+        },
+        {
+          "title": "Unified Realistic Evaluation Framework",
+          "level": 3,
+          "paragraphs": [
+            "To support realistic evaluation of general LLM agents, we design a unified framework that exposes all tasks and tools through a shared interaction interface. These choices reflect three fundamental properties of real-world agent usage: cross-domain task diversity, comprehensive skill requirements, and dynamically evolving multi-turn interactions. An overview of the framework is illustrated in Figure 2."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To support realistic evaluation of general LLM agents, we design a unified framework that exposes all tasks and tools through a shared interaction interface. These choices reflect three fundamental properties of real-world agent usage: cross-domain task diversity, comprehensive skill requirements, and dynamically evolving multi-turn interactions. An overview of the framework is illustrated in Figure 2."
+            }
+          ]
+        },
+        {
+          "title": "Experimental details",
+          "level": 3,
+          "paragraphs": [
+            "Our evaluation covers a total of ten frontier language models. Among open-source models, we include several high-performing systems such as Qwen3-235B (Yang et al., 2025) and DeepSeek-R1 (Guo et al., 2025), as well as more recent models with novel attention mechanisms, including Qwen3-Next (Qwen Team, Alibaba Inc., 2025) and DeepSeek-v3.2 (Liu et al., 2025). For proprietary models, we consider both efficiency-oriented variants (e.g., Gemini 2.5 Flash (Comanici et al., 2025)) and models optimized for complex reasoning (e.g., GPT-5 (OpenAI, 2025a) and Claude Sonnet 4.5 (Anthropic, 2025a)). We access these models via Amazon Bedrock 11https://aws.amazon.com/bedrock/pricing/ and the Hugging Face Inference API .22https://huggingface.co/docs/inference-providers/en/index For all evaluations, we fix the decoding temperature to 0.7 and ensure that each model’s native context length exceeds the maximum context length required by the benchmark."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Our evaluation covers a total of ten frontier language models. Among open-source models, we include several high-performing systems such as Qwen3-235B (Yang et al., 2025) and DeepSeek-R1 (Guo et al., 2025), as well as more recent models with novel attention mechanisms, including Qwen3-Next (Qwen Team, Alibaba Inc., 2025) and DeepSeek-v3.2 (Liu et al., 2025). For proprietary models, we consider both efficiency-oriented variants (e.g., Gemini 2.5 Flash (Comanici et al., 2025)) and models optimized for complex reasoning (e.g., GPT-5 (OpenAI, 2025a) and Claude Sonnet 4.5 (Anthropic, 2025a)). We access these models via Amazon Bedrock 11https://aws.amazon.com/bedrock/pricing/ and the Hugging Face Inference API .22https://huggingface.co/docs/inference-providers/en/index For all evaluations, we fix the decoding temperature to 0.7 and ensure that each model’s native context length exceeds the maximum context length required by the benchmark."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we introduce the construction of General AgentBench (Section 2.1) and the unified evaluation framework (Section 2.2 ). Detailed prompt templates, tool specifications, and the unified policy are deferred to the Appendix E."
+        }
+      ]
+    },
+    {
+      "title": "Main Results",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we report overall performance on General AgentBench and compare it against evaluations conducted under prior domain-specific settings to quantify the gap between specialized and general-purpose LLM agents."
+      ],
+      "subsections": [
+        {
+          "title": "Result analysis",
+          "level": 3,
+          "paragraphs": [
+            "Table 2 summarizes the results across models and domains on General AgentBench. Claude Sonnet 4.5 achieves the strongest overall performance, driven primarily by its tool-use and coding capabilities, while GPT-5 attains the highest scores in the Search and Reason domains, reflecting its strengths in information retrieval and complex reasoning. Among open-source models, DeepSeek-V3.2 outperforms both Gemini variants, demonstrating the significant scaling potential of efficient, sparse-attention architectures. Across models, performance on BrowseComp remains consistently low, indicating that retrieving rare and precise information beyond in-domain training data is still a major bottleneck for current LLM agents.",
+            "We further examine how performance changes when models transition from specialized agents operating under domain-specific contexts to general agents acting within a unified environment with shared toolsets. Figure 4 summarizes the mean degradation aggregated over all domains, while Figure 3 reports the relative performance change for each agent across domains. Most LLM agents experience substantial degradation in the general-agent setting, with average relative drops ranging from 10% to 30%. The magnitude of this degradation varies widely: for example, Gemini 2.5-Pro suffers a drop exceeding 60% in the Reason domain, falling from top-tier performance in the baseline setting to near-average performance as a general agent. In contrast, Claude Sonnet 4.5 remains notably robust, with only a 0.2% average degradation. Detailed overall results can be found in Appendix  A.2."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x6.png",
+              "alt": "Refer to caption",
+              "caption": "Performance comparison between specialized-agent and general-agent settings.Top: Absolute performance .Bottom: Relative performance degradation under the general-agent setting.",
+              "label": "S3.F4"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x7.png",
+              "alt": "Refer to caption",
+              "caption": "Test-time scaling behaviors of general LLM agents. Results are reported for five models across four domains on General AgentBench. Top: Parallel scaling expands the solution space through increased sampling. Bottom: Sequential scaling allocates additional computation via longer interaction histories, yet exhibiting unstable or diminishing returns.",
+              "label": "S3.F5"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Table 2 summarizes the results across models and domains on General AgentBench. Claude Sonnet 4.5 achieves the strongest overall performance, driven primarily by its tool-use and coding capabilities, while GPT-5 attains the highest scores in the Search and Reason domains, reflecting its strengths in information retrieval and complex reasoning. Among open-source models, DeepSeek-V3.2 outperforms both Gemini variants, demonstrating the significant scaling potential of efficient, sparse-attention architectures. Across models, performance on BrowseComp remains consistently low, indicating that retrieving rare and precise information beyond in-domain training data is still a major bottleneck for current LLM agents."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x6.png",
+                "alt": "Refer to caption",
+                "caption": "Performance comparison between specialized-agent and general-agent settings.Top: Absolute performance .Bottom: Relative performance degradation under the general-agent setting.",
+                "label": "S3.F4"
+              }
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x7.png",
+                "alt": "Refer to caption",
+                "caption": "Test-time scaling behaviors of general LLM agents. Results are reported for five models across four domains on General AgentBench. Top: Parallel scaling expands the solution space through increased sampling. Bottom: Sequential scaling allocates additional computation via longer interaction histories, yet exhibiting unstable or diminishing returns.",
+                "label": "S3.F5"
+              }
+            },
+            {
+              "type": "para",
+              "data": "We further examine how performance changes when models transition from specialized agents operating under domain-specific contexts to general agents acting within a unified environment with shared toolsets. Figure 4 summarizes the mean degradation aggregated over all domains, while Figure 3 reports the relative performance change for each agent across domains. Most LLM agents experience substantial degradation in the general-agent setting, with average relative drops ranging from 10% to 30%. The magnitude of this degradation varies widely: for example, Gemini 2.5-Pro suffers a drop exceeding 60% in the Reason domain, falling from top-tier performance in the baseline setting to near-average performance as a general agent. In contrast, Claude Sonnet 4.5 remains notably robust, with only a 0.2% average degradation. Detailed overall results can be found in Appendix  A.2."
+            }
+          ]
+        },
+        {
+          "title": "Cross-domain tool usage",
+          "level": 3,
+          "paragraphs": [
+            "Interestingly, several models, including Qwen3-Next, Deepseek-R1, and Claude, exhibit performance gains in the Search domains under the general-agent setting. Trajectory-level analysis shows that these improvements arise from effective cross-domain tool usage, where agents repurpose tools beyond their originally intended domains to support reasoning and information retrieval.\nWe take a closer look at these behaviors. Analysis of 189 search task traces from Claude Sonnet 4.5 reveals that $26$% of tasks ($50/189$) utilized specialized domain tools beyond plain web search. The most frequently used specialized tools include Google Maps APIs ($78$ calls), Paper Search across arXiv, PubMed, and Google Scholar ($60$ calls), and Hugging Face model APIs ($36$ calls). We present a case study demonstrating how domain-specific tools outperform plain web search.",
+            "We observe that the plain search baseline iteratively refines web queries across 6 turns, ultimately finding tabularisai/multilingual-sentiment-analysis with only surface-level information (“fine-tuned DistilBERT”). In contrast, the General agent system’s specialized Hugging_Face__search-models API directly queries the model hub with structured filters, returning download counts, tags, and model IDs. The subsequent Hugging_Face__get-model-info call retrieves comprehensive metadata including architecture specifications, training data scale, and official model cards—information unavailable through web search snippets.",
+            "This behavior reflects an agent’s ability to dynamically select and compose tools under minimal domain priors, capturing a more realistic upper bound on general-agent capability and highlighting the importance of evaluation settings that approximate real-world tool availability."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Interestingly, several models, including Qwen3-Next, Deepseek-R1, and Claude, exhibit performance gains in the Search domains under the general-agent setting. Trajectory-level analysis shows that these improvements arise from effective cross-domain tool usage, where agents repurpose tools beyond their originally intended domains to support reasoning and information retrieval.\nWe take a closer look at these behaviors. Analysis of 189 search task traces from Claude Sonnet 4.5 reveals that $26$% of tasks ($50/189$) utilized specialized domain tools beyond plain web search. The most frequently used specialized tools include Google Maps APIs ($78$ calls), Paper Search across arXiv, PubMed, and Google Scholar ($60$ calls), and Hugging Face model APIs ($36$ calls). We present a case study demonstrating how domain-specific tools outperform plain web search."
+            },
+            {
+              "type": "para",
+              "data": "We observe that the plain search baseline iteratively refines web queries across 6 turns, ultimately finding tabularisai/multilingual-sentiment-analysis with only surface-level information (“fine-tuned DistilBERT”). In contrast, the General agent system’s specialized Hugging_Face__search-models API directly queries the model hub with structured filters, returning download counts, tags, and model IDs. The subsequent Hugging_Face__get-model-info call retrieves comprehensive metadata including architecture specifications, training data scale, and official model cards—information unavailable through web search snippets."
+            },
+            {
+              "type": "para",
+              "data": "This behavior reflects an agent’s ability to dynamically select and compose tools under minimal domain priors, capturing a more realistic upper bound on general-agent capability and highlighting the importance of evaluation settings that approximate real-world tool availability."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we report overall performance on General AgentBench and compare it against evaluations conducted under prior domain-specific settings to quantify the gap between specialized and general-purpose LLM agents."
+        }
+      ]
+    },
+    {
+      "title": "Test-Time Scaling Evaluation",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we present a systematic study of test-time scaling behavior of general LLM agents. Section 4.1 introduces the scaling strategies, with results and findings presented in Sections 4.2 and 4.3."
+      ],
+      "subsections": [
+        {
+          "title": "Scaling Methodology",
+          "level": 3,
+          "paragraphs": [
+            "We investigate test-time scaling through two complementary paradigms: Parallel Scaling and Sequential Scaling, which correspond to distinct axes of computational allocation—breadth of exploration versus depth of exploitation. Compared with more sophisticated test-time scaling techniques such as self-correction(Madaan et al., 2023), beam search(Yao et al., 2023), or MCTS(Zhou et al., 2023a), these two strategies are the most commonly adopted and easiest to deploy in real-world agentic systems."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We investigate test-time scaling through two complementary paradigms: Parallel Scaling and Sequential Scaling, which correspond to distinct axes of computational allocation—breadth of exploration versus depth of exploitation. Compared with more sophisticated test-time scaling techniques such as self-correction(Madaan et al., 2023), beam search(Yao et al., 2023), or MCTS(Zhou et al., 2023a), these two strategies are the most commonly adopted and easiest to deploy in real-world agentic systems."
+            }
+          ]
+        },
+        {
+          "title": "Sequential Scaling",
+          "level": 3,
+          "paragraphs": [
+            "Sequential scaling exhibits behavior that departs markedly from our expectations, shown in the bottom of Figure 5. Although several models on certain benchmarks show performance improvements, such as Qwen3-235B on the Search domain and Deepseek-v3.2 on the Reason domain, most show little to no consistent improvement despite allocating additional computational resources through iterative reasoning and reflection.",
+            "We categorize sequential scaling behaviors into two distinct regimes. (1) Stagnant fluctuation: In domains such as reasoning, performance oscillates within a narrow range despite increased computation. This pattern suggests a limited capacity for agents to explore novel solution paths within extended interaction traces, coupled with a diminished ability to maintain coherence—likely due to the agent’s finite context processing capacity. (2) Saturation and degradation: In coding domains, models initially benefit from additional reasoning steps; however, beyond an important turning point, performance consistently deteriorates and fails to recover. Figure 6 shows how instance-level correctness for several data entries changes as the context length increases. We observe that agents either repeatedly succeed on queries they already handle well while failing to progress on unsuccessful cases, or exhibit unstable behavior with accuracy fluctuating between 0 and 1 across interaction steps. These observations further validate our summarization regarding the inherent limitations of sequential scaling.",
+            "To better understand how this turning point occurs, we analyze performance relative to an agent’s inherent context length—defined as the total context naturally accumulated when completing a task without artificial constraints on interaction depth. By integrating data from Qwen3-235B and Gemini 2.5-Flash (as seen in Figure 5) with new experimental results on smaller context windows, we observed a distinct performance ceiling. As shown in Figure 7, both models exhibit an initial upward trend, approaching peak performance as they reach their inherent context limits. However, once the accumulated context passes a specific threshold ( for example, approximately 112K for Qwen3-235B and 96K for Gemini 2.5-Flash in the search domain), performance typically plateaus or begins to degrade. In these instances, additional computation and time yield no further gains. This suggests the existence of a “context ceiling”: a maximum effective context length under sequential scaling, beyond which raw interaction history offers diminishing or zero practical returns. Notably, this ceiling varies across domains, reflecting the unique demands each task places on context utilization and computational efficiency.",
+            "Taken together, these results indicate that simply allocating more computation by extending raw interaction histories rarely leads to meaningful performance gains, contradicting previous observations in non-agentic settings (Muennighoff et al., 2025). Long-horizon agentic tasks expose fundamental challenges in context utilization and reasoning stability, highlighting the need for more effective mechanisms for context management and reasoning control under sequential scaling (Zhang et al., 2025c; Anthropic, 2025c)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x8.png",
+              "alt": "Refer to caption",
+              "caption": "Instance-level correctness dynamics under sequential scaling. We randomly sample 10 instances from the reasoning domain and track their correctness across increasing context lengths. Red indicates incorrect predictions and blue indicates correct ones. Most instances exhibit stagnant or oscillatory behavior, repeating prior successes while failing on unresolved cases, with some fluctuating between correct and incorrect across steps.",
+              "label": "S4.F6"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x9.png",
+              "alt": "Refer to caption",
+              "caption": "Sequential scaling behavior of Gemini 2.5-Flash and Qwen3-235B across domains, with inherent context lengths indicated by the dashed line. Performance scales positively as interaction history approaches and slightly exceeds the inherent context; however, it saturates or degrades once the context extends significantly beyond this threshold. This limit represents the “context ceiling” of sequential scaling, beyond which further history yields diminishing returns.",
+              "label": "S4.F7"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x10.png",
+              "alt": "Refer to caption",
+              "caption": "Verification gap between generation and self-choice. Across four domains, we observe a consistent gap between solution generation and verification: as the number of samples increases, correct solutions appear more frequently in the sampled set, yet models often fail to identify and select them. The dashed and dotted curves represent two self-choice strategies, while the diamond denotes a stronger evaluator, GPT-5.",
+              "label": "S4.F8"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x8.png",
+                "alt": "Refer to caption",
+                "caption": "Instance-level correctness dynamics under sequential scaling. We randomly sample 10 instances from the reasoning domain and track their correctness across increasing context lengths. Red indicates incorrect predictions and blue indicates correct ones. Most instances exhibit stagnant or oscillatory behavior, repeating prior successes while failing on unresolved cases, with some fluctuating between correct and incorrect across steps.",
+                "label": "S4.F6"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Sequential scaling exhibits behavior that departs markedly from our expectations, shown in the bottom of Figure 5. Although several models on certain benchmarks show performance improvements, such as Qwen3-235B on the Search domain and Deepseek-v3.2 on the Reason domain, most show little to no consistent improvement despite allocating additional computational resources through iterative reasoning and reflection."
+            },
+            {
+              "type": "para",
+              "data": "We categorize sequential scaling behaviors into two distinct regimes. (1) Stagnant fluctuation: In domains such as reasoning, performance oscillates within a narrow range despite increased computation. This pattern suggests a limited capacity for agents to explore novel solution paths within extended interaction traces, coupled with a diminished ability to maintain coherence—likely due to the agent’s finite context processing capacity. (2) Saturation and degradation: In coding domains, models initially benefit from additional reasoning steps; however, beyond an important turning point, performance consistently deteriorates and fails to recover. Figure 6 shows how instance-level correctness for several data entries changes as the context length increases. We observe that agents either repeatedly succeed on queries they already handle well while failing to progress on unsuccessful cases, or exhibit unstable behavior with accuracy fluctuating between 0 and 1 across interaction steps. These observations further validate our summarization regarding the inherent limitations of sequential scaling."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x9.png",
+                "alt": "Refer to caption",
+                "caption": "Sequential scaling behavior of Gemini 2.5-Flash and Qwen3-235B across domains, with inherent context lengths indicated by the dashed line. Performance scales positively as interaction history approaches and slightly exceeds the inherent context; however, it saturates or degrades once the context extends significantly beyond this threshold. This limit represents the “context ceiling” of sequential scaling, beyond which further history yields diminishing returns.",
+                "label": "S4.F7"
+              }
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x10.png",
+                "alt": "Refer to caption",
+                "caption": "Verification gap between generation and self-choice. Across four domains, we observe a consistent gap between solution generation and verification: as the number of samples increases, correct solutions appear more frequently in the sampled set, yet models often fail to identify and select them. The dashed and dotted curves represent two self-choice strategies, while the diamond denotes a stronger evaluator, GPT-5.",
+                "label": "S4.F8"
+              }
+            },
+            {
+              "type": "para",
+              "data": "To better understand how this turning point occurs, we analyze performance relative to an agent’s inherent context length—defined as the total context naturally accumulated when completing a task without artificial constraints on interaction depth. By integrating data from Qwen3-235B and Gemini 2.5-Flash (as seen in Figure 5) with new experimental results on smaller context windows, we observed a distinct performance ceiling. As shown in Figure 7, both models exhibit an initial upward trend, approaching peak performance as they reach their inherent context limits. However, once the accumulated context passes a specific threshold ( for example, approximately 112K for Qwen3-235B and 96K for Gemini 2.5-Flash in the search domain), performance typically plateaus or begins to degrade. In these instances, additional computation and time yield no further gains. This suggests the existence of a “context ceiling”: a maximum effective context length under sequential scaling, beyond which raw interaction history offers diminishing or zero practical returns. Notably, this ceiling varies across domains, reflecting the unique demands each task places on context utilization and computational efficiency."
+            },
+            {
+              "type": "para",
+              "data": "Taken together, these results indicate that simply allocating more computation by extending raw interaction histories rarely leads to meaningful performance gains, contradicting previous observations in non-agentic settings (Muennighoff et al., 2025). Long-horizon agentic tasks expose fundamental challenges in context utilization and reasoning stability, highlighting the need for more effective mechanisms for context management and reasoning control under sequential scaling (Zhang et al., 2025c; Anthropic, 2025c)."
+            }
+          ]
+        },
+        {
+          "title": "Parallel Scaling",
+          "level": 3,
+          "paragraphs": [
+            "We observe a monotonic increase in pass@K as the number of sampled trajectories grows (Figure 5, top). Increasing $K$ from 1 to 4 yields an average improvement of roughly 50%, with DeepSeek-V3.2 exhibiting the largest gains—approaching a twofold improvement in both coding and reasoning domains.",
+            "However, pass@K only reflects an idealized upper bound. In practice, the effectiveness of parallel scaling depends on an agent’s ability to evaluate and select among its own sampled trajectories, which is captured by self-choice performance. As shown by the gap between the solid lines (pass@K) and the dashed or dotted lines (self-choice) in Figure 8, self-choice performance consistently lags behind the pass@K upper bound regardless of the strategy. In some cases, self-choice performance even degrades as $K$ increases. While the coding domain exhibits the smallest gap between pass@K and self-choice, in most settings self-choice gains saturate quickly and fail to track the continued improvement of pass@K.",
+            "To examine whether this gap stems from limited verifier capability, we replace the model’s internal self-judgment with an external verifier, GPT-5, and perform point-wise evaluation of sampled trajectories from all models. As shown by the diamond line in Figure 8, GPT-5 generally underperforms models’ own self-judgment. Notably, even at $K=1$, GPT-5 occasionally misclassifies correct trajectories as incorrect, introducing a non-trivial gap between pass@1 and GPT-5–based verification. We hypothesize that this effect arises from solution familiarity: models are better at evaluating their own generations, which align closely with their internal reasoning patterns, whereas external verifiers may struggle to accurately assess unfamiliar execution traces.",
+            "Overall, these results reveal a fundamental gap between models’ generation capacity and their ability to reliably select correct solutions, which ultimately limits the practical utility of parallel scaling."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We observe a monotonic increase in pass@K as the number of sampled trajectories grows (Figure 5, top). Increasing $K$ from 1 to 4 yields an average improvement of roughly 50%, with DeepSeek-V3.2 exhibiting the largest gains—approaching a twofold improvement in both coding and reasoning domains."
+            },
+            {
+              "type": "para",
+              "data": "However, pass@K only reflects an idealized upper bound. In practice, the effectiveness of parallel scaling depends on an agent’s ability to evaluate and select among its own sampled trajectories, which is captured by self-choice performance. As shown by the gap between the solid lines (pass@K) and the dashed or dotted lines (self-choice) in Figure 8, self-choice performance consistently lags behind the pass@K upper bound regardless of the strategy. In some cases, self-choice performance even degrades as $K$ increases. While the coding domain exhibits the smallest gap between pass@K and self-choice, in most settings self-choice gains saturate quickly and fail to track the continued improvement of pass@K."
+            },
+            {
+              "type": "para",
+              "data": "To examine whether this gap stems from limited verifier capability, we replace the model’s internal self-judgment with an external verifier, GPT-5, and perform point-wise evaluation of sampled trajectories from all models. As shown by the diamond line in Figure 8, GPT-5 generally underperforms models’ own self-judgment. Notably, even at $K=1$, GPT-5 occasionally misclassifies correct trajectories as incorrect, introducing a non-trivial gap between pass@1 and GPT-5–based verification. We hypothesize that this effect arises from solution familiarity: models are better at evaluating their own generations, which align closely with their internal reasoning patterns, whereas external verifiers may struggle to accurately assess unfamiliar execution traces."
+            },
+            {
+              "type": "para",
+              "data": "Overall, these results reveal a fundamental gap between models’ generation capacity and their ability to reliably select correct solutions, which ultimately limits the practical utility of parallel scaling."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we present a systematic study of test-time scaling behavior of general LLM agents. Section 4.1 introduces the scaling strategies, with results and findings presented in Sections 4.2 and 4.3."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [
+        "Prior work on LLM agents spans three closely related directions: benchmarking agentic abilities, developing agent models and frameworks, and exploring effective scaling methods. Most agentic benchmarks evaluate specialized agents in domain-specific settings, where tasks, interaction protocols, and tool access are tailored to specific skills. Representative ones cover software engineering (e.g., SWE-bench (Jimenez et al., 2023) and its variants (Aleithan et al., 2024; Zhang et al., 2025b; Yang et al., 2024a)), web navigation and interaction (e.g., WebShopcite (Yao et al., 2022a), Mind2Web (Deng et al., 2023), WebArena (Zhou et al., 2023b), WebVoyager (He et al., 2024)), and tool use with curated APIs (e.g., ToolLLM (Qin et al., 2023), API-Bank (Li et al., 2023), BFCL (Patil et al., 2025), StableToolBench (Guo et al., 2024)). Broader suites such as $\\tau$-bench (Yao et al., 2024), AgentBench(Barres et al., 2025), and GAIA (Mialon et al., 2023) incorporate multi-turn interaction across multiple task categories , while OSWorld (Xie et al., 2024), OSWorld-G (Xie et al., 2025), and AndroidWorld (Rawles et al., 2024) evaluate agents operating in real desktop and mobile systems.",
+        "In parallel, substantial effort has focused on building general-purpose agents capable of planning, acting, and invoking tools across heterogeneous tasks. Early methods such as ReAct (Yao et al., 2022b), Reflexion (Shinn et al., 2023), Toolformer (Schick et al., 2023), and HuggingGPT (Shen et al., 2023) introduce structured reasoning–action trajectories, reflection, and learned tool invocation. More recent work emphasizes scalable agent frameworks and deployment platforms supporting multi-agent coordination and rich tool ecosystems, including OpenAgents (Xie et al., 2023), AgentVerse (Chen et al., 2024b), AgentScope (Gao et al., 2024), and OpenCUA (Wang et al., 2025a). Industry systems—such as agents built on Claude (Anthropic, 2025b), Microsoft (Microsoft, 2025), OpenAI (OpenAI, 2025), Qwen (QwenLM, 2023), Kimi (Moonshot AI, 2026), and Gemini (Deepmind, 2025)—further demonstrate the practical importance of general agents in real-world deployments.",
+        "A complementary line of research studies test-time scaling, allocating additional inference-time computation to improve agent performance. Chain-of-thought prompting (Wei et al., 2022) and self-consistency (Wang et al., 2022) show that deeper reasoning and multi-sample decoding can substantially boost accuracy. More explicit approaches perform search or refinement over solution paths, including Tree-of-Thoughts (Yao et al., 2023), MCTS-based agent planning such as LATS (Zhou et al., 2023a), and iterative refinement methods like Reflexion (Shinn et al., 2023) and Self-Refine (Madaan et al., 2023). More recently, “internal scaling” trains models to autonomously decide how much inference computation to allocate and when to terminate reasoning, shifting control from external orchestration toward model-internal deliberation (Guo et al., 2025; OpenAI, 2024a). Verifier-based inference further augments sampling or search with learned ranking or rejection, with process-level supervision improving reliability in mathematical reasoning (Lightman et al., 2023; Li et al., 2024; Hosseini et al., 2024; Wang et al., 2024c)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Prior work on LLM agents spans three closely related directions: benchmarking agentic abilities, developing agent models and frameworks, and exploring effective scaling methods. Most agentic benchmarks evaluate specialized agents in domain-specific settings, where tasks, interaction protocols, and tool access are tailored to specific skills. Representative ones cover software engineering (e.g., SWE-bench (Jimenez et al., 2023) and its variants (Aleithan et al., 2024; Zhang et al., 2025b; Yang et al., 2024a)), web navigation and interaction (e.g., WebShopcite (Yao et al., 2022a), Mind2Web (Deng et al., 2023), WebArena (Zhou et al., 2023b), WebVoyager (He et al., 2024)), and tool use with curated APIs (e.g., ToolLLM (Qin et al., 2023), API-Bank (Li et al., 2023), BFCL (Patil et al., 2025), StableToolBench (Guo et al., 2024)). Broader suites such as $\\tau$-bench (Yao et al., 2024), AgentBench(Barres et al., 2025), and GAIA (Mialon et al., 2023) incorporate multi-turn interaction across multiple task categories , while OSWorld (Xie et al., 2024), OSWorld-G (Xie et al., 2025), and AndroidWorld (Rawles et al., 2024) evaluate agents operating in real desktop and mobile systems."
+        },
+        {
+          "type": "para",
+          "data": "In parallel, substantial effort has focused on building general-purpose agents capable of planning, acting, and invoking tools across heterogeneous tasks. Early methods such as ReAct (Yao et al., 2022b), Reflexion (Shinn et al., 2023), Toolformer (Schick et al., 2023), and HuggingGPT (Shen et al., 2023) introduce structured reasoning–action trajectories, reflection, and learned tool invocation. More recent work emphasizes scalable agent frameworks and deployment platforms supporting multi-agent coordination and rich tool ecosystems, including OpenAgents (Xie et al., 2023), AgentVerse (Chen et al., 2024b), AgentScope (Gao et al., 2024), and OpenCUA (Wang et al., 2025a). Industry systems—such as agents built on Claude (Anthropic, 2025b), Microsoft (Microsoft, 2025), OpenAI (OpenAI, 2025), Qwen (QwenLM, 2023), Kimi (Moonshot AI, 2026), and Gemini (Deepmind, 2025)—further demonstrate the practical importance of general agents in real-world deployments."
+        },
+        {
+          "type": "para",
+          "data": "A complementary line of research studies test-time scaling, allocating additional inference-time computation to improve agent performance. Chain-of-thought prompting (Wei et al., 2022) and self-consistency (Wang et al., 2022) show that deeper reasoning and multi-sample decoding can substantially boost accuracy. More explicit approaches perform search or refinement over solution paths, including Tree-of-Thoughts (Yao et al., 2023), MCTS-based agent planning such as LATS (Zhou et al., 2023a), and iterative refinement methods like Reflexion (Shinn et al., 2023) and Self-Refine (Madaan et al., 2023). More recently, “internal scaling” trains models to autonomously decide how much inference computation to allocate and when to terminate reasoning, shifting control from external orchestration toward model-internal deliberation (Guo et al., 2025; OpenAI, 2024a). Verifier-based inference further augments sampling or search with learned ranking or rejection, with process-level supervision improving reliability in mathematical reasoning (Lightman et al., 2023; Li et al., 2024; Hosseini et al., 2024; Wang et al., 2024c)."
+        }
+      ]
+    },
+    {
+      "title": "Conclusions",
+      "level": 2,
+      "paragraphs": [
+        "We present General AgentBench, a unified benchmark for evaluating LLM agents under realistic, multi-domain interactions where agents must infer intent, select tools from a shared pool, and act end-to-end. Across ten leading models, we find a substantial robustness gap when moving from domain-specific to general-agent evaluation. Our test-time scaling analysis reveals two fundamental limits: sequential scaling is bounded by an context ceiling, beyond which longer interactions become unstable, and parallel scaling delivers limited practical gains due to a persistent verification gap between generation and self-choice. We hope General AgentBench enables realistic assessment and guides progress toward robust, scalable general agents."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We present General AgentBench, a unified benchmark for evaluating LLM agents under realistic, multi-domain interactions where agents must infer intent, select tools from a shared pool, and act end-to-end. Across ten leading models, we find a substantial robustness gap when moving from domain-specific to general-agent evaluation. Our test-time scaling analysis reveals two fundamental limits: sequential scaling is bounded by an context ceiling, beyond which longer interactions become unstable, and parallel scaling delivers limited practical gains due to a persistent verification gap between generation and self-choice. We hope General AgentBench enables realistic assessment and guides progress toward robust, scalable general agents."
+        }
+      ]
+    },
+    {
+      "title": "Impact Statement",
+      "level": 2,
+      "paragraphs": [
+        "This paper introduces General AgentBench, a benchmark for evaluating large language model agents as general-purpose systems under unified and realistic interaction settings. By exposing agents to diverse tasks and tools within a single framework, it enables more consistent and transparent assessment of agents’ abilities to interpret open-ended requests, select appropriate tools, and scale inference-time computation across domains. We expect this benchmark to support the development and diagnosis of more robust general-purpose agents. We also acknowledge potential risks. Unified evaluation and test-time scaling may favor computationally intensive or proprietary models, and unreliable self-choice under parallel scaling may lead to unstable or misleading agent behavior if applied naively in deployment. As general-purpose agents are increasingly integrated into real-world applications, failures in long-horizon reasoning, tool use, or self-verification may affect reliability and user trust. We emphasize that General AgentBench is intended for research and evaluation purposes. The community shares a responsibility to interpret results carefully and to pair scaling-based improvements with stronger verification, transparency, and safety considerations."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "This paper introduces General AgentBench, a benchmark for evaluating large language model agents as general-purpose systems under unified and realistic interaction settings. By exposing agents to diverse tasks and tools within a single framework, it enables more consistent and transparent assessment of agents’ abilities to interpret open-ended requests, select appropriate tools, and scale inference-time computation across domains. We expect this benchmark to support the development and diagnosis of more robust general-purpose agents. We also acknowledge potential risks. Unified evaluation and test-time scaling may favor computationally intensive or proprietary models, and unreliable self-choice under parallel scaling may lead to unstable or misleading agent behavior if applied naively in deployment. As general-purpose agents are increasingly integrated into real-world applications, failures in long-horizon reasoning, tool use, or self-verification may affect reliability and user trust. We emphasize that General AgentBench is intended for research and evaluation purposes. The community shares a responsibility to interpret results carefully and to pair scaling-based improvements with stronger verification, transparency, and safety considerations."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Performace comparsion.",
+      "label": "S1.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Performace comparsion.",
+      "label": "S1.F1.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "(b) Sequential test-time scaling.",
+      "label": "S1.F1.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "(c) Parallel test-time scaling.",
+      "label": "S1.F1.sf3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Illustration of how General AgentBench covers a wide range of task categories while providing a unified interface to simulate real-world user interactions. The green region indicates the specific task currently being handled by the agent (e.g., a search task). Orange boxes denote other clients and servers that remain active and responsive but are not directly involved in the current interaction. Red indicates that other domain-specific data are excluded.",
+      "label": "S2.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "Relative performance change across domains from the Baseline (BB) specialized agent setting to the general agent (GG) setting with unified context and tools. Negative values indicate performance degradation under the General AgentBench.",
+      "label": "S2.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "Performance comparison between specialized-agent and general-agent settings.Top: Absolute performance .Bottom: Relative performance degradation under the general-agent setting.",
+      "label": "S3.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Test-time scaling behaviors of general LLM agents. Results are reported for five models across four domains on General AgentBench. Top: Parallel scaling expands the solution space through increased sampling. Bottom: Sequential scaling allocates additional computation via longer interaction histories, yet exhibiting unstable or diminishing returns.",
+      "label": "S3.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "Instance-level correctness dynamics under sequential scaling. We randomly sample 10 instances from the reasoning domain and track their correctness across increasing context lengths. Red indicates incorrect predictions and blue indicates correct ones. Most instances exhibit stagnant or oscillatory behavior, repeating prior successes while failing on unresolved cases, with some fluctuating between correct and incorrect across steps.",
+      "label": "S4.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "Sequential scaling behavior of Gemini 2.5-Flash and Qwen3-235B across domains, with inherent context lengths indicated by the dashed line. Performance scales positively as interaction history approaches and slightly exceeds the inherent context; however, it saturates or degrades once the context extends significantly beyond this threshold. This limit represents the “context ceiling” of sequential scaling, beyond which further history yields diminishing returns.",
+      "label": "S4.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x10.png",
+      "alt": "Refer to caption",
+      "caption": "Verification gap between generation and self-choice. Across four domains, we observe a consistent gap between solution generation and verification: as the number of samples increases, correct solutions appear more frequently in the sampled set, yet models often fail to identify and select them. The dashed and dotted curves represent two self-choice strategies, while the diamond denotes a stronger evaluator, GPT-5.",
+      "label": "S4.F8"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x11.png",
+      "alt": "Refer to caption",
+      "caption": "Pairwise correlation between static long-context benchmarks and agentic domains. “All” denotes the average performance across the search, code, reasoning, and tool-use domains.",
+      "label": "A1.F9"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x12.png",
+      "alt": "Refer to caption",
+      "caption": "Pairwise correlation between models.",
+      "label": "A1.F10"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x13.png",
+      "alt": "Refer to caption",
+      "caption": "Comparison of attention behaviors under the General AgentBench setting. Top: Qwen3-235B (full attention). Bottom: Qwen3-Next (hybrid linear attention).",
+      "label": "A2.F11"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x13.png",
+      "alt": "Refer to caption",
+      "caption": null,
+      "label": "A2.F11.1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.18998/assets/x14.png",
+      "alt": "Refer to caption",
+      "caption": null,
+      "label": "A2.F11.2"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Composition of General AgentBench",
+      "headers": [],
+      "rows": [
+        [
+          "Domain",
+          "Dataset",
+          "Original",
+          "Sampled"
+        ],
+        [
+          "Search",
+          "BrowseComp",
+          "1266",
+          "124"
+        ],
+        [
+          "WebVoyager",
+          "643",
+          "65"
+        ],
+        [
+          "Coding",
+          "SWE-Bench Verified",
+          "500",
+          "50"
+        ],
+        [
+          "Terminal-Bench",
+          "230",
+          "80"
+        ],
+        [
+          "Reason",
+          "MathHay",
+          "602",
+          "75"
+        ],
+        [
+          "Tool-Calling",
+          "Tau2-Bench",
+          "278",
+          "50"
+        ],
+        [
+          "MCP-Bench",
+          "104",
+          "52"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Main results on General AgentBench. Benchmarks are grouped by domain. Avg. denotes the mean score across all available benchmarks for each model. Bold indicates the best score.",
+      "headers": [],
+      "rows": [
+        [
+          "Models",
+          "Search",
+          "Code",
+          "Reason",
+          "Tool-use",
+          "Avg."
+        ],
+        [
+          "BrowseComp",
+          "WebVoyager",
+          "SWE-Bench",
+          "Terminal-Bench",
+          "MathHay",
+          "Tau2-Bench",
+          "MCP-Bench"
+        ],
+        [
+          "Open-Source",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "GPT-OSS-120B",
+          "4.0",
+          "27.7",
+          "12.0",
+          "6.3",
+          "38.7",
+          "26.0",
+          "63.3",
+          "25.4"
+        ],
+        [
+          "Qwen3-235B-A22B",
+          "8.9",
+          "30.8",
+          "20.4",
+          "23.8",
+          "32.0",
+          "38.3",
+          "66.1",
+          "31.5"
+        ],
+        [
+          "Qwen3-Next",
+          "10.5",
+          "35.4",
+          "18.0",
+          "8.8",
+          "42.0",
+          "48.9",
+          "64.6",
+          "32.6"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "19.4",
+          "46.2",
+          "31.8",
+          "22.2",
+          "33.3",
+          "54.0",
+          "66.0",
+          "39.0"
+        ],
+        [
+          "DeepSeek-R1",
+          "9.7",
+          "43.1",
+          "14.0",
+          "8.8",
+          "46.7",
+          "17.1",
+          "62.2",
+          "28.8"
+        ],
+        [
+          "Proprietary",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Gemini 2.5-Flash",
+          "6.5",
+          "32.3",
+          "14.0",
+          "20.0",
+          "36.0",
+          "38.3",
+          "66.6",
+          "30.5"
+        ],
+        [
+          "Gemini 2.5-Pro",
+          "8.9",
+          "46.2",
+          "26.0",
+          "27.5",
+          "24.0",
+          "46.0",
+          "67.2",
+          "35.1"
+        ],
+        [
+          "Claude Haiku 4.5",
+          "17.7",
+          "47.7",
+          "56.0",
+          "25.0",
+          "34.7",
+          "44.0",
+          "69.0",
+          "42.0"
+        ],
+        [
+          "Claude Sonnet 4.5",
+          "23.1",
+          "56.9",
+          "54.0",
+          "45.0",
+          "36.0",
+          "48.0",
+          "72.9",
+          "48.0"
+        ],
+        [
+          "GPT-5",
+          "27.4",
+          "61.5",
+          "36.0",
+          "41.3",
+          "64.0",
+          "32.0",
+          "59.1",
+          "45.9"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Main Results on General AgentBench. We report performance in the Baseline (BB) and General (GG) settings. Δ%\\Delta\\% represents the relative change. The overall average scores (AvgB,AvgG\\text{Avg}_{B},\\text{Avg}_{G}) and the mean relative degradation are averaged across four domains instead of each benchmark. Bold text indicates the best performance, while underlining denotes the second best; red highlights performance degradation.",
+      "headers": [],
+      "rows": [
+        [
+          "Models",
+          "Search",
+          "Code",
+          "Reason",
+          "Tool-Call",
+          "Overall Avg.",
+          "Avg. Δ%\\Delta\\%"
+        ],
+        [
+          "BB",
+          "GG",
+          "Δ%\\Delta\\%",
+          "BB",
+          "GG",
+          "Δ%\\Delta\\%",
+          "BB",
+          "GG",
+          "Δ%\\Delta\\%",
+          "BB",
+          "GG",
+          "Δ%\\Delta\\%",
+          "AvgB\\text{Avg}_{B}",
+          "AvgG\\text{Avg}_{G}"
+        ],
+        [
+          "Open-Source",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "GPT-OSS-120B",
+          "17.6",
+          "12.1",
+          "-31.3",
+          "16.9",
+          "8.5",
+          "-49.7",
+          "46.7",
+          "38.7",
+          "-17.1",
+          "65.2",
+          "45.0",
+          "-31.0",
+          "36.6",
+          "26.1",
+          "-28.7"
+        ],
+        [
+          "Qwen3-235B-A22B",
+          "21.7",
+          "16.4",
+          "-24.4",
+          "36.2",
+          "22.5",
+          "-37.8",
+          "45.3",
+          "32.0",
+          "-29.4",
+          "62.6",
+          "52.5",
+          "-16.1",
+          "41.5",
+          "30.9",
+          "-25.5"
+        ],
+        [
+          "Qwen3-Next",
+          "16.1",
+          "19.1",
+          "+18.6",
+          "22.3",
+          "12.3",
+          "-44.8",
+          "44.0",
+          "42.0",
+          "-4.5",
+          "63.3",
+          "56.9",
+          "-10.1",
+          "36.4",
+          "32.6",
+          "-10.4"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "34.6",
+          "28.6",
+          "-17.3",
+          "32.3",
+          "25.9",
+          "-19.8",
+          "34.7",
+          "33.3",
+          "-4.0",
+          "61.8",
+          "60.1",
+          "-2.8",
+          "40.9",
+          "37.0",
+          "-9.5"
+        ],
+        [
+          "DeepSeek-R1",
+          "16.6",
+          "21.2",
+          "+27.7",
+          "23.1",
+          "10.8",
+          "-52.2",
+          "47.3",
+          "46.7",
+          "-1.3",
+          "44.7",
+          "40.1",
+          "-10.3",
+          "32.9",
+          "29.7",
+          "-9.8"
+        ],
+        [
+          "Proprietary",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Gemini 2.5-Flash",
+          "21.1",
+          "15.4",
+          "-27.0",
+          "30.0",
+          "17.7",
+          "-41.0",
+          "60.0",
+          "36.0",
+          "-40.0",
+          "66.0",
+          "52.7",
+          "-20.2",
+          "44.3",
+          "30.5",
+          "-31.2"
+        ],
+        [
+          "Gemini 2.5-Pro",
+          "23.4",
+          "21.7",
+          "-7.3",
+          "26.9",
+          "26.9",
+          "0.0",
+          "61.3",
+          "24.0",
+          "-60.8",
+          "66.1",
+          "56.8",
+          "-14.1",
+          "44.4",
+          "32.4",
+          "-27.2"
+        ],
+        [
+          "Claude Haiku 4.5",
+          "23.6",
+          "28.0",
+          "+18.6",
+          "41.5",
+          "36.9",
+          "-11.1",
+          "54.7",
+          "34.7",
+          "-36.6",
+          "64.5",
+          "56.7",
+          "-12.1",
+          "46.1",
+          "39.1",
+          "-15.2"
+        ],
+        [
+          "Claude Sonnet 4.5",
+          "26.1",
+          "34.7",
+          "+33.0",
+          "49.2",
+          "48.5",
+          "-1.4",
+          "32.0",
+          "36.0",
+          "+12.5",
+          "73.0",
+          "60.7",
+          "-16.8",
+          "45.1",
+          "45.0",
+          "-0.2"
+        ],
+        [
+          "GPT-5",
+          "55.8",
+          "39.1",
+          "-29.9",
+          "45.4",
+          "39.3",
+          "-13.4",
+          "64.0",
+          "64.0",
+          "0.0",
+          "78.3",
+          "45.8",
+          "-41.5",
+          "60.9",
+          "47.1",
+          "-22.7"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Performance on Traditional Long-Context Benchmarks. We report scores across three established benchmarks focusing on retrieval and single-turn comprehension. Bold indicates the best performance in each category.",
+      "headers": [],
+      "rows": [
+        [
+          "Models",
+          "LongBench",
+          "HELMET",
+          "MRCR"
+        ],
+        [
+          "Open-Source",
+          "",
+          "",
+          ""
+        ],
+        [
+          "GPT-OSS-120B",
+          "47.8",
+          "12.9",
+          "32.8"
+        ],
+        [
+          "Qwen3-235B-A22B",
+          "58.3",
+          "40.8",
+          "40.6"
+        ],
+        [
+          "Qwen3-Next",
+          "53.1",
+          "26.3",
+          "27.9"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "50.3",
+          "48.0",
+          "33.2"
+        ],
+        [
+          "DeepSeek-R1",
+          "58.3",
+          "36.9",
+          "39.2"
+        ],
+        [
+          "Frontier",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Gemini 2.5-Flash",
+          "62.1",
+          "27.8",
+          "67.4"
+        ],
+        [
+          "Gemini 2.5-Pro",
+          "63.3",
+          "63.1",
+          "80.0"
+        ],
+        [
+          "Claude Haiku 4.5",
+          "55.3",
+          "50.4",
+          "33.3"
+        ],
+        [
+          "Claude Sonnet 4.5",
+          "61.8",
+          "49.2",
+          "35.5"
+        ],
+        [
+          "GPT-5",
+          "64.6",
+          "51.6",
+          "79.1"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Taxonomy of Existing Long-Context Benchmarks. Unlike static evaluation paradigms, Agentic LongBench introduces multi-turn dynamics and sequential reasoning over expansive contexts.",
+      "headers": [],
+      "rows": [
+        [
+          "Task Category",
+          "Sub-category",
+          "Representative Benchmarks / Papers"
+        ],
+        [
+          "Long Document QA",
+          "Single/Multi-Doc Understanding",
+          "NarrativeQA (Kočiskỳ et al., 2018), 2WikiMultihopQA (Ho et al., 2020), Loong (Wang et al., 2024b)"
+        ],
+        [
+          "",
+          "Long Dialogue Understanding",
+          "MeetingBank (Hu et al., 2023), CharacterChat (Tu et al., 2023)"
+        ],
+        [
+          "",
+          "Code Understanding",
+          "RepoBench (Liu et al., 2023a), CrossCodeEval (Ding et al., 2023)"
+        ],
+        [
+          "",
+          "Structured Data Understanding",
+          "TabFact (Chen et al., 2019), WikiTableQuestions (Kweon et al., 2023), LongBench (Bai et al., 2024) (L-Data)"
+        ],
+        [
+          "Summarization",
+          "Global Information Aggregation",
+          "GovReport (Huang et al., 2021), Multi-News (Fabbri et al., 2019), ZeroSCROLLS (Shaham et al., 2023)"
+        ],
+        [
+          "Many-Shot",
+          "In-Context Learning",
+          "MIR-Bench (Yan et al., 2025), Many-Shot ICL (Agarwal et al., 2024)"
+        ],
+        [
+          "Retrieval",
+          "Key-Value Retrieval",
+          "Needle In A Haystack (Kamradt, 2023), RULER (Hsieh et al., 2024), MRCR (OpenAI, 2025b), BABILong 2024"
+        ],
+        [
+          "",
+          "Retrieval-Augmented Gen (RAG)",
+          "RAGBench (Friel et al., 2024), RGB (Chen et al., 2024a), RECALL (Liu et al., 2023c)"
+        ],
+        [
+          "Reranking",
+          "Passage Reranking",
+          "BEIR (Thakur et al., 2021), MTEB (Muennighoff et al., 2023) (Reranking Selection)"
+        ],
+        [
+          "Citation Gen",
+          "Generation with Citations",
+          "ALCE (Gao et al., 2023) (ASQA/ELI5), LongCite (Zhang et al., 2025a)"
+        ],
+        [
+          "\\rowcolor[gray]0.9 Agentic",
+          "Multi-turn Reasoning",
+          "SWE-Bench (Jimenez et al., 2023), BrowseComp (Wei et al., 2025), OSWorld (Xie et al., 2024), General AgentBench (This Work)"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Figure 11: Comparison of attention behaviors under the General AgentBench setting. Top: Qwen3-235B (full attention). Bottom: Qwen3-Next (hybrid linear attention).",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Input",
+          "Cached Input",
+          "Output"
+        ],
+        [
+          "Gemini-2.5-Flash",
+          "0.30",
+          "0.03",
+          "2.50"
+        ],
+        [
+          "Gemini-2.5-Pro",
+          "1.25",
+          "0.125",
+          "10.00"
+        ],
+        [
+          "GPT-5",
+          "1.25",
+          "0.125",
+          "10.00"
+        ],
+        [
+          "Claude-Haiku 4.5",
+          "1.00",
+          "0.50",
+          "5.00"
+        ],
+        [
+          "Claude-Sonnet 4.5",
+          "3.00",
+          "3.75",
+          "15.00"
+        ],
+        [
+          "gpt-oss-120B",
+          "0.15",
+          "0.075",
+          "0.60"
+        ],
+        [
+          "Deepseek-R1",
+          "1.35",
+          "–",
+          "5.40"
+        ],
+        [
+          "Deepseek-V3.2",
+          "0.28",
+          "–",
+          "0.42"
+        ],
+        [
+          "Qwen3-235B",
+          "0.22",
+          "0.11",
+          "0.88"
+        ],
+        [
+          "Qwen3-Next",
+          "0.15",
+          "–",
+          "1.50"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Unit API prices (USD per 1M tokens) used in our cost estimation.",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Search",
+          "MathHay",
+          "SWEBench",
+          "MCPBench",
+          "Tau2Bench",
+          "TerminalBench",
+          "Total"
+        ],
+        [
+          "Gemini-2.5-Flash",
+          "$193",
+          "$70.9",
+          "$12719",
+          "$122",
+          "$62.2",
+          "$826",
+          "$13993"
+        ],
+        [
+          "DeepSeek-R1",
+          "$5188",
+          "$157",
+          "$3675",
+          "$492",
+          "$202",
+          "$1505",
+          "$11218"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "$369",
+          "$38.8",
+          "$7.80",
+          "$88.4",
+          "$54.4",
+          "$412",
+          "$970"
+        ],
+        [
+          "Qwen3-235B",
+          "$1254",
+          "$41.4",
+          "$1286",
+          "$120",
+          "$55.5",
+          "$409",
+          "$3166"
+        ],
+        [
+          "Qwen3-Next",
+          "$25.3",
+          "$9.52",
+          "$3.38",
+          "$21.2",
+          "$14.9",
+          "$154",
+          "$229"
+        ],
+        [
+          "Total",
+          "$7028",
+          "$317",
+          "$17692",
+          "$843",
+          "$389",
+          "$3307",
+          "$29576"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Cost for evaluating models under parallel scaling setting (USD)",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Search",
+          "MathHay",
+          "SWEBench",
+          "MCPBench",
+          "Tau2Bench",
+          "TerminalBench",
+          "Total"
+        ],
+        [
+          "Gemini-2.5-Flash",
+          "$5588",
+          "$369",
+          "$2024",
+          "$568",
+          "$852",
+          "$1870",
+          "$11271"
+        ],
+        [
+          "DeepSeek-R1",
+          "$1267",
+          "$654",
+          "$892",
+          "$931",
+          "$1088",
+          "$782",
+          "$5614"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "$902",
+          "$333",
+          "$191",
+          "$79.1",
+          "$52.3",
+          "$356",
+          "$1913"
+        ],
+        [
+          "Qwen3-235B",
+          "$1370",
+          "$238",
+          "$436",
+          "$716",
+          "$162",
+          "$689",
+          "$3610"
+        ],
+        [
+          "Qwen3-Next",
+          "$442",
+          "$219",
+          "$392",
+          "$152",
+          "$251",
+          "$529",
+          "$1985"
+        ],
+        [
+          "Total",
+          "$9568",
+          "$1814",
+          "$3935",
+          "$2445",
+          "$2405",
+          "$4225",
+          "$24392"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Cost for evaluating models under sequential scaling setting (USD)",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Search",
+          "MathHay",
+          "SWEBench",
+          "MCPBench",
+          "Tau2Bench",
+          "TerminalBench",
+          "Total"
+        ],
+        [
+          "Gemini-2.5-Pro",
+          "$47.5",
+          "$18.6",
+          "$3253",
+          "$31.3",
+          "$15.2",
+          "$203",
+          "$3569"
+        ],
+        [
+          "GPT-5",
+          "$87.5",
+          "$14.2",
+          "$146",
+          "$21.0",
+          "$12.4",
+          "$60.9",
+          "$342"
+        ],
+        [
+          "Claude-Haiku-4.5",
+          "$304",
+          "$10.9",
+          "$312",
+          "$29.3",
+          "$14.1",
+          "$106",
+          "$776"
+        ],
+        [
+          "Claude-Sonnet-4.5",
+          "$1248",
+          "$40.9",
+          "$926",
+          "$129",
+          "$52.0",
+          "$376",
+          "$2772"
+        ],
+        [
+          "OpenAI-oss-120B",
+          "$1.44",
+          "$1.49",
+          "$0.52",
+          "$0.50",
+          "$1.35",
+          "$0.40",
+          "$5.70"
+        ],
+        [
+          "DeepSeek-V3.2",
+          "$96.8",
+          "$10.0",
+          "$1.92",
+          "$22.0",
+          "$14.0",
+          "$102",
+          "$247"
+        ],
+        [
+          "Qwen3-Next",
+          "$6.05",
+          "$2.42",
+          "$0.88",
+          "$5.51",
+          "$3.60",
+          "$38.2",
+          "$56.7"
+        ],
+        [
+          "Total",
+          "$1791",
+          "$98.5",
+          "$4640",
+          "$239",
+          "$113",
+          "$886",
+          "$7768"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\text{Cost}=p_{\\text{in}}\\cdot\\tfrac{T_{\\text{in}}}{10^{6}}+p_{\\text{out}}\\cdot\\tfrac{T_{\\text{out}}}{10^{6}},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\text{Cost}=p_{\\text{in}}\\cdot\\tfrac{T_{\\text{in}}}{10^{6}}+p_{\\text{out}}\\cdot\\tfrac{T_{\\text{out}}}{10^{6}},",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Agarwal et al. (2024) Agarwal, R., Singh, A., Zhang, L., Bohnet, B., Rosias, L., Chan, S., Zhang, B., Anand, A., Abbas, Z., Nova, A., et al. Many-shot in-context learning. Advances in Neural Information Processing Systems, 37:76930–76966, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Agarwal et al. (2024)"
+    },
+    {
+      "raw_text": "Aleithan et al. (2024) Aleithan, R. et al. Swe-bench+: Enhanced coding benchmark for llms. arXiv preprint arXiv:2410.06992, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2410.06992",
+      "doi": null,
+      "url": null,
+      "citation_key": "Aleithan et al. (2024)"
+    },
+    {
+      "raw_text": "Anthropic (2024) Anthropic. Introducing the model context protocol, November 2024. URL https://www.anthropic.com/news/model-context-protocol.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "citation_key": "Anthropic (2024)"
+    },
+    {
+      "raw_text": "Anthropic (2025a) Anthropic. Introducing claude sonnet 4.5. https://www.anthropic.com/news/claude-sonnet-4-5, September 2025a. Accessed: 2026-01-29.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.anthropic.com/news/claude-sonnet-4-5",
+      "citation_key": "Anthropic (2025a)"
+    },
+    {
+      "raw_text": "Anthropic (2025b) Anthropic. Building agents with the Claude agent SDK. https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk, September 2025b. Accessed: 2026-01-29.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk",
+      "citation_key": "Anthropic (2025b)"
+    },
+    {
+      "raw_text": "Anthropic (2025c) Anthropic. Effective context engineering for ai agents. https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents, September 2025c. Accessed: 2026-01-29.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+      "citation_key": "Anthropic (2025c)"
+    },
+    {
+      "raw_text": "Anthropic (2026) Anthropic. Building agents with skills: Equipping agents for specialized work, January 2026. URL https://claude.com/blog/building-agents-with-skills-equipping-agents-for-specialized-work.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://claude.com/blog/building-agents-with-skills-equipping-agents-for-specialized-work",
+      "citation_key": "Anthropic (2026)"
+    },
+    {
+      "raw_text": "Bai et al. (2024) Bai, Y., Lv, X., Zhang, J., Lyu, H., Tang, J., Huang, Z., Du, Z., Liu, X., Zeng, A., Hou, L., et al. Longbench: A bilingual, multitask benchmark for long context understanding. In Proceedings of the 62nd annual meeting of the association for computational linguistics (volume 1: Long papers), pp. 3119–3137, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bai et al. (2024)"
+    },
+    {
+      "raw_text": "Barres et al. (2025) Barres, V., Dong, H., Ray, S., Si, X., and Narasimhan, K. tau2-bench: Evaluating conversational agents in a dual-control environment. arXiv preprint arXiv:2506.07982, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2506.07982",
+      "doi": null,
+      "url": null,
+      "citation_key": "Barres et al. (2025)"
+    },
+    {
+      "raw_text": "Brown et al. (2024) Brown, B., Juravsky, J., Ehrlich, R., Clark, R., Le, Q. V., Ré, C., and Mirhoseini, A. Large language monkeys: Scaling inference compute with repeated sampling. arXiv preprint arXiv:2407.21787, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2407.21787",
+      "doi": null,
+      "url": null,
+      "citation_key": "Brown et al. (2024)"
+    },
+    {
+      "raw_text": "Chen et al. (2024a) Chen, J., Lin, H., Han, X., and Sun, L. Benchmarking large language models in retrieval-augmented generation. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 38, pp. 17754–17762, 2024a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Chen et al. (2024a)"
+    },
+    {
+      "raw_text": "Chen et al. (2019) Chen, W., Wang, H., Chen, J., Zhang, Y., Wang, H., Li, S., Zhou, X., and Wang, W. Y. Tabfact: A large-scale dataset for table-based fact verification. arXiv preprint arXiv:1909.02164, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": "1909.02164",
+      "doi": null,
+      "url": null,
+      "citation_key": "Chen et al. (2019)"
+    },
+    {
+      "raw_text": "Chen et al. (2024b) Chen, W., Su, Y., Zuo, J., Yang, C., Yuan, C., Chan, C.-M., Yu, H., Lu, Y., Hung, Y.-H., Qian, C., et al. Agentverse: Facilitating multi-agent collaboration and exploring emergent behaviors. In The Twelfth International Conference on Learning Representations, 2024b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Chen et al. (2024b)"
+    },
+    {
+      "raw_text": "Cobbe et al. (2021) Cobbe, K., Kosaraju, V., Bavarian, M., Chen, M., Jun, H., Kaiser, L., Plappert, M., Tworek, J., Hilton, J., Nakano, R., et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2110.14168",
+      "doi": null,
+      "url": null,
+      "citation_key": "Cobbe et al. (2021)"
+    },
+    {
+      "raw_text": "Comanici et al. (2025) Comanici, G., Bieber, E., Schaekermann, M., Pasupat, I., Sachdeva, N., Dhillon, I., Blistein, M., Ram, O., Zhang, D., Rosen, E., et al. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2507.06261",
+      "doi": null,
+      "url": null,
+      "citation_key": "Comanici et al. (2025)"
+    },
+    {
+      "raw_text": "Deepmind (2025) Deepmind, G. Gemini, Nov 2025. URL https://deepmind.google/models/gemini/.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://deepmind.google/models/gemini/",
+      "citation_key": "Deepmind (2025)"
+    },
+    {
+      "raw_text": "Deng et al. (2023) Deng, X., Gu, Y., Zheng, B., Chen, S., Stevens, S., Wang, B., Sun, H., and Su, Y. Mind2web: Towards a generalist agent for the web. In NeurIPS Datasets and Benchmarks, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Deng et al. (2023)"
+    },
+    {
+      "raw_text": "Ding et al. (2023) Ding, Y., Wang, Z., Ahmad, W., Ding, H., Tan, M., Jain, N., Ramanathan, M. K., Nallapati, R., Bhatia, P., Roth, D., et al. Crosscodeeval: A diverse and multilingual benchmark for cross-file code completion. Advances in Neural Information Processing Systems, 36:46701–46723, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Ding et al. (2023)"
+    },
+    {
+      "raw_text": "Erdogan et al. (2025) Erdogan, L. E., Furuta, H., Kim, S., Lee, N., Moon, S., Anumanchipalli, G., Keutzer, K., and Gholami, A. Plan-and-act: Improving planning of agents for long-horizon tasks. In Forty-second International Conference on Machine Learning, 2025. URL https://openreview.net/forum?id=ybA4EcMmUZ.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=ybA4EcMmUZ",
+      "citation_key": "Erdogan et al. (2025)"
+    },
+    {
+      "raw_text": "Fabbri et al. (2019) Fabbri, A. R., Li, I., She, T., Li, S., and Radev, D. Multi-news: A large-scale multi-document summarization dataset and abstractive hierarchical model. In Proceedings of the 57th annual meeting of the association for computational linguistics, pp. 1074–1084, 2019.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Fabbri et al. (2019)"
+    },
+    {
+      "raw_text": "Friel et al. (2024) Friel, R., Belyi, M., and Sanyal, A. Ragbench: Explainable benchmark for retrieval-augmented generation systems. arXiv preprint arXiv:2407.11005, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2407.11005",
+      "doi": null,
+      "url": null,
+      "citation_key": "Friel et al. (2024)"
+    },
+    {
+      "raw_text": "Gao et al. (2024) Gao, D., Li, Z., Pan, X., Kuang, W., Ma, Z., Qian, B., Wei, F., Zhang, W., Xie, Y., Chen, D., et al. Agentscope: A flexible yet robust multi-agent platform. arXiv preprint arXiv:2402.14034, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2402.14034",
+      "doi": null,
+      "url": null,
+      "citation_key": "Gao et al. (2024)"
+    },
+    {
+      "raw_text": "Gao et al. (2023) Gao, T., Yen, H., Yu, J., and Chen, D. Enabling large language models to generate text with citations. arXiv preprint arXiv:2305.14627, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.14627",
+      "doi": null,
+      "url": null,
+      "citation_key": "Gao et al. (2023)"
+    },
+    {
+      "raw_text": "Guo et al. (2025) Guo, D., Yang, D., Zhang, H., Song, J., Zhang, R., Xu, R., Zhu, Q., Ma, S., Wang, P., Bi, X., et al. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2501.12948",
+      "doi": null,
+      "url": null,
+      "citation_key": "Guo et al. (2025)"
+    },
+    {
+      "raw_text": "Guo et al. (2024) Guo, Z. et al. Stabletoolbench: Towards stable large-scale benchmarking on tool learning of large language models. In Findings of ACL, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Guo et al. (2024)"
+    },
+    {
+      "raw_text": "He et al. (2024) He, H., Yao, W., Ma, K., Yu, W., Dai, Y., Zhang, H., Lan, Z., and Yu, D. Webvoyager: Building an end-to-end web agent with large multimodal models. arXiv preprint arXiv:2401.13919, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2401.13919",
+      "doi": null,
+      "url": null,
+      "citation_key": "He et al. (2024)"
+    },
+    {
+      "raw_text": "Ho et al. (2020) Ho, X., Duong Nguyen, A.-K., Sugawara, S., and Aizawa, A. Constructing a multi-hop QA dataset for comprehensive evaluation of reasoning steps. In Scott, D., Bel, N., and Zong, C. (eds.), Proceedings of the 28th International Conference on Computational Linguistics, pp. 6609–6625, Barcelona, Spain (Online), December 2020. International Committee on Computational Linguistics. doi: 10.18653/v1/2020.coling-main.580. URL https://aclanthology.org/2020.coling-main.580/.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.18653/v1/2020.coling-main.580",
+      "url": "https://aclanthology.org/2020.coling-main.580/",
+      "citation_key": "Ho et al. (2020)"
+    },
+    {
+      "raw_text": "Hosseini et al. (2024) Hosseini, A., Yuan, X., Malkin, N., Courville, A., Sordoni, A., and Agarwal, R. V-star: Training verifiers for self-taught reasoners. arXiv preprint arXiv:2402.06457, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2402.06457",
+      "doi": null,
+      "url": null,
+      "citation_key": "Hosseini et al. (2024)"
+    },
+    {
+      "raw_text": "Hsieh et al. (2024) Hsieh, C.-P., Sun, S., Kriman, S., Acharya, S., Rekesh, D., Jia, F., Zhang, Y., and Ginsburg, B. Ruler: What’s the real context size of your long-context language models? arXiv preprint arXiv:2404.06654, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2404.06654",
+      "doi": null,
+      "url": null,
+      "citation_key": "Hsieh et al. (2024)"
+    },
+    {
+      "raw_text": "Hu et al. (2023) Hu, Y., Ganter, T., Deilamsalehy, H., Dernoncourt, F., Foroosh, H., and Liu, F. Meetingbank: A benchmark dataset for meeting summarization. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 16409–16423, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hu et al. (2023)"
+    },
+    {
+      "raw_text": "Huang et al. (2021) Huang, L., Cao, S., Parulian, N., Ji, H., and Wang, L. Efficient attentions for long document summarization. arXiv preprint arXiv:2104.02112, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2104.02112",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2021)"
+    },
+    {
+      "raw_text": "Jimenez et al. (2023) Jimenez, C. E., Yang, J., Wettig, A., Yao, S., Pei, K., Press, O., and Narasimhan, K. Swe-bench: Can language models resolve real-world github issues? arXiv preprint arXiv:2310.06770, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.06770",
+      "doi": null,
+      "url": null,
+      "citation_key": "Jimenez et al. (2023)"
+    },
+    {
+      "raw_text": "Jin et al. (2025) Jin, J., Paladugu, A., and Xiong, C. Beneficial reasoning behaviors in agentic search and effective post-training to obtain them. arXiv preprint arXiv:2510.06534, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.06534",
+      "doi": null,
+      "url": null,
+      "citation_key": "Jin et al. (2025)"
+    },
+    {
+      "raw_text": "Kamradt (2023) Kamradt, G. LLMTest_NeedleInAHaystack: Needle in a haystack – pressure testing llms. https://github.com/gkamradt/LLMTest_NeedleInAHaystack, 2023. GitHub repository. Accessed: 2026-01-15.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/gkamradt/LLMTest_NeedleInAHaystack",
+      "citation_key": "Kamradt (2023)"
+    },
+    {
+      "raw_text": "Kočiskỳ et al. (2018) Kočiskỳ, T., Schwarz, J., Blunsom, P., Dyer, C., Hermann, K. M., Melis, G., and Grefenstette, E. The narrativeqa reading comprehension challenge. Transactions of the Association for Computational Linguistics, 6:317–328, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kočiskỳ et al. (2018)"
+    },
+    {
+      "raw_text": "Kuratov et al. (2024) Kuratov, Y., Bulatov, A., Anokhin, P., Rodkin, I., Sorokin, D., Sorokin, A., and Burtsev, M. Babilong: Testing the limits of llms with long context reasoning-in-a-haystack. Advances in Neural Information Processing Systems, 37:106519–106554, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kuratov et al. (2024)"
+    },
+    {
+      "raw_text": "Kweon et al. (2023) Kweon, S., Kwon, Y., Cho, S., Jo, Y., and Choi, E. Open-wikitable: Dataset for open domain question answering with complex reasoning over table. arXiv preprint arXiv:2305.07288, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.07288",
+      "doi": null,
+      "url": null,
+      "citation_key": "Kweon et al. (2023)"
+    },
+    {
+      "raw_text": "Li et al. (2023) Li, M. et al. Api-bank: A comprehensive benchmark for tool-augmented llms. In EMNLP, 2023. arXiv:2304.08244.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.08244",
+      "doi": null,
+      "url": null,
+      "citation_key": "Li et al. (2023)"
+    },
+    {
+      "raw_text": "Li et al. (2024) Li, X., Yu, Z., and Xiong, C. Montessori-instruct: Generate influential training data tailored for student learning. arXiv preprint arXiv:2410.14208, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2410.14208",
+      "doi": null,
+      "url": null,
+      "citation_key": "Li et al. (2024)"
+    },
+    {
+      "raw_text": "Lightman et al. (2023) Lightman, H. et al. Let’s verify step by step. arXiv preprint arXiv:2305.20050, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.20050",
+      "doi": null,
+      "url": null,
+      "citation_key": "Lightman et al. (2023)"
+    },
+    {
+      "raw_text": "Liu et al. (2025) Liu, A., Mei, A., Lin, B., Xue, B., Wang, B., Xu, B., Wu, B., Zhang, B., Lin, C., Dong, C., et al. Deepseek-v3. 2: Pushing the frontier of open large language models. arXiv preprint arXiv:2512.02556, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.02556",
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2025)"
+    },
+    {
+      "raw_text": "Liu et al. (2023a) Liu, T., Xu, C., and McAuley, J. Repobench: Benchmarking repository-level code auto-completion systems. arXiv preprint arXiv:2306.03091, 2023a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2306.03091",
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2023a)"
+    },
+    {
+      "raw_text": "Liu et al. (2023b) Liu, X.-Y., Wang, G., Yang, H., and Zha, D. Fingpt: Democratizing internet-scale data for financial large language models. arXiv preprint arXiv:2307.10485, 2023b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2307.10485",
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2023b)"
+    },
+    {
+      "raw_text": "Liu et al. (2023c) Liu, Y., Huang, L., Li, S., Chen, S., Zhou, H., Meng, F., Zhou, J., and Sun, X. Recall: A benchmark for llms robustness against external counterfactual knowledge. arXiv preprint arXiv:2311.08147, 2023c.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2311.08147",
+      "doi": null,
+      "url": null,
+      "citation_key": "Liu et al. (2023c)"
+    },
+    {
+      "raw_text": "Luo et al. (2025) Luo, J., Zhang, W., Yuan, Y., Zhao, Y., Yang, J., Gu, Y., Wu, B., Chen, B., Qiao, Z., Long, Q., et al. Large language model agent: A survey on methodology, applications and challenges. arXiv preprint arXiv:2503.21460, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2503.21460",
+      "doi": null,
+      "url": null,
+      "citation_key": "Luo et al. (2025)"
+    },
+    {
+      "raw_text": "Madaan et al. (2023) Madaan, A., Tandon, N., Gupta, P., Hallinan, S., Gao, L., Wiegreffe, S., Alon, U., Dziri, N., et al. Self-refine: Iterative refinement with self-feedback. arXiv preprint arXiv:2303.17651, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2303.17651",
+      "doi": null,
+      "url": null,
+      "citation_key": "Madaan et al. (2023)"
+    },
+    {
+      "raw_text": "Mialon et al. (2023) Mialon, G., Fourrier, C., Swift, C., Wolf, T., LeCun, Y., and Scialom, T. Gaia: A benchmark for general ai assistants. arXiv preprint arXiv:2311.12983, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2311.12983",
+      "doi": null,
+      "url": null,
+      "citation_key": "Mialon et al. (2023)"
+    },
+    {
+      "raw_text": "Microsoft (2025) Microsoft. Microsoft/agent-framework: A framework for building, orchestrating and deploying ai agents and multi-agent workflows with support for python and .net., Apr 2025. URL https://github.com/microsoft/agent-framework.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/microsoft/agent-framework",
+      "citation_key": "Microsoft (2025)"
+    },
+    {
+      "raw_text": "Moonshot AI (2026) Moonshot AI. Kimi k2.5: Visual agentic intelligence. https://www.kimi.com/blog/kimi-k2-5.html, January 2026. Accessed: 2026-01-28.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.kimi.com/blog/kimi-k2-5.html",
+      "citation_key": "Moonshot AI (2026)"
+    },
+    {
+      "raw_text": "Muennighoff et al. (2023) Muennighoff, N., Tazi, N., Magne, L., and Reimers, N. Mteb: Massive text embedding benchmark. In Proceedings of the 17th Conference of the European Chapter of the Association for Computational Linguistics, pp. 2014–2037, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Muennighoff et al. (2023)"
+    },
+    {
+      "raw_text": "Muennighoff et al. (2025) Muennighoff, N., Yang, Z., Shi, W., Li, X. L., Fei-Fei, L., Hajishirzi, H., Zettlemoyer, L., Liang, P., Candès, E., and Hashimoto, T. B. s1: Simple test-time scaling. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing, pp. 20286–20332, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Muennighoff et al. (2025)"
+    },
+    {
+      "raw_text": "OpenAI (2024a) OpenAI. Learning to reason with llms. https://openai.com/index/learning-to-reason-with-llms/, September 2024a. Accessed: 2026-01-28.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/learning-to-reason-with-llms/",
+      "citation_key": "OpenAI (2024a)"
+    },
+    {
+      "raw_text": "OpenAI (2024b) OpenAI. Introducing SWE-bench verified. https://openai.com/index/introducing-swe-bench-verified/, August 2024b. OpenAI Blog. Updated: 2025-02-24. Accessed: 2026-01-15.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/introducing-swe-bench-verified/",
+      "citation_key": "OpenAI (2024b)"
+    },
+    {
+      "raw_text": "OpenAI (2025a) OpenAI. Gpt-5 system card. Technical report, OpenAI, August 2025a. URL https://cdn.openai.com/gpt-5-system-card.pdf.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://cdn.openai.com/gpt-5-system-card.pdf",
+      "citation_key": "OpenAI (2025a)"
+    },
+    {
+      "raw_text": "OpenAI (2025b) OpenAI. Openai mrcr: Long context multiple needle in a haystack benchmark. https://huggingface.co/datasets/openai/mrcr, 2025b. Hugging Face Datasets. Accessed: 2026-01-15.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://huggingface.co/datasets/openai/mrcr",
+      "citation_key": "OpenAI (2025b)"
+    },
+    {
+      "raw_text": "OpenAI (2025) OpenAI. Introducing agentkit, Oct 2025. URL https://openai.com/index/introducing-agentkit/.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/introducing-agentkit/",
+      "citation_key": "OpenAI (2025)"
+    },
+    {
+      "raw_text": "Parmar et al. (2025) Parmar, M., Liu, X., Goyal, P., Chen, Y., Le, L., Mishra, S., Mobahi, H., Gu, J., Wang, Z., Nakhost, H., et al. Plangen: A multi-agent framework for generating planning and reasoning trajectories for complex problem solving. arXiv preprint arXiv:2502.16111, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2502.16111",
+      "doi": null,
+      "url": null,
+      "citation_key": "Parmar et al. (2025)"
+    },
+    {
+      "raw_text": "Patil et al. (2024) Patil, S. G., Zhang, T., Wang, X., and Gonzalez, J. E. Gorilla: Large language model connected with massive apis. Advances in Neural Information Processing Systems, 37:126544–126565, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Patil et al. (2024)"
+    },
+    {
+      "raw_text": "Patil et al. (2025) Patil, S. G., Mao, H., Yan, F., Ji, C. C.-J., Suresh, V., Stoica, I., and Gonzalez, J. E. The berkeley function calling leaderboard (BFCL): From tool use to agentic evaluation of large language models. In Forty-second International Conference on Machine Learning, 2025. URL https://openreview.net/forum?id=2GmDdhBdDk.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=2GmDdhBdDk",
+      "citation_key": "Patil et al. (2025)"
+    },
+    {
+      "raw_text": "Qin et al. (2023) Qin, Y., Liang, S., Ye, Y., Zhu, K., Yan, L., Lu, Y., Lin, Y., Cong, X., Tang, X., Qian, B., et al. Toolllm: Facilitating large language models to master 16000+ real-world apis. arXiv preprint arXiv:2307.16789, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.16789",
+      "doi": null,
+      "url": null,
+      "citation_key": "Qin et al. (2023)"
+    },
+    {
+      "raw_text": "Qwen Team, Alibaba Inc. (2025) Qwen Team, Alibaba Inc. Qwen3-Next: Towards ultimate training & inference efficiency. https://qwen.ai/blog?id=4074cca80393150c248e508aa62983f9cb7d27cd, September 2025. Accessed: 2026-01-29.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://qwen.ai/blog?id=4074cca80393150c248e508aa62983f9cb7d27cd",
+      "citation_key": "Qwen Team, Alibaba Inc. (2025)"
+    },
+    {
+      "raw_text": "QwenLM (2023) QwenLM. Qwenlm/qwen-agent: Agent framework and applications built upon qwen¿=3.0, featuring function calling, mcp, code interpreter, rag, chrome extension, etc., Sep 2023. URL https://github.com/QwenLM/Qwen-Agent.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/QwenLM/Qwen-Agent",
+      "citation_key": "QwenLM (2023)"
+    },
+    {
+      "raw_text": "Rawles et al. (2024) Rawles, C., Clinckemaillie, S., Chang, Y., Waltz, J., Lau, G., Fair, M., Li, A., Bishop, W., Li, W., Campbell-Ajala, F., et al. Androidworld: A dynamic benchmarking environment for autonomous agents. arXiv preprint arXiv:2405.14573, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2405.14573",
+      "doi": null,
+      "url": null,
+      "citation_key": "Rawles et al. (2024)"
+    },
+    {
+      "raw_text": "Schick et al. (2023) Schick, T., Dwivedi-Yu, J., Dessì, R., Raileanu, R., Lomeli, M., Hambro, E., Zettlemoyer, L., Cancedda, N., and Scialom, T. Toolformer: Language models can teach themselves to use tools. Advances in Neural Information Processing Systems, 36:68539–68551, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Schick et al. (2023)"
+    },
+    {
+      "raw_text": "Shaham et al. (2023) Shaham, U., Ivgi, M., Efrat, A., Berant, J., and Levy, O. Zeroscrolls: A zero-shot benchmark for long text understanding. arXiv preprint arXiv:2305.14196, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.14196",
+      "doi": null,
+      "url": null,
+      "citation_key": "Shaham et al. (2023)"
+    },
+    {
+      "raw_text": "Shen et al. (2023) Shen, Y., Song, K., Tan, X., Li, D., Lu, W., and Zhuang, Y. Hugginggpt: Solving ai tasks with chatgpt and its friends in hugging face. arXiv preprint arXiv:2303.17580, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2303.17580",
+      "doi": null,
+      "url": null,
+      "citation_key": "Shen et al. (2023)"
+    },
+    {
+      "raw_text": "Shinn et al. (2023) Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., and Yao, S. Reflexion: Language agents with verbal reinforcement learning. Advances in Neural Information Processing Systems, 36:8634–8652, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Shinn et al. (2023)"
+    },
+    {
+      "raw_text": "Snell et al. (2024) Snell, C., Lee, J., Xu, K., and Kumar, A. Scaling llm test-time compute optimally can be more effective than scaling model parameters. arXiv preprint arXiv:2408.03314, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2408.03314",
+      "doi": null,
+      "url": null,
+      "citation_key": "Snell et al. (2024)"
+    },
+    {
+      "raw_text": "Thakur et al. (2021) Thakur, N., Reimers, N., Rücklé, A., Srivastava, A., and Gurevych, I. Beir: A heterogenous benchmark for zero-shot evaluation of information retrieval models. arXiv preprint arXiv:2104.08663, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2104.08663",
+      "doi": null,
+      "url": null,
+      "citation_key": "Thakur et al. (2021)"
+    },
+    {
+      "raw_text": "Tu et al. (2023) Tu, Q., Chen, C., Li, J., Li, Y., Shang, S., Zhao, D., Wang, R., and Yan, R. Characterchat: Learning towards conversational ai with personalized social support. arXiv preprint arXiv:2308.10278, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2308.10278",
+      "doi": null,
+      "url": null,
+      "citation_key": "Tu et al. (2023)"
+    },
+    {
+      "raw_text": "Wang et al. (2023) Wang, L., Xu, W., Lan, Y., Hu, Z., Lan, Y., Lee, R. K.-W., and Lim, E.-P. Plan-and-solve prompting: Improving zero-shot chain-of-thought reasoning by large language models. arXiv preprint arXiv:2305.04091, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.04091",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2023)"
+    },
+    {
+      "raw_text": "Wang et al. (2024a) Wang, L., Dong, S., Xu, Y., Dong, H., Wang, Y., Saha, A., Lim, E.-P., Xiong, C., and Sahoo, D. Mathhay: An automated benchmark for long-context mathematical reasoning in llms. arXiv preprint arXiv:2410.04698, 2024a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2410.04698",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2024a)"
+    },
+    {
+      "raw_text": "Wang et al. (2024b) Wang, M., Chen, L., Cheng, F., Liao, S., Zhang, X., Wu, B., Yu, H., Xu, N., Zhang, L., Luo, R., et al. Leave no document behind: Benchmarking long-context llms with extended multi-doc qa. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing, pp. 5627–5646, 2024b.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2024b)"
+    },
+    {
+      "raw_text": "Wang et al. (2024c) Wang, P., Li, L., Shao, Z., Xu, R., Dai, D., Li, Y., Chen, D., Wu, Y., and Sui, Z. Math-shepherd: Verify and reinforce llms step-by-step without human annotations. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 9426–9439, 2024c.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2024c)"
+    },
+    {
+      "raw_text": "Wang et al. (2022) Wang, X., Wei, J., Schuurmans, D., Le, Q., Chi, E., Narang, S., Chowdhery, A., and Zhou, D. Self-consistency improves chain of thought reasoning in language models. arXiv preprint arXiv:2203.11171, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2203.11171",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2022)"
+    },
+    {
+      "raw_text": "Wang et al. (2025a) Wang, X., Wang, B., Lu, D., Yang, J., Xie, T., Wang, J., Deng, J., Guo, X., Xu, Y., Wu, C. H., et al. Opencua: Open foundations for computer-use agents. arXiv preprint arXiv:2508.09123, 2025a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2508.09123",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2025a)"
+    },
+    {
+      "raw_text": "Wang et al. (2025b) Wang, Z., Chang, Q., Patel, H., Biju, S., Wu, C.-E., Liu, Q., Ding, A., Rezazadeh, A., Shah, A., Bao, Y., et al. Mcp-bench: Benchmarking tool-using llm agents with complex real-world tasks via mcp servers. arXiv preprint arXiv:2508.20453, 2025b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2508.20453",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2025b)"
+    },
+    {
+      "raw_text": "Wei et al. (2022) Wei, J., Wang, X., Schuurmans, D., Bosma, M., Ichter, B., Xia, F., Chi, E., Le, Q. V., and Zhou, D. Chain-of-thought prompting elicits reasoning in large language models. arXiv preprint arXiv:2201.11903, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2201.11903",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wei et al. (2022)"
+    },
+    {
+      "raw_text": "Wei et al. (2025) Wei, J., Sun, Z., Papay, S., McKinney, S., Han, J., Fulford, I., Chung, H. W., Passos, A. T., Fedus, W., and Glaese, A. Browsecomp: A simple yet challenging benchmark for browsing agents. arXiv preprint arXiv:2504.12516, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2504.12516",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wei et al. (2025)"
+    },
+    {
+      "raw_text": "Xi et al. (2023) Xi, Z., Chen, W., Guo, X., He, W., Ding, Y., Hong, B., Zhang, M., Wang, J., Jin, S., Zhou, E., et al. The rise and potential of large language model based agents: A survey. arXiv preprint arXiv:2309.07864, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2309.07864",
+      "doi": null,
+      "url": null,
+      "citation_key": "Xi et al. (2023)"
+    },
+    {
+      "raw_text": "Xie et al. (2023) Xie, T., Zhou, F., Cheng, Z., Shi, P., Weng, L., Liu, Y., et al. Openagents: An open platform for language agents in the wild. arXiv preprint arXiv:2310.10634, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.10634",
+      "doi": null,
+      "url": null,
+      "citation_key": "Xie et al. (2023)"
+    },
+    {
+      "raw_text": "Xie et al. (2024) Xie, T., Zhang, D., Chen, J., Li, X., Zhao, S., Cao, R., Hua, T. J., Cheng, Z., Shin, D., Lei, F., et al. Osworld: Benchmarking multimodal agents for open-ended tasks in real computer environments. Advances in Neural Information Processing Systems, 37:52040–52094, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Xie et al. (2024)"
+    },
+    {
+      "raw_text": "Xie et al. (2025) Xie, T., Deng, J., Li, X., Yang, J., Wu, H., Chen, J., Hu, W., Wang, X., Xu, Y., Wang, Z., et al. Scaling computer-use grounding via user interface decomposition and synthesis. arXiv preprint arXiv:2505.13227, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2505.13227",
+      "doi": null,
+      "url": null,
+      "citation_key": "Xie et al. (2025)"
+    },
+    {
+      "raw_text": "Yan et al. (2025) Yan, K., Ling, Z., Liu, K., Yang, Y., Fan, T.-H., Shen, L., Du, Z., and Chen, J. Mir-bench: Can your llm recognize complicated patterns via many-shot in-context reasoning? arXiv preprint arXiv:2502.09933, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2502.09933",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yan et al. (2025)"
+    },
+    {
+      "raw_text": "Yang et al. (2025) Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., et al. Qwen3 technical report. arXiv preprint arXiv:2505.09388, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2505.09388",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. (2025)"
+    },
+    {
+      "raw_text": "Yang et al. (2024a) Yang, J., Jimenez, C. E., Wettig, A., Lieret, K., Yao, S., Narasimhan, K., and Press, O. Swe-agent: Agent-computer interfaces enable automated software engineering. Advances in Neural Information Processing Systems, 37:50528–50652, 2024a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. (2024a)"
+    },
+    {
+      "raw_text": "Yang et al. (2024b) Yang, S., Kautz, J., and Hatamizadeh, A. Gated delta networks: Improving mamba2 with delta rule. arXiv preprint arXiv:2412.06464, 2024b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2412.06464",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. (2024b)"
+    },
+    {
+      "raw_text": "Yao et al. (2022a) Yao, S., Chen, H., Yang, J., and Narasimhan, K. Webshop: Towards scalable real-world web interaction with grounded language agents. arXiv preprint arXiv:2207.01206, 2022a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2207.01206",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yao et al. (2022a)"
+    },
+    {
+      "raw_text": "Yao et al. (2022b) Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K. R., and Cao, Y. React: Synergizing reasoning and acting in language models. In The eleventh international conference on learning representations, 2022b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Yao et al. (2022b)"
+    },
+    {
+      "raw_text": "Yao et al. (2023) Yao, S., Yu, D., Zhao, J., Shafran, I., Griffiths, T. L., Cao, Y., and Narasimhan, K. Tree of thoughts: Deliberate problem solving with large language models. arXiv preprint arXiv:2305.10601, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.10601",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yao et al. (2023)"
+    },
+    {
+      "raw_text": "Yao et al. (2024) Yao, S. et al. t​a​u\\\\ tau-bench: A benchmark for tool-agent-user interaction in real-world domains. arXiv preprint arXiv:2406.12045, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2406.12045",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yao et al. (2024)"
+    },
+    {
+      "raw_text": "Yue et al. (2024) Yue, L., Xing, S., Chen, J., and Fu, T. Clinicalagent: Clinical trial multi-agent system with large language model-based reasoning. In Proceedings of the 15th ACM International Conference on Bioinformatics, Computational Biology and Health Informatics, pp. 1–10, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Yue et al. (2024)"
+    },
+    {
+      "raw_text": "Zelikman et al. (2024) Zelikman, E., Harik, G., Shao, Y., Jayasiri, V., Haber, N., and Goodman, N. D. Quiet-star: Language models can teach themselves to think before speaking. arXiv preprint arXiv:2403.09629, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2403.09629",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zelikman et al. (2024)"
+    },
+    {
+      "raw_text": "Zhang et al. (2025a) Zhang, J., Bai, Y., Lv, X., Gu, W., Liu, D., Zou, M., Cao, S., Hou, L., Dong, Y., Feng, L., et al. Longcite: Enabling llms to generate fine-grained citations in long-context qa. In Findings of the Association for Computational Linguistics: ACL 2025, pp. 5098–5122, 2025a.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. (2025a)"
+    },
+    {
+      "raw_text": "Zhang et al. (2025b) Zhang, L. et al. Swe-bench goes live! arXiv preprint arXiv:2505.23419, 2025b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2505.23419",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. (2025b)"
+    },
+    {
+      "raw_text": "Zhang et al. (2025c) Zhang, Q., Hu, C., Upasani, S., Ma, B., Hong, F., Kamanuru, V., Rainton, J., Wu, C., Ji, M., Li, H., et al. Agentic context engineering: Evolving contexts for self-improving language models. arXiv preprint arXiv:2510.04618, 2025c.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2510.04618",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. (2025c)"
+    },
+    {
+      "raw_text": "Zhou et al. (2023a) Zhou, A., Yan, K., Shlapentokh-Rothman, M., Wang, H., and Wang, Y.-X. Language agent tree search unifies reasoning, acting, and planning in language models. arXiv preprint arXiv:2310.04406, 2023a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2310.04406",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhou et al. (2023a)"
+    },
+    {
+      "raw_text": "Zhou et al. (2023b) Zhou, S., Xu, F. F., Zhu, H., Zhou, X., Lo, R., Sridhar, A., Cheng, X., Ou, T., Bisk, Y., Fried, D., et al. Webarena: A realistic web environment for building autonomous agents. arXiv preprint arXiv:2307.13854, 2023b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2307.13854",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhou et al. (2023b)"
+    }
+  ],
+  "full_text": "## Introduction\n\nAgents powered by large language models (LLMs) are at a turning point, transitioning from domain-specific (Liu et al., 2023b; Yang et al., 2024a; Yue et al., 2024) to general-purpose (Xi et al., 2023; Luo et al., 2025). Real-world user requests are often open-ended and require LLM agents to operate end-to-end through planning (Wang et al., 2023; Erdogan et al., 2025), reasoning (Wei et al., 2022; Yao et al., 2022b; Parmar et al., 2025), and tool use (Schick et al., 2023; Patil et al., 2024) under uncertain and evolving conditions. A capable general agent is expected to compose multiple skills and tools (e.g., search, coding, computation, and MCP APIs) to handle the diversity of realistic requests(Anthropic, 2026), while exhibiting effective test-time scaling abilities to address increasing task complexity and enhance response quality (Wang et al., 2022; Brown et al., 2024; Snell et al., 2024). This shift raises an important evaluation gap: beyond asking “can the model solve a task,” we must assess whether agents can infer user intent, select specific tools, and scale up their performance under a unified evaluation framework across diverse domains.\n\nExisting agentic benchmarks typically evaluate LLM agents in domain-specific settings, where the environment and available toolsets are explicitly designed for a particular task category (e.g., software engineering with a Docker environment and terminal tools (Jimenez et al., 2023; Aleithan et al., 2024), or web navigation with a browsing interface (Zhou et al., 2023b; He et al., 2024; Wei et al., 2025)). Conversely, actual user interactions are rarely so constrained; they typically involve multi-turn, open-ended requests spanning disparate domains, requiring agents to remain ready across a broad toolset to handle unpredictable queries. As a result, while current benchmarks are informative for domain-specific agent development, they may not fully capture the demands of real-world usage and can overestimate robustness under realistic, multi-domain conditions.\n\nIn this paper, we address this gap by introducing General AgentBench, a benchmark designed to evaluate general-purpose agents across diverse scenarios under a unified framework that more closely reflects real-world user interactions. We consolidate tools from all domains into a shared interface that is consistently exposed to evaluated agents across different tasks, while domain-specific environments and implementations remain hidden. We evaluate ten leading LLM-based agents, each of which must first interpret the user request, then choose suitable tools from a large and diverse tool pool, and iteratively interact with the environment until producing a final response.\n\nFor complex requests that exceed the capabilities of a short interaction horizon, agents can benefit from increased inference-time computation—a strategy known as test-time scaling and extensively studied in the context of non-agentic reasoning (Cobbe et al., 2021; Zelikman et al., 2024; Guo et al., 2025). We focus on two primary scaling strategies: (1) sequential scaling, which extends interaction histories to support continued reasoning, reflection, and exploration; and (2) parallel scaling, which independently samples $K$ candidate trajectories and selects a single candidate to return. More concretely, effective parallel scaling requires agents not only to generate correct solutions, but also to reliably identify and choose the correct one, since real-world agents cannot present multiple responses simultaneously. Together, these settings enable a systematic study of test-time scaling behaviors in general LLM agents.\n\nOur results lead to three key conclusions. (1) Across ten leading LLMs, we observe a substantial performance drop when moving from domain-specific configurations to the general-agent setting (Figure 1(a)), with pronounced differences in robustness across model families. Among them, Claude exhibits the strongest robustness, while most other models experience performance drops of approximately 30%. (2) Sequential scaling exhibits an effective context length ceiling (context ceiling): while performance improves within a modest range of additional interaction turns, it often fluctuates or degrades thereafter. This suggests that the accumulated history eventually overwhelms the agent’s reasoning capacity, leading to instability in long-horizon tasks. (Figure 1(b)). (3) Although parallel scaling increases the theoretical upper bound of performance (past@$K$), we consistently observe a gap between this upper bound and self-choice accuracy, revealing a substantial verification gap that ultimately limits achievable performance in realistic settings (Figure 1(c)). In summary, our contributions are:\n\nGeneral AgentBench for Realistic Evaluation.\nWe introduce General AgentBench, a benchmark for evaluating whether agents can compose multiple skills and tools to solve open-ended requests from diverse domains under a unified framework, more closely reflecting real-world user interactions.\n\nSequential Test-time Scaling in General Agents.\nWe study the sequential test-time scaling behavior of general agents, showing that performance improvements are bounded by an effective context ceiling, beyond which additional computation often leads to instability and performance degradation. This inherent point varies across models and domains.\n\nParallel Test-time Scaling.\nWe analyze parallel test-time scaling and show that, despite increasing the theoretical performance upper bound (past@$K$), its practical gains are limited by a verification gap between generation and model self-choice accuracy.\n\n## General AgentBench\n\nIn this section, we introduce the construction of General AgentBench (Section 2.1) and the unified evaluation framework (Section 2.2 ). Detailed prompt templates, tool specifications, and the unified policy are deferred to the Appendix E.\n\n### Domains and Sources\n\nOur benchmark spans four task domains: Coding, Search, Tool-use, and Reason. These domains reflect common real-world applications such as software engineering, information seeking, service workflows, and analytical reasoning, positioning General AgentBench as an initial step toward evaluating general-purpose agents in open-ended and unified settings. Table 1 summarizes the benchmark composition.\n\n### Unified Realistic Evaluation Framework\n\nTo support realistic evaluation of general LLM agents, we design a unified framework that exposes all tasks and tools through a shared interaction interface. These choices reflect three fundamental properties of real-world agent usage: cross-domain task diversity, comprehensive skill requirements, and dynamically evolving multi-turn interactions. An overview of the framework is illustrated in Figure 2.\n\n### Experimental details\n\nOur evaluation covers a total of ten frontier language models. Among open-source models, we include several high-performing systems such as Qwen3-235B (Yang et al., 2025) and DeepSeek-R1 (Guo et al., 2025), as well as more recent models with novel attention mechanisms, including Qwen3-Next (Qwen Team, Alibaba Inc., 2025) and DeepSeek-v3.2 (Liu et al., 2025). For proprietary models, we consider both efficiency-oriented variants (e.g., Gemini 2.5 Flash (Comanici et al., 2025)) and models optimized for complex reasoning (e.g., GPT-5 (OpenAI, 2025a) and Claude Sonnet 4.5 (Anthropic, 2025a)). We access these models via Amazon Bedrock 11https://aws.amazon.com/bedrock/pricing/ and the Hugging Face Inference API .22https://huggingface.co/docs/inference-providers/en/index For all evaluations, we fix the decoding temperature to 0.7 and ensure that each model’s native context length exceeds the maximum context length required by the benchmark.\n\n## Main Results\n\nIn this section, we report overall performance on General AgentBench and compare it against evaluations conducted under prior domain-specific settings to quantify the gap between specialized and general-purpose LLM agents.\n\n### Result analysis\n\nTable 2 summarizes the results across models and domains on General AgentBench. Claude Sonnet 4.5 achieves the strongest overall performance, driven primarily by its tool-use and coding capabilities, while GPT-5 attains the highest scores in the Search and Reason domains, reflecting its strengths in information retrieval and complex reasoning. Among open-source models, DeepSeek-V3.2 outperforms both Gemini variants, demonstrating the significant scaling potential of efficient, sparse-attention architectures. Across models, performance on BrowseComp remains consistently low, indicating that retrieving rare and precise information beyond in-domain training data is still a major bottleneck for current LLM agents.\n\nWe further examine how performance changes when models transition from specialized agents operating under domain-specific contexts to general agents acting within a unified environment with shared toolsets. Figure 4 summarizes the mean degradation aggregated over all domains, while Figure 3 reports the relative performance change for each agent across domains. Most LLM agents experience substantial degradation in the general-agent setting, with average relative drops ranging from 10% to 30%. The magnitude of this degradation varies widely: for example, Gemini 2.5-Pro suffers a drop exceeding 60% in the Reason domain, falling from top-tier performance in the baseline setting to near-average performance as a general agent. In contrast, Claude Sonnet 4.5 remains notably robust, with only a 0.2% average degradation. Detailed overall results can be found in Appendix  A.2.\n\n### Cross-domain tool usage\n\nInterestingly, several models, including Qwen3-Next, Deepseek-R1, and Claude, exhibit performance gains in the Search domains under the general-agent setting. Trajectory-level analysis shows that these improvements arise from effective cross-domain tool usage, where agents repurpose tools beyond their originally intended domains to support reasoning and information retrieval.\nWe take a closer look at these behaviors. Analysis of 189 search task traces from Claude Sonnet 4.5 reveals that $26$% of tasks ($50/189$) utilized specialized domain tools beyond plain web search. The most frequently used specialized tools include Google Maps APIs ($78$ calls), Paper Search across arXiv, PubMed, and Google Scholar ($60$ calls), and Hugging Face model APIs ($36$ calls). We present a case study demonstrating how domain-specific tools outperform plain web search.\n\nWe observe that the plain search baseline iteratively refines web queries across 6 turns, ultimately finding tabularisai/multilingual-sentiment-analysis with only surface-level information (“fine-tuned DistilBERT”). In contrast, the General agent system’s specialized Hugging_Face__search-models API directly queries the model hub with structured filters, returning download counts, tags, and model IDs. The subsequent Hugging_Face__get-model-info call retrieves comprehensive metadata including architecture specifications, training data scale, and official model cards—information unavailable through web search snippets.\n\nThis behavior reflects an agent’s ability to dynamically select and compose tools under minimal domain priors, capturing a more realistic upper bound on general-agent capability and highlighting the importance of evaluation settings that approximate real-world tool availability.\n\n## Test-Time Scaling Evaluation\n\nIn this section, we present a systematic study of test-time scaling behavior of general LLM agents. Section 4.1 introduces the scaling strategies, with results and findings presented in Sections 4.2 and 4.3.\n\n### Scaling Methodology\n\nWe investigate test-time scaling through two complementary paradigms: Parallel Scaling and Sequential Scaling, which correspond to distinct axes of computational allocation—breadth of exploration versus depth of exploitation. Compared with more sophisticated test-time scaling techniques such as self-correction(Madaan et al., 2023), beam search(Yao et al., 2023), or MCTS(Zhou et al., 2023a), these two strategies are the most commonly adopted and easiest to deploy in real-world agentic systems.\n\n### Sequential Scaling\n\nSequential scaling exhibits behavior that departs markedly from our expectations, shown in the bottom of Figure 5. Although several models on certain benchmarks show performance improvements, such as Qwen3-235B on the Search domain and Deepseek-v3.2 on the Reason domain, most show little to no consistent improvement despite allocating additional computational resources through iterative reasoning and reflection.\n\nWe categorize sequential scaling behaviors into two distinct regimes. (1) Stagnant fluctuation: In domains such as reasoning, performance oscillates within a narrow range despite increased computation. This pattern suggests a limited capacity for agents to explore novel solution paths within extended interaction traces, coupled with a diminished ability to maintain coherence—likely due to the agent’s finite context processing capacity. (2) Saturation and degradation: In coding domains, models initially benefit from additional reasoning steps; however, beyond an important turning point, performance consistently deteriorates and fails to recover. Figure 6 shows how instance-level correctness for several data entries changes as the context length increases. We observe that agents either repeatedly succeed on queries they already handle well while failing to progress on unsuccessful cases, or exhibit unstable behavior with accuracy fluctuating between 0 and 1 across interaction steps. These observations further validate our summarization regarding the inherent limitations of sequential scaling.\n\nTo better understand how this turning point occurs, we analyze performance relative to an agent’s inherent context length—defined as the total context naturally accumulated when completing a task without artificial constraints on interaction depth. By integrating data from Qwen3-235B and Gemini 2.5-Flash (as seen in Figure 5) with new experimental results on smaller context windows, we observed a distinct performance ceiling. As shown in Figure 7, both models exhibit an initial upward trend, approaching peak performance as they reach their inherent context limits. However, once the accumulated context passes a specific threshold ( for example, approximately 112K for Qwen3-235B and 96K for Gemini 2.5-Flash in the search domain), performance typically plateaus or begins to degrade. In these instances, additional computation and time yield no further gains. This suggests the existence of a “context ceiling”: a maximum effective context length under sequential scaling, beyond which raw interaction history offers diminishing or zero practical returns. Notably, this ceiling varies across domains, reflecting the unique demands each task places on context utilization and computational efficiency.\n\nTaken together, these results indicate that simply allocating more computation by extending raw interaction histories rarely leads to meaningful performance gains, contradicting previous observations in non-agentic settings (Muennighoff et al., 2025). Long-horizon agentic tasks expose fundamental challenges in context utilization and reasoning stability, highlighting the need for more effective mechanisms for context management and reasoning control under sequential scaling (Zhang et al., 2025c; Anthropic, 2025c).\n\n### Parallel Scaling\n\nWe observe a monotonic increase in pass@K as the number of sampled trajectories grows (Figure 5, top). Increasing $K$ from 1 to 4 yields an average improvement of roughly 50%, with DeepSeek-V3.2 exhibiting the largest gains—approaching a twofold improvement in both coding and reasoning domains.\n\nHowever, pass@K only reflects an idealized upper bound. In practice, the effectiveness of parallel scaling depends on an agent’s ability to evaluate and select among its own sampled trajectories, which is captured by self-choice performance. As shown by the gap between the solid lines (pass@K) and the dashed or dotted lines (self-choice) in Figure 8, self-choice performance consistently lags behind the pass@K upper bound regardless of the strategy. In some cases, self-choice performance even degrades as $K$ increases. While the coding domain exhibits the smallest gap between pass@K and self-choice, in most settings self-choice gains saturate quickly and fail to track the continued improvement of pass@K.\n\nTo examine whether this gap stems from limited verifier capability, we replace the model’s internal self-judgment with an external verifier, GPT-5, and perform point-wise evaluation of sampled trajectories from all models. As shown by the diamond line in Figure 8, GPT-5 generally underperforms models’ own self-judgment. Notably, even at $K=1$, GPT-5 occasionally misclassifies correct trajectories as incorrect, introducing a non-trivial gap between pass@1 and GPT-5–based verification. We hypothesize that this effect arises from solution familiarity: models are better at evaluating their own generations, which align closely with their internal reasoning patterns, whereas external verifiers may struggle to accurately assess unfamiliar execution traces.\n\nOverall, these results reveal a fundamental gap between models’ generation capacity and their ability to reliably select correct solutions, which ultimately limits the practical utility of parallel scaling.\n\n## Related Work\n\nPrior work on LLM agents spans three closely related directions: benchmarking agentic abilities, developing agent models and frameworks, and exploring effective scaling methods. Most agentic benchmarks evaluate specialized agents in domain-specific settings, where tasks, interaction protocols, and tool access are tailored to specific skills. Representative ones cover software engineering (e.g., SWE-bench (Jimenez et al., 2023) and its variants (Aleithan et al., 2024; Zhang et al., 2025b; Yang et al., 2024a)), web navigation and interaction (e.g., WebShopcite (Yao et al., 2022a), Mind2Web (Deng et al., 2023), WebArena (Zhou et al., 2023b), WebVoyager (He et al., 2024)), and tool use with curated APIs (e.g., ToolLLM (Qin et al., 2023), API-Bank (Li et al., 2023), BFCL (Patil et al., 2025), StableToolBench (Guo et al., 2024)). Broader suites such as $\\tau$-bench (Yao et al., 2024), AgentBench(Barres et al., 2025), and GAIA (Mialon et al., 2023) incorporate multi-turn interaction across multiple task categories , while OSWorld (Xie et al., 2024), OSWorld-G (Xie et al., 2025), and AndroidWorld (Rawles et al., 2024) evaluate agents operating in real desktop and mobile systems.\n\nIn parallel, substantial effort has focused on building general-purpose agents capable of planning, acting, and invoking tools across heterogeneous tasks. Early methods such as ReAct (Yao et al., 2022b), Reflexion (Shinn et al., 2023), Toolformer (Schick et al., 2023), and HuggingGPT (Shen et al., 2023) introduce structured reasoning–action trajectories, reflection, and learned tool invocation. More recent work emphasizes scalable agent frameworks and deployment platforms supporting multi-agent coordination and rich tool ecosystems, including OpenAgents (Xie et al., 2023), AgentVerse (Chen et al., 2024b), AgentScope (Gao et al., 2024), and OpenCUA (Wang et al., 2025a). Industry systems—such as agents built on Claude (Anthropic, 2025b), Microsoft (Microsoft, 2025), OpenAI (OpenAI, 2025), Qwen (QwenLM, 2023), Kimi (Moonshot AI, 2026), and Gemini (Deepmind, 2025)—further demonstrate the practical importance of general agents in real-world deployments.\n\nA complementary line of research studies test-time scaling, allocating additional inference-time computation to improve agent performance. Chain-of-thought prompting (Wei et al., 2022) and self-consistency (Wang et al., 2022) show that deeper reasoning and multi-sample decoding can substantially boost accuracy. More explicit approaches perform search or refinement over solution paths, including Tree-of-Thoughts (Yao et al., 2023), MCTS-based agent planning such as LATS (Zhou et al., 2023a), and iterative refinement methods like Reflexion (Shinn et al., 2023) and Self-Refine (Madaan et al., 2023). More recently, “internal scaling” trains models to autonomously decide how much inference computation to allocate and when to terminate reasoning, shifting control from external orchestration toward model-internal deliberation (Guo et al., 2025; OpenAI, 2024a). Verifier-based inference further augments sampling or search with learned ranking or rejection, with process-level supervision improving reliability in mathematical reasoning (Lightman et al., 2023; Li et al., 2024; Hosseini et al., 2024; Wang et al., 2024c).\n\n## Conclusions\n\nWe present General AgentBench, a unified benchmark for evaluating LLM agents under realistic, multi-domain interactions where agents must infer intent, select tools from a shared pool, and act end-to-end. Across ten leading models, we find a substantial robustness gap when moving from domain-specific to general-agent evaluation. Our test-time scaling analysis reveals two fundamental limits: sequential scaling is bounded by an context ceiling, beyond which longer interactions become unstable, and parallel scaling delivers limited practical gains due to a persistent verification gap between generation and self-choice. We hope General AgentBench enables realistic assessment and guides progress toward robust, scalable general agents.\n\n## Impact Statement\n\nThis paper introduces General AgentBench, a benchmark for evaluating large language model agents as general-purpose systems under unified and realistic interaction settings. By exposing agents to diverse tasks and tools within a single framework, it enables more consistent and transparent assessment of agents’ abilities to interpret open-ended requests, select appropriate tools, and scale inference-time computation across domains. We expect this benchmark to support the development and diagnosis of more robust general-purpose agents. We also acknowledge potential risks. Unified evaluation and test-time scaling may favor computationally intensive or proprietary models, and unreliable self-choice under parallel scaling may lead to unstable or misleading agent behavior if applied naively in deployment. As general-purpose agents are increasingly integrated into real-world applications, failures in long-horizon reasoning, tool use, or self-verification may affect reliability and user trust. We emphasize that General AgentBench is intended for research and evaluation purposes. The community shares a responsibility to interpret results carefully and to pair scaling-based improvements with stronger verification, transparency, and safety considerations.\n",
+  "extracted_at": "2026-04-13T14:55:25.617188"
+}

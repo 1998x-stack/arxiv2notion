@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "2602.16958v1",
+  "title": "Automating Agent Hijacking via Structural Template Injection",
+  "authors": [
+    "Xinhao Deng",
+    "Jiaqing Wu",
+    "Miao Chen",
+    "Yue Xiao",
+    "Ke Xu",
+    "Qi Li"
+  ],
+  "abstract": "Agent hijacking, highlighted by OWASP as a critical threat to the Large Language Model (LLM) ecosystem, enables adversaries to manipulate execution by injecting malicious instructions into retrieved content. Most existing attacks rely on manually crafted, semantics-driven prompt manipulation, which often yields low attack success rates and limited transferability to closed-source commercial models. In this paper, we propose Phantom, an automated agent hijacking framework built upon Structured Template Injection that targets the fundamental architectural mechanisms of LLM agents. Our key insight is that agents rely on specific chat template tokens to separate system, user, assistant, and tool instructions. By injecting optimized structured templates into the retrieved context, we induce role confusion and cause the agent to misinterpret the injected content as legitimate user instructions or prior tool outputs. To enhance attack transferability against black-box agents, Phantom introduces a novel attack template search framework. We first perform multi-level template augmentation to increase structural diversity and then train a Template Autoencoder (TAE) to embed discrete templates into a continuous, searchable latent space. Subsequently, we apply Bayesian optimization to efficiently identify optimal adversarial vectors that are decoded into high-potency structured templates. Extensive experiments on Qwen, GPT, and Gemini demonstrate that our framework significantly outperforms existing baselines in both Attack Success Rate (ASR) and query efficiency. Moreover, we identified over 70 vulnerabilities in real-world commercial products that have been confirmed by vendors, underscoring the practical severity of structured template-based hijacking and providing an empirical foundation for securing next-generation agentic systems.",
+  "categories": [
+    "cs.AI",
+    "cs.LG"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2026-02-18T23:52:14+00:00",
+  "updated": "2026-02-18T23:52:14+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2602.16958v1.pdf"
+}

@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "2603.20639v1",
+  "title": "Agentic AI and the next intelligence explosion",
+  "authors": [
+    "James Evans",
+    "Benjamin Bratton",
+    "Blaise Agüera y Arcas"
+  ],
+  "abstract": "The \"AI singularity\" is often miscast as a monolithic, godlike mind. Evolution suggests a different path: intelligence is fundamentally plural, social, and relational. Recent advances in agentic AI reveal that frontier reasoning models, such as DeepSeek-R1, do not improve simply by \"thinking longer\". Instead, they simulate internal \"societies of thought,\" spontaneous cognitive debates that argue, verify, and reconcile to solve complex tasks. Moreover, we are entering an era of human-AI centaurs: hybrid actors where collective agency transcends individual control. Scaling this intelligence requires shifting from dyadic alignment (RLHF) toward institutional alignment. By designing digital protocols, modeled on organizations and markets, we can build a social infrastructure of checks and balances. The next intelligence explosion will not be a single silicon brain, but a complex, combinatorial society specializing and sprawling like a city. No mind is an island.",
+  "categories": [
+    "cs.AI"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2026-03-21T04:23:11+00:00",
+  "updated": "2026-03-21T04:23:11+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "4 pages",
+  "pdf_url": "https://arxiv.org/pdf/2603.20639v1.pdf"
+}

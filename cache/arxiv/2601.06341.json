@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "2601.06341v1",
+  "title": "Evaluating Robustness of Large Language Models in Enterprise Applications: Benchmarks for Perturbation Consistency Across Formats and Languages",
+  "authors": [
+    "Tara Bogavelli",
+    "Oluwanifemi Bamgbose",
+    "Gabrielle Gauthier Melançon",
+    "Fanny Riols",
+    "Roshnee Sharma"
+  ],
+  "abstract": "Enterprise LLM applications require consistently high quality and reliable performance across diverse scenarios, demanding robustness to minor variations. Existing research shows that even small prompt changes can lead to substantial differences in output, but has mainly focused on a narrow set of perturbations with small academic datasets, limiting their relevance to real-world applications. To address this, we present a comprehensive benchmark suite that evaluates robustness across multiple perturbation types, including general text edits (e.g., punctuation, whitespace), formatting changes (e.g., JSON, YAML), multilingual and cross-lingual inputs, and positional variations in instructions. Evaluating 11 models ranging from 4B to 120B+ parameters, we find that minor perturbations reduce performance by up to 40 percentage points on key enterprise metrics. Critically, we demonstrate that the relationship between model size and robustness is more nuanced than conventional assumptions suggest: an 8B parameter model (Ministral 3 8B) outperforms most larger models, while another 8B model (Llama 3.1 8B) performs worst overall.",
+  "categories": [
+    "cs.LG",
+    "cs.AI",
+    "cs.SE"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2026-01-09T22:26:31+00:00",
+  "updated": "2026-01-09T22:26:31+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2601.06341v1.pdf"
+}

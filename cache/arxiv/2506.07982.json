@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2506.07982v1",
+  "title": "$τ^2$-Bench: Evaluating Conversational Agents in a Dual-Control Environment",
+  "authors": [
+    "Victor Barres",
+    "Honghua Dong",
+    "Soham Ray",
+    "Xujie Si",
+    "Karthik Narasimhan"
+  ],
+  "abstract": "Existing benchmarks for conversational AI agents simulate single-control environments, where only the AI agent can use tools to interact with the world, while the user remains a passive information provider. This differs from real-world scenarios like technical support, where users need to actively participate in modifying the state of the (shared) world. In order to address this gap, we introduce $τ^2$-bench, with four key contributions: 1) A novel Telecom dual-control domain modeled as a Dec-POMDP, where both agent and user make use of tools to act in a shared, dynamic environment that tests both agent coordination and communication, 2) A compositional task generator that programmatically creates diverse, verifiable tasks from atomic components, ensuring domain coverage and controlled complexity, 3) A reliable user simulator tightly coupled with the environment, whose behavior is constrained by tools and observable states, improving simulation fidelity, 4) Fine-grained analysis of agent performance through multiple ablations including separating errors arising from reasoning vs communication/coordination. In particular, our experiments show significant performance drops when agents shift from no-user to dual-control, highlighting the challenges of guiding users. Overall, $τ^2$-bench provides a controlled testbed for agents that must both reason effectively and guide user actions.",
+  "categories": [
+    "cs.AI",
+    "cs.CL"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2025-06-09T17:52:18+00:00",
+  "updated": "2025-06-09T17:52:18+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2506.07982v1.pdf"
+}

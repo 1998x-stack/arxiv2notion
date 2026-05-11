@@ -1,0 +1,1435 @@
+{
+  "paper_id": "1508.01211",
+  "title": "Listen, Attend and Spell",
+  "authors": [
+    "William Chan Carnegie Mellon University williamchan@cmu.edu &Navdeep Jaitly, Quoc V. Le, Oriol Vinyals Google Brain {ndjaitly,qvl,vinyals}@google.com"
+  ],
+  "affiliations": [],
+  "abstract": "We present Listen, Attend and Spell (LAS), a neural network that learns to transcribe speech utterances to characters. Unlike traditional DNN-HMM models, this model learns all the components of a speech recognizer jointly. Our system has two components: a listener and a speller. The listener is a pyramidal recurrent network encoder that accepts filter bank spectra as inputs. The speller is an attention-based recurrent network decoder that emits characters as outputs. The network produces character sequences without making any independence assumptions between the characters. This is the key improvement of LAS over previous end-to-end CTC models. On a subset of the Google voice search task, LAS achieves a word error rate (WER) of 14.1% without a dictionary or a language model, and 10.3% with language model rescoring over the top 32 beams. By comparison, the state-of-the-art CLDNN-HMM model achieves a WER of 8.0%.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Deep Neural Networks (DNNs) have led to improvements in various components of\nspeech recognizers. They are commonly used in hybrid DNN-HMM speech recognition\nsystems for acoustic modeling\n [1, 2, 3, 4, 5, 6]. DNNs have also produced significant gains in\npronunciation models that map words to phoneme sequences\n[7, 8]. In language modeling, recurrent models have\nbeen shown to improve speech recognition accuracy by rescoring n-best lists\n[9]. Traditionally these components – acoustic,\npronunciation and language models – have all been trained separately, each\nwith a different objective. Recent work in this area attempts to rectify this\ndisjoint training issue by designing models that are trained end-to-end – from\nspeech directly to\ntranscripts [10, 11, 12, 13, 14, 15].\nTwo main approaches for this are Connectionist Temporal Classification (CTC)\n[10] and sequence to sequence models with\nattention [16]. Both of these approaches have limitations\nthat we try to address: CTC assumes that the label outputs are conditionally\nindependent of each other; whereas the sequence to sequence approach has only\nbeen applied to phoneme sequences\n[14, 15], and not trained end-to-end for\nspeech recognition.",
+        "In this paper we introduce Listen, Attend and Spell (LAS), a neural network\nthat improves upon the previous\nattempts [12, 14, 15]. The\nnetwork learns to transcribe an audio sequence signal to a word sequence, one\ncharacter at a time. Unlike previous approaches, LAS does not make\nindependence assumptions in the label sequence and it does not rely on HMMs.\nLAS is based on the sequence to sequence learning\nframework with attention [17, 18, 16, 14, 15].\nIt consists of an encoder recurrent neural network (RNN), which is named the\nlistener, and a decoder RNN, which is named the speller. The\nlistener is a pyramidal RNN that converts low level speech signals into higher\nlevel features. The speller is an RNN that converts these higher level features\ninto output utterances by specifying a probability distribution over sequences\nof characters using the attention\nmechanism [16, 14, 15].\nThe listener and the speller are trained jointly.",
+        "Key to our approach is the fact that we use a pyramidal RNN model for the\nlistener, which reduces the number of time steps that the attention model has\nto extract relevant information from. Rare and out-of-vocabulary (OOV) words\nare handled automatically, since the model outputs the character sequence, one\ncharacter at a time. Another advantage of modeling characters as outputs is\nthat the network is able to generate multiple spelling variants naturally. For\nexample, for the phrase “triple a” the model produces both “triple a”\nand “aaa” in the top beams (see section 4.5). A model like\nCTC may have trouble producing such diverse transcripts for the same utterance\nbecause of conditional independence assumptions between frames.",
+        "In our experiments, we find that these components are necessary for\nLAS to work well. Without the attention mechanism, the model\noverfits the training data significantly, in spite of our large\ntraining set of three million utterances - it memorizes the training\ntranscripts without paying attention to the acoustics. Without the\npyramid structure in the encoder side, our model converges too slowly\n- even after a month of training, the error rates were significantly\nhigher than the errors we report here. Both of these problems arise\nbecause the acoustic signals can have hundreds to thousands of frames\nwhich makes it difficult to train the RNNs. Finally, to reduce the\noverfitting of the speller to the training transcripts, we use a\nsampling trick during training [19].",
+        "With these improvements, LAS achieves 14.1% WER on a subset of the Google voice\nsearch task, without a dictionary or a language model. When combined\nwith language model rescoring, LAS achieves 10.3% WER. By\ncomparison, the Google state-of-the-art CLDNN-HMM system achieves 8.0% WER on the\nsame data set [20]."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Deep Neural Networks (DNNs) have led to improvements in various components of\nspeech recognizers. They are commonly used in hybrid DNN-HMM speech recognition\nsystems for acoustic modeling\n [1, 2, 3, 4, 5, 6]. DNNs have also produced significant gains in\npronunciation models that map words to phoneme sequences\n[7, 8]. In language modeling, recurrent models have\nbeen shown to improve speech recognition accuracy by rescoring n-best lists\n[9]. Traditionally these components – acoustic,\npronunciation and language models – have all been trained separately, each\nwith a different objective. Recent work in this area attempts to rectify this\ndisjoint training issue by designing models that are trained end-to-end – from\nspeech directly to\ntranscripts [10, 11, 12, 13, 14, 15].\nTwo main approaches for this are Connectionist Temporal Classification (CTC)\n[10] and sequence to sequence models with\nattention [16]. Both of these approaches have limitations\nthat we try to address: CTC assumes that the label outputs are conditionally\nindependent of each other; whereas the sequence to sequence approach has only\nbeen applied to phoneme sequences\n[14, 15], and not trained end-to-end for\nspeech recognition."
+        },
+        {
+          "type": "para",
+          "data": "In this paper we introduce Listen, Attend and Spell (LAS), a neural network\nthat improves upon the previous\nattempts [12, 14, 15]. The\nnetwork learns to transcribe an audio sequence signal to a word sequence, one\ncharacter at a time. Unlike previous approaches, LAS does not make\nindependence assumptions in the label sequence and it does not rely on HMMs.\nLAS is based on the sequence to sequence learning\nframework with attention [17, 18, 16, 14, 15].\nIt consists of an encoder recurrent neural network (RNN), which is named the\nlistener, and a decoder RNN, which is named the speller. The\nlistener is a pyramidal RNN that converts low level speech signals into higher\nlevel features. The speller is an RNN that converts these higher level features\ninto output utterances by specifying a probability distribution over sequences\nof characters using the attention\nmechanism [16, 14, 15].\nThe listener and the speller are trained jointly."
+        },
+        {
+          "type": "para",
+          "data": "Key to our approach is the fact that we use a pyramidal RNN model for the\nlistener, which reduces the number of time steps that the attention model has\nto extract relevant information from. Rare and out-of-vocabulary (OOV) words\nare handled automatically, since the model outputs the character sequence, one\ncharacter at a time. Another advantage of modeling characters as outputs is\nthat the network is able to generate multiple spelling variants naturally. For\nexample, for the phrase “triple a” the model produces both “triple a”\nand “aaa” in the top beams (see section 4.5). A model like\nCTC may have trouble producing such diverse transcripts for the same utterance\nbecause of conditional independence assumptions between frames."
+        },
+        {
+          "type": "para",
+          "data": "In our experiments, we find that these components are necessary for\nLAS to work well. Without the attention mechanism, the model\noverfits the training data significantly, in spite of our large\ntraining set of three million utterances - it memorizes the training\ntranscripts without paying attention to the acoustics. Without the\npyramid structure in the encoder side, our model converges too slowly\n- even after a month of training, the error rates were significantly\nhigher than the errors we report here. Both of these problems arise\nbecause the acoustic signals can have hundreds to thousands of frames\nwhich makes it difficult to train the RNNs. Finally, to reduce the\noverfitting of the speller to the training transcripts, we use a\nsampling trick during training [19]."
+        },
+        {
+          "type": "para",
+          "data": "With these improvements, LAS achieves 14.1% WER on a subset of the Google voice\nsearch task, without a dictionary or a language model. When combined\nwith language model rescoring, LAS achieves 10.3% WER. By\ncomparison, the Google state-of-the-art CLDNN-HMM system achieves 8.0% WER on the\nsame data set [20]."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [
+        "Even though deep networks have been successfully used in many\napplications, until recently, they have mainly been used in\nclassification: mapping a fixed-length vector to an output\ncategory [21]. For structured problems, such as\nmapping one variable-length sequence to another variable-length\nsequence, neural networks have to be combined with other sequential\nmodels such as Hidden Markov Models (HMMs) [22]\nand Conditional Random Fields (CRFs) [23]. A drawback\nof this combining approach is that the resulting models cannot be\neasily trained end-to-end and they make simplistic assumptions about\nthe probability distribution of the data.",
+        "Sequence to sequence learning is a framework that attempts to address\nthe problem of learning variable-length input and output\nsequences [17]. It uses an encoder RNN to map\nthe sequential variable-length input into a fixed-length vector. A\ndecoder RNN then uses this vector to produce the variable-length\noutput sequence, one token at a time. During training, the model feeds\nthe groundtruth labels as inputs to the decoder. During inference, the\nmodel performs a beam search to generate suitable candidates for next\nstep predictions.",
+        "Sequence to sequence models can be improved significantly by the use of\nan attention mechanism that provides the decoder RNN more information\nwhen it produces the output tokens [16]. At each\noutput step, the last hidden state of the decoder RNN is used to generate\nan attention vector over the input sequence of the encoder. The attention\nvector is used to propagate information from the encoder to the decoder\nat every time step, instead of just once, as with the original sequence to\nsequence model [17]. This attention vector can be\nthought of as skip connections that allow the information and the gradients\nto flow more effectively in an RNN.",
+        "The sequence to sequence framework has been used extensively for many\napplications: machine translation [24, 25], image\ncaptioning [26, 27], parsing [28]\nand conversational modeling [29]. The generality of this\nframework suggests that speech recognition can also be a direct application\n[14, 15]."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Even though deep networks have been successfully used in many\napplications, until recently, they have mainly been used in\nclassification: mapping a fixed-length vector to an output\ncategory [21]. For structured problems, such as\nmapping one variable-length sequence to another variable-length\nsequence, neural networks have to be combined with other sequential\nmodels such as Hidden Markov Models (HMMs) [22]\nand Conditional Random Fields (CRFs) [23]. A drawback\nof this combining approach is that the resulting models cannot be\neasily trained end-to-end and they make simplistic assumptions about\nthe probability distribution of the data."
+        },
+        {
+          "type": "para",
+          "data": "Sequence to sequence learning is a framework that attempts to address\nthe problem of learning variable-length input and output\nsequences [17]. It uses an encoder RNN to map\nthe sequential variable-length input into a fixed-length vector. A\ndecoder RNN then uses this vector to produce the variable-length\noutput sequence, one token at a time. During training, the model feeds\nthe groundtruth labels as inputs to the decoder. During inference, the\nmodel performs a beam search to generate suitable candidates for next\nstep predictions."
+        },
+        {
+          "type": "para",
+          "data": "Sequence to sequence models can be improved significantly by the use of\nan attention mechanism that provides the decoder RNN more information\nwhen it produces the output tokens [16]. At each\noutput step, the last hidden state of the decoder RNN is used to generate\nan attention vector over the input sequence of the encoder. The attention\nvector is used to propagate information from the encoder to the decoder\nat every time step, instead of just once, as with the original sequence to\nsequence model [17]. This attention vector can be\nthought of as skip connections that allow the information and the gradients\nto flow more effectively in an RNN."
+        },
+        {
+          "type": "para",
+          "data": "The sequence to sequence framework has been used extensively for many\napplications: machine translation [24, 25], image\ncaptioning [26, 27], parsing [28]\nand conversational modeling [29]. The generality of this\nframework suggests that speech recognition can also be a direct application\n[14, 15]."
+        }
+      ]
+    },
+    {
+      "title": "Model",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we will formally describe LAS which accepts acoustic\nfeatures as inputs and emits English characters as outputs. Let $\\mathbf{x}=(x_{1},\\dots,x_{T})$ be our input sequence of filter bank spectra features, and\nlet $\\mathbf{y}=(\\langle\\mathrm{sos}\\rangle,y_{1},\\dots,y_{S},\\langle\\mathrm{eos}\\rangle)$, $y_{i}\\in\\{a,b,c,\\cdots,z,0,\\cdots,9,\\langle\\mathrm{space}\\rangle,\\langle\\mathrm{comma}\\rangle,\\langle\\mathrm{period}\\rangle,\\langle\\mathrm{apostrophe}\\rangle,\\langle\\mathrm{unk}\\rangle\\}$,\nbe the output sequence of characters. Here $\\langle\\mathrm{sos}\\rangle$ and\n$\\langle\\mathrm{eos}\\rangle$ are the special start-of-sentence token, and\nend-of-sentence tokens, respectively.",
+        "We want to model each character output $y_{i}$ as a conditional distribution\nover the previous characters $y_{<i}$ and the input signal $\\mathbf{x}$\nusing the chain rule:",
+        "Our Listen, Attend and Spell (LAS) model consists of two\nsub-modules: the listener and the speller. The listener is an acoustic model\nencoder, whose key operation is $\\operatorname{Listen}$. The speller is an\nattention-based character decoder, whose key operation is\n$\\operatorname{AttendAndSpell}$. The $\\operatorname{Listen}$ function\ntransforms the original signal $\\mathbf{x}$ into a high level representation\n$\\mathbf{h}=(h_{1},\\dots,h_{U})$ with $U\\leq T$, while the\n$\\operatorname{AttendAndSpell}$ function consumes $\\mathbf{h}$ and produces a\nprobability distribution over character sequences:",
+        "Figure 1 visualizes LAS with these two components. We\nprovide more details of these components in the following sections."
+      ],
+      "subsections": [
+        {
+          "title": "Listen",
+          "level": 3,
+          "paragraphs": [
+            "The $\\operatorname{Listen}$ operation uses a Bidirectional Long Short\nTerm Memory RNN (BLSTM)\n[30, 31, 12]\nwith a pyramid structure. This modification is required to reduce the\nlength $U$ of ${\\mathbf{h}}$, from $T$, the length of the input\n${\\mathbf{x}}$, because the input speech signals can be hundreds to\nthousands of frames long. A direct application of BLSTM for the\noperation $\\operatorname{Listen}$ converged slowly and produced\nresults inferior to those reported here, even after a month of\ntraining time. This is presumably because the operation\n$\\operatorname{AttendAndSpell}$ has a hard time extracting the\nrelevant information from a large number of input time steps.",
+            "We circumvent this problem by using a pyramid BLSTM (pBLSTM) similar\nto the Clockwork RNN [33]. In each successive stacked pBLSTM\nlayer, we reduce the time resolution by a factor of 2. In a typical deep\nBTLM architecture, the output at the $i$-th time step, from the $j$-th layer is\ncomputed as follows:",
+            "In the pBLSTM model, we concatenate the outputs at consecutive\nsteps of each layer before feeding it to the next layer, i.e.:",
+            "In our model, we stack 3 pBLSTMs on top of the bottom BLSTM layer to\nreduce the time resolution $2^{3}=8$ times. This allows the attention\nmodel (see next section) to extract the relevant information from a\nsmaller number of times steps. In addition to reducing the resolution,\nthe deep architecture allows the model to learn nonlinear feature\nrepresentations of the data. See Figure 1 for a\nvisualization of the pBLSTM.",
+            "The pyramid structure also reduces the computational complexity. In\nthe next section we show that the attention mechanism over $U$\nfeatures has a computational complexity of $O(US)$. Thus,\nreducing $U$ speeds up learning and inference significantly."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The $\\operatorname{Listen}$ operation uses a Bidirectional Long Short\nTerm Memory RNN (BLSTM)\n[30, 31, 12]\nwith a pyramid structure. This modification is required to reduce the\nlength $U$ of ${\\mathbf{h}}$, from $T$, the length of the input\n${\\mathbf{x}}$, because the input speech signals can be hundreds to\nthousands of frames long. A direct application of BLSTM for the\noperation $\\operatorname{Listen}$ converged slowly and produced\nresults inferior to those reported here, even after a month of\ntraining time. This is presumably because the operation\n$\\operatorname{AttendAndSpell}$ has a hard time extracting the\nrelevant information from a large number of input time steps."
+            },
+            {
+              "type": "para",
+              "data": "We circumvent this problem by using a pyramid BLSTM (pBLSTM) similar\nto the Clockwork RNN [33]. In each successive stacked pBLSTM\nlayer, we reduce the time resolution by a factor of 2. In a typical deep\nBTLM architecture, the output at the $i$-th time step, from the $j$-th layer is\ncomputed as follows:"
+            },
+            {
+              "type": "para",
+              "data": "In the pBLSTM model, we concatenate the outputs at consecutive\nsteps of each layer before feeding it to the next layer, i.e.:"
+            },
+            {
+              "type": "para",
+              "data": "In our model, we stack 3 pBLSTMs on top of the bottom BLSTM layer to\nreduce the time resolution $2^{3}=8$ times. This allows the attention\nmodel (see next section) to extract the relevant information from a\nsmaller number of times steps. In addition to reducing the resolution,\nthe deep architecture allows the model to learn nonlinear feature\nrepresentations of the data. See Figure 1 for a\nvisualization of the pBLSTM."
+            },
+            {
+              "type": "para",
+              "data": "The pyramid structure also reduces the computational complexity. In\nthe next section we show that the attention mechanism over $U$\nfeatures has a computational complexity of $O(US)$. Thus,\nreducing $U$ speeds up learning and inference significantly."
+            }
+          ]
+        },
+        {
+          "title": "Attend and Spell",
+          "level": 3,
+          "paragraphs": [
+            "We now describe the $\\operatorname{AttendAndSpell}$ function. The\nfunction is computed using an attention-based LSTM transducer\n[16, 15].\nAt every output step, the transducer produces a probability distribution\nover the next character conditioned on all the characters seen previously.\nThe distribution for $y_{i}$ is a function of the decoder state $s_{i}$ and\ncontext $c_{i}$. The decoder state $s_{i}$ is a function of the previous\nstate $s_{i-1}$, the previously emitted character $y_{i-1}$\nand context $c_{i-1}$. The context vector $c_{i}$ is produced by an\nattention mechanism. Specifically,",
+            "where\n$\\operatorname{CharacterDistribution}$ is an MLP with softmax outputs over\ncharacters, and $\\operatorname{RNN}$ is a 2 layer LSTM.",
+            "At each time step, $i$, the attention mechanism, $\\operatorname{AttentionContext}$\ngenerates a context vector, $c_{i}$ encapsulating the information in the acoustic\nsignal needed to generate the next character. The attention model is\ncontent based - the contents of the decoder state $s_{i}$ are matched\nto the contents of $h_{u}$ representing time step $u$ of $\\mathbf{h}$, to generate an\nattention vector $\\alpha_{i}$. $\\alpha_{i}$ is used to linearly blend vectors $h_{u}$ to\ncreate $c_{i}$.",
+            "Specifically, at each decoder timestep $i$, the $\\operatorname{AttentionContext}$\nfunction computes the scalar energy $e_{i,u}$ for each time step $u$, using\nvector $h_{u}\\in\\mathbf{h}$ and $s_{i}$. The scalar energy $e_{i,u}$ is converted into a\nprobability distribution over times steps (or attention) $\\alpha_{i}$ using a\nsoftmax function. This is used to create the context vector $c_{i}$ by linearly\nblending the listener features, $h_{u}$, at different time steps:",
+            "where\n$\\phi$ and $\\psi$ are MLP networks. On convergence, the $\\alpha_{i}$\ndistribution is typically very sharp, and focused on only a few frames of $\\mathbf{h}$;\n$c_{i}$ can be seen as a continuous bag of weighted features of $\\mathbf{h}$. Figure\n1 shows LAS architecture."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We now describe the $\\operatorname{AttendAndSpell}$ function. The\nfunction is computed using an attention-based LSTM transducer\n[16, 15].\nAt every output step, the transducer produces a probability distribution\nover the next character conditioned on all the characters seen previously.\nThe distribution for $y_{i}$ is a function of the decoder state $s_{i}$ and\ncontext $c_{i}$. The decoder state $s_{i}$ is a function of the previous\nstate $s_{i-1}$, the previously emitted character $y_{i-1}$\nand context $c_{i-1}$. The context vector $c_{i}$ is produced by an\nattention mechanism. Specifically,"
+            },
+            {
+              "type": "para",
+              "data": "where\n$\\operatorname{CharacterDistribution}$ is an MLP with softmax outputs over\ncharacters, and $\\operatorname{RNN}$ is a 2 layer LSTM."
+            },
+            {
+              "type": "para",
+              "data": "At each time step, $i$, the attention mechanism, $\\operatorname{AttentionContext}$\ngenerates a context vector, $c_{i}$ encapsulating the information in the acoustic\nsignal needed to generate the next character. The attention model is\ncontent based - the contents of the decoder state $s_{i}$ are matched\nto the contents of $h_{u}$ representing time step $u$ of $\\mathbf{h}$, to generate an\nattention vector $\\alpha_{i}$. $\\alpha_{i}$ is used to linearly blend vectors $h_{u}$ to\ncreate $c_{i}$."
+            },
+            {
+              "type": "para",
+              "data": "Specifically, at each decoder timestep $i$, the $\\operatorname{AttentionContext}$\nfunction computes the scalar energy $e_{i,u}$ for each time step $u$, using\nvector $h_{u}\\in\\mathbf{h}$ and $s_{i}$. The scalar energy $e_{i,u}$ is converted into a\nprobability distribution over times steps (or attention) $\\alpha_{i}$ using a\nsoftmax function. This is used to create the context vector $c_{i}$ by linearly\nblending the listener features, $h_{u}$, at different time steps:"
+            },
+            {
+              "type": "para",
+              "data": "where\n$\\phi$ and $\\psi$ are MLP networks. On convergence, the $\\alpha_{i}$\ndistribution is typically very sharp, and focused on only a few frames of $\\mathbf{h}$;\n$c_{i}$ can be seen as a continuous bag of weighted features of $\\mathbf{h}$. Figure\n1 shows LAS architecture."
+            }
+          ]
+        },
+        {
+          "title": "Learning",
+          "level": 3,
+          "paragraphs": [
+            "The $\\operatorname{Listen}$ and $\\operatorname{AttendAndSpell}$ functions can\nbe trained jointly for end-to-end speech recognition. The sequence to sequence\nmethods condition the next step prediction on the previous\ncharacters [17, 16] and maximizes the log\nprobability:",
+            "where $y^{*}_{<i}$ is the groundtruth of the previous\ncharacters.",
+            "However during inference, the groundtruth is missing and the predictions can suffer\nbecause the model was not trained to be resilient to feeding in bad predictions\nat some time steps. To ameliorate this effect, we use a trick that was proposed in [19].\nDuring training, instead of always feeding in the ground truth transcript for next step\nprediction, we sometimes sample from our previous character distribution and use that as the\ninputs in the next step predictions:",
+            "where $\\tilde{y}_{i-1}$ is the character chosen from the ground truth, or sampled from\nthe model with a certain sampling rate. Unlike [19], we do not use\na schedule and simply use a constant sampling rate of 10% right from the start\nof training.",
+            "As the system is a very deep network it may appear that some type of\npretraining would be required. However, in our experiments, we found no need\nfor pretraining. In particular, we attempted to pretrain the\n$\\operatorname{Listen}$ function with context independent or context dependent\nphonemes generated from a conventional GMM-HMM system. A softmax network was\nattached to the output units $h_{u}\\in\\mathbf{h}$ of the listener and used to\nmake multi-frame phoneme state predictions [34] but\nled to no improvements. We also attempted to use the phonemes as a joint\nobjective target [35], but found no improvements."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The $\\operatorname{Listen}$ and $\\operatorname{AttendAndSpell}$ functions can\nbe trained jointly for end-to-end speech recognition. The sequence to sequence\nmethods condition the next step prediction on the previous\ncharacters [17, 16] and maximizes the log\nprobability:"
+            },
+            {
+              "type": "para",
+              "data": "where $y^{*}_{<i}$ is the groundtruth of the previous\ncharacters."
+            },
+            {
+              "type": "para",
+              "data": "However during inference, the groundtruth is missing and the predictions can suffer\nbecause the model was not trained to be resilient to feeding in bad predictions\nat some time steps. To ameliorate this effect, we use a trick that was proposed in [19].\nDuring training, instead of always feeding in the ground truth transcript for next step\nprediction, we sometimes sample from our previous character distribution and use that as the\ninputs in the next step predictions:"
+            },
+            {
+              "type": "para",
+              "data": "where $\\tilde{y}_{i-1}$ is the character chosen from the ground truth, or sampled from\nthe model with a certain sampling rate. Unlike [19], we do not use\na schedule and simply use a constant sampling rate of 10% right from the start\nof training."
+            },
+            {
+              "type": "para",
+              "data": "As the system is a very deep network it may appear that some type of\npretraining would be required. However, in our experiments, we found no need\nfor pretraining. In particular, we attempted to pretrain the\n$\\operatorname{Listen}$ function with context independent or context dependent\nphonemes generated from a conventional GMM-HMM system. A softmax network was\nattached to the output units $h_{u}\\in\\mathbf{h}$ of the listener and used to\nmake multi-frame phoneme state predictions [34] but\nled to no improvements. We also attempted to use the phonemes as a joint\nobjective target [35], but found no improvements."
+            }
+          ]
+        },
+        {
+          "title": "Decoding and Rescoring",
+          "level": 3,
+          "paragraphs": [
+            "During inference we want to find the most likely character sequence given\nthe input acoustics:",
+            "Decoding is performed with a simple left-to-right beam search algorithm similar\nto [17]. We maintain a set of $\\beta$ partial\nhypotheses, starting with the start-of-sentence $\\langle\\mathrm{sos}\\rangle$ token. At each timestep, each partial hypothesis in the\nbeam is expanded with every possible character and only the\n$\\beta$ most likely beams are kept. When the $\\langle\\mathrm{eos}\\rangle$\ntoken is encountered, it is removed from the beam and added to the set of\ncomplete hypothesis. A dictionary can optionally be added to constrain\nthe search space to valid words, however we found that this was not necessary\nsince the model learns to spell real words almost all the time.",
+            "We have vast quantities of text data [36], compared to\nthe amount of transcribed speech utterances. We can use language models\ntrained on text corpora alone similar to conventional speech systems [37].\nTo do so we can rescore our beams with the language model. We find that our model\nhas a small bias for shorter utterances so we normalize our probabilities by the\nnumber of characters $|\\mathbf{y}|_{c}$ in the hypothesis and combine it with a language model\nprobability $P_{\\operatorname{LM}}(\\mathbf{y})$:",
+            "where $\\lambda$ is our\nlanguage model weight and can be determined by a held-out validation set."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "During inference we want to find the most likely character sequence given\nthe input acoustics:"
+            },
+            {
+              "type": "para",
+              "data": "Decoding is performed with a simple left-to-right beam search algorithm similar\nto [17]. We maintain a set of $\\beta$ partial\nhypotheses, starting with the start-of-sentence $\\langle\\mathrm{sos}\\rangle$ token. At each timestep, each partial hypothesis in the\nbeam is expanded with every possible character and only the\n$\\beta$ most likely beams are kept. When the $\\langle\\mathrm{eos}\\rangle$\ntoken is encountered, it is removed from the beam and added to the set of\ncomplete hypothesis. A dictionary can optionally be added to constrain\nthe search space to valid words, however we found that this was not necessary\nsince the model learns to spell real words almost all the time."
+            },
+            {
+              "type": "para",
+              "data": "We have vast quantities of text data [36], compared to\nthe amount of transcribed speech utterances. We can use language models\ntrained on text corpora alone similar to conventional speech systems [37].\nTo do so we can rescore our beams with the language model. We find that our model\nhas a small bias for shorter utterances so we normalize our probabilities by the\nnumber of characters $|\\mathbf{y}|_{c}$ in the hypothesis and combine it with a language model\nprobability $P_{\\operatorname{LM}}(\\mathbf{y})$:"
+            },
+            {
+              "type": "para",
+              "data": "where $\\lambda$ is our\nlanguage model weight and can be determined by a held-out validation set."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we will formally describe LAS which accepts acoustic\nfeatures as inputs and emits English characters as outputs. Let $\\mathbf{x}=(x_{1},\\dots,x_{T})$ be our input sequence of filter bank spectra features, and\nlet $\\mathbf{y}=(\\langle\\mathrm{sos}\\rangle,y_{1},\\dots,y_{S},\\langle\\mathrm{eos}\\rangle)$, $y_{i}\\in\\{a,b,c,\\cdots,z,0,\\cdots,9,\\langle\\mathrm{space}\\rangle,\\langle\\mathrm{comma}\\rangle,\\langle\\mathrm{period}\\rangle,\\langle\\mathrm{apostrophe}\\rangle,\\langle\\mathrm{unk}\\rangle\\}$,\nbe the output sequence of characters. Here $\\langle\\mathrm{sos}\\rangle$ and\n$\\langle\\mathrm{eos}\\rangle$ are the special start-of-sentence token, and\nend-of-sentence tokens, respectively."
+        },
+        {
+          "type": "para",
+          "data": "We want to model each character output $y_{i}$ as a conditional distribution\nover the previous characters $y_{<i}$ and the input signal $\\mathbf{x}$\nusing the chain rule:"
+        },
+        {
+          "type": "para",
+          "data": "Our Listen, Attend and Spell (LAS) model consists of two\nsub-modules: the listener and the speller. The listener is an acoustic model\nencoder, whose key operation is $\\operatorname{Listen}$. The speller is an\nattention-based character decoder, whose key operation is\n$\\operatorname{AttendAndSpell}$. The $\\operatorname{Listen}$ function\ntransforms the original signal $\\mathbf{x}$ into a high level representation\n$\\mathbf{h}=(h_{1},\\dots,h_{U})$ with $U\\leq T$, while the\n$\\operatorname{AttendAndSpell}$ function consumes $\\mathbf{h}$ and produces a\nprobability distribution over character sequences:"
+        },
+        {
+          "type": "para",
+          "data": "Figure 1 visualizes LAS with these two components. We\nprovide more details of these components in the following sections."
+        }
+      ]
+    },
+    {
+      "title": "Experiments",
+      "level": 2,
+      "paragraphs": [
+        "We used a dataset approximately three million Google voice search utterances\n(representing 2000 hours of data) for our experiments. Approximately 10 hours\nof utterances were randomly selected as a held-out validation set. Data\naugmentation was performed using a room simulator, adding different types of\nnoise and reverberations; the noise sources were obtained from YouTube and\nenvironmental recordings of daily events [20]. This\nincreased the amount of audio data by $20$ times. 40-dimensional log-mel filter\nbank features were computed every 10ms and used as the acoustic inputs to the\nlistener. A separate set of 22K utterances representing approximately 16 hours\nof data were used as the test data. A noisy test data set was also created\nusing the same corruption strategy that was applied to the training data. All\ntraining sets are anonymized and hand-transcribed, and are representative of\nGoogle’s speech traffic.",
+        "The text was normalized by converting all characters to lower case\nEnglish alphanumerics (including digits). The punctuations: space,\ncomma, period and apostrophe were kept, while all other tokens were\nconverted to the unknown $\\langle\\mathrm{unk}\\rangle$ token. As\nmentioned earlier, all utterances were padded with the\nstart-of-sentence $\\langle\\mathrm{sos}\\rangle$ and the\nend-of-sentence $\\langle\\mathrm{eos}\\rangle$ tokens.",
+        "The state-of-the-art model on this dataset is a CLDNN-HMM system that\nwas described in [20]. The CLDNN system achieves\na WER of 8.0% on the clean test set and 8.9% on the noisy test\nset. However, we note that the CLDNN uses unidirectional CLDNNs and\nwould certainly benefit even further from the use of a bidirectional\nCLDNN architecture.",
+        "For the $\\operatorname{Listen}$ function we used 3 layers of 512 pBLSTM nodes\n(i.e., 256 nodes per direction) on top of a BLSTM that operates on the input.\nThis reduced the time resolution by $8=2^{3}$ times. The $\\operatorname{Spell}$\nfunction used a two layer LSTM with 512 nodes each. The weights were\ninitialized with a uniform distribution $\\mathcal{U}(-0.1,0.1)$.",
+        "Asynchronous Stochastic Gradient Descent (ASGD) was used for training\nour model [38]. A learning rate of $0.2$ was used\nwith a geometric decay of $0.98$ per 3M utterances\n(i.e., $\\nicefrac{{1}}{{20}}$-th of an epoch). We used the DistBelief\nframework [38] with 32 replicas, each with a\nminibatch of 32 utterances. In order to further speed up training, the\nsequences were grouped into buckets based on their frame\nlength [17].",
+        "The model was trained using groundtruth previous characters until results on the\nvalidation set stopped improving. This took approximately two weeks. The model\nwas decoded using beam width $\\beta=32$ and achieved 16.2% WER on\nthe clean test set and 19.0% WER on the noisy test set without any\ndictionary or language model. We found that constraining the beam search with a\ndictionary had no impact on the WER. Rescoring the top 32 beams with\nthe same n-gram language model that was used by the CLDNN system using a language model\nweight of $\\lambda=0.008$ improved the results for the clean\nand noisy test sets to 12.6% and 14.7% respectively. Note that for convenience,\nwe did not decode with a language model, but rather only rescored the top 32 beams.\nIt is possible that further gains could have been achieved by using the language model\nduring decoding.",
+        "As mentioned in Section 3.3, there is a mismatch between\ntraining and testing. During training the model is conditioned on the correct\nprevious characters but during testing mistakes made by the model corrupt\nfuture predictions. We trained another model by sampling from our previous character\ndistribution with a probability of 10% (we did not use a schedule as\ndescribed in [19]). This improved our results on the clean\nand noisy test sets to 14.1% and 16.5% WER respectively when no language model rescoring\nwas used. With language model rescoring, we achevied 10.3% and 12.0% WER on the clean\nand noisy test sets, respectively. Table 1 summarizes these results.",
+        "On the clean test set, this model is within 2.5% absolute WER of the\nstate-of-the-art CLDNN-HMM system, while on the noisy set it is less than\n3.0% absolute WER worse. We suspect that convolutional filters could lead to\nimproved results, as they have been reported to improve performance by 5%\nrelative WER on clean speech and 7% relative on noisy speech compared to\nnon-convolutional architectures [20]."
+      ],
+      "subsections": [
+        {
+          "title": "Attention Visualization",
+          "level": 3,
+          "paragraphs": [
+            "The content-based attention mechanism creates an explicit alignment between the\ncharacters and audio signal. We can visualize the attention mechanism by\nrecording the attention distribution on the acoustic sequence at every\ncharacter output timestep. Figure 2 visualizes the attention\nalignment between the characters and the filterbanks for the utterance “how\nmuch would a woodchuck chuck”. For this particular utterance, the model learnt\na monotonic distribution without any location priors. The words “woodchuck”\nand “chuck” have acoustic similarities, the attention mechanism was slightly\nconfused when emitting “woodchuck” with a dilution in the distribution. The\nattention model was also able to identify the start and end of the utterance\nproperly.",
+            "In the following sections, we report results of control experiments\nthat were conducted to understand the effects of beam widths,\nutterance lengths and word frequency on the WER of our model."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/woodchuck.png",
+              "alt": "Refer to caption",
+              "caption": "Alignments between character outputs and audio signal produced by the Listen, Attend and Spell (LAS) model for the utterance “how much would a woodchuck chuck”. The content based attention mechanism was able to identify the start position in the audio sequence for the first character correctly. The alignment produced is generally monotonic without a need for any location based priors.",
+              "label": "S4.F2"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/woodchuck.png",
+                "alt": "Refer to caption",
+                "caption": "Alignments between character outputs and audio signal produced by the Listen, Attend and Spell (LAS) model for the utterance “how much would a woodchuck chuck”. The content based attention mechanism was able to identify the start position in the audio sequence for the first character correctly. The alignment produced is generally monotonic without a need for any location based priors.",
+                "label": "S4.F2"
+              }
+            },
+            {
+              "type": "para",
+              "data": "The content-based attention mechanism creates an explicit alignment between the\ncharacters and audio signal. We can visualize the attention mechanism by\nrecording the attention distribution on the acoustic sequence at every\ncharacter output timestep. Figure 2 visualizes the attention\nalignment between the characters and the filterbanks for the utterance “how\nmuch would a woodchuck chuck”. For this particular utterance, the model learnt\na monotonic distribution without any location priors. The words “woodchuck”\nand “chuck” have acoustic similarities, the attention mechanism was slightly\nconfused when emitting “woodchuck” with a dilution in the distribution. The\nattention model was also able to identify the start and end of the utterance\nproperly."
+            },
+            {
+              "type": "para",
+              "data": "In the following sections, we report results of control experiments\nthat were conducted to understand the effects of beam widths,\nutterance lengths and word frequency on the WER of our model."
+            }
+          ]
+        },
+        {
+          "title": "Effects of Beam Width",
+          "level": 3,
+          "paragraphs": [
+            "We investigate the correlation between the performance of the model\nand the width of beam search, with and without the language model\nrescoring. Figure 3 shows the effect of the decode\nbeam width, $\\beta$, on the WER for the clean test set. We see\nconsistent WER improvements by increasing the beam width up to 16,\nafter which we observe no significant benefits. At a beam width of 32,\nthe WER is 14.1% and 10.3% after language model rescoring.\nRescoring the top 32 beams with an oracle produces a WER of 4.3% on\nthe clean test set and 5.5% on the noisy test\nset."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x1.png",
+              "alt": "Refer to caption",
+              "caption": "The effect of the decode beam width on WER for the clean Google voice search task. The reported WERs are without a dictionary or language model, with language model rescoring and the oracle WER for different beam widths. The figure shows that good results can be obtained even with a relatively small beam size.",
+              "label": "S4.F3"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We investigate the correlation between the performance of the model\nand the width of beam search, with and without the language model\nrescoring. Figure 3 shows the effect of the decode\nbeam width, $\\beta$, on the WER for the clean test set. We see\nconsistent WER improvements by increasing the beam width up to 16,\nafter which we observe no significant benefits. At a beam width of 32,\nthe WER is 14.1% and 10.3% after language model rescoring.\nRescoring the top 32 beams with an oracle produces a WER of 4.3% on\nthe clean test set and 5.5% on the noisy test\nset."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x1.png",
+                "alt": "Refer to caption",
+                "caption": "The effect of the decode beam width on WER for the clean Google voice search task. The reported WERs are without a dictionary or language model, with language model rescoring and the oracle WER for different beam widths. The figure shows that good results can be obtained even with a relatively small beam size.",
+                "label": "S4.F3"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Effects of Utterance Length",
+          "level": 3,
+          "paragraphs": [
+            "We measure the performance of our model as a function of the number of\nwords in the utterance. We expect the model to do poorly on longer\nutterances due to limited number of long training utterances in our\ndistribution. Hence it is not surprising that longer utterances have a\nlarger error rate. The deletions dominate the error for long\nutterances, suggesting we may be missing out on words. It is\nsurprising that short utterances (e.g., 2 words or less) perform quite\npoorly. Here, the substitutions and insertions are the main sources of\nerrors, suggesting the model may split words apart.",
+            "Figure 4 also suggests that our model struggles to\ngeneralize to long utterances when trained on a distribution of\nshorter utterances. It is possible location-based priors may help in\nthese situations as reported by [15]."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x2.png",
+              "alt": "Refer to caption",
+              "caption": "The correlation between error rates (insertion, deletion, substitution and WER) and the number of words in an utterance. The WER is reported without a dictionary or language model, with language model rescoring and the oracle WER for the clean Google voice search task. The data distribution with respect to the number of words in an utterance is overlaid in the figure. LAS performs poorly with short utterances despite an abundance of data. LAS also fails to generalize well on longer utterances when trained on a distribution of shorter utterances. Insertions and substitutions are the main sources of errors for short utterances, while deletions dominate the error for long utterances.",
+              "label": "S4.F4"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We measure the performance of our model as a function of the number of\nwords in the utterance. We expect the model to do poorly on longer\nutterances due to limited number of long training utterances in our\ndistribution. Hence it is not surprising that longer utterances have a\nlarger error rate. The deletions dominate the error for long\nutterances, suggesting we may be missing out on words. It is\nsurprising that short utterances (e.g., 2 words or less) perform quite\npoorly. Here, the substitutions and insertions are the main sources of\nerrors, suggesting the model may split words apart."
+            },
+            {
+              "type": "para",
+              "data": "Figure 4 also suggests that our model struggles to\ngeneralize to long utterances when trained on a distribution of\nshorter utterances. It is possible location-based priors may help in\nthese situations as reported by [15]."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x2.png",
+                "alt": "Refer to caption",
+                "caption": "The correlation between error rates (insertion, deletion, substitution and WER) and the number of words in an utterance. The WER is reported without a dictionary or language model, with language model rescoring and the oracle WER for the clean Google voice search task. The data distribution with respect to the number of words in an utterance is overlaid in the figure. LAS performs poorly with short utterances despite an abundance of data. LAS also fails to generalize well on longer utterances when trained on a distribution of shorter utterances. Insertions and substitutions are the main sources of errors for short utterances, while deletions dominate the error for long utterances.",
+                "label": "S4.F4"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Word Frequency",
+          "level": 3,
+          "paragraphs": [
+            "We study the performance of our model on rare words. We use the recall metric\nto indicate whether a word appears in the utterance regardless of position\n(higher is better). Figure 5 reports the recall of each word\nin the test distribution as a function of the word frequency in the training\ndistribution. Rare words have higher variance and lower recall while more\nfrequent words typically have higher recall. The word “and” occurs 85k times\nin the training set, however it has a recall of only 80% even after language\nmodel rescoring. The word “and” is frequently mis-transcribed as “in”\n(which has 95% recall). This suggests improvements are needed in the language\nmodel. By contrast, the word “walkerville” occurs just once in the training\nset but it has a recall of 100%. This suggests that the recall for a word\ndepends both on its frequency in the training set and its acoustic uniqueness."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x3.png",
+              "alt": "Refer to caption",
+              "caption": "The correlation between word frequency in the training distribution and recall in the test distribution. In general, rare words report worse recall compared to more frequent words.",
+              "label": "S4.F5"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We study the performance of our model on rare words. We use the recall metric\nto indicate whether a word appears in the utterance regardless of position\n(higher is better). Figure 5 reports the recall of each word\nin the test distribution as a function of the word frequency in the training\ndistribution. Rare words have higher variance and lower recall while more\nfrequent words typically have higher recall. The word “and” occurs 85k times\nin the training set, however it has a recall of only 80% even after language\nmodel rescoring. The word “and” is frequently mis-transcribed as “in”\n(which has 95% recall). This suggests improvements are needed in the language\nmodel. By contrast, the word “walkerville” occurs just once in the training\nset but it has a recall of 100%. This suggests that the recall for a word\ndepends both on its frequency in the training set and its acoustic uniqueness."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x3.png",
+                "alt": "Refer to caption",
+                "caption": "The correlation between word frequency in the training distribution and recall in the test distribution. In general, rare words report worse recall compared to more frequent words.",
+                "label": "S4.F5"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Interesting Decoding Examples",
+          "level": 3,
+          "paragraphs": [
+            "In this section, we show the outputs of the model on several\nutterances to demonstrate the capabilities of LAS. All the\nresults in this section are decoded without a dictionary or a language\nmodel.",
+            "During our experiments, we observed that LAS can learn multiple\nspelling variants given the same acoustics. Table 2 shows\ntop beams for the utterance that includes “triple a”. As can be\nseen, the model produces both “triple a” and “aaa” within the top\nfour beams. The decoder is able to generate such varied parses,\nbecause the next step prediction model makes no assumptions on the\nprobability distribution by using the chain rule decomposition. It\nwould be difficult to produce such differing transcripts using CTC due\nto the conditional independence assumptions, where $p(y_{i}|x)$ is\nconditionally independent of $p(y_{i+1}|x)$. Conventional DNN-HMM\nsystems would require both spellings to be in the pronunciation\ndictionary to generate both spelling permutations.",
+            "It can also be seen that the model produced “xxx” even though acoustically\n“x” is very different from “a” - this is presumably because the language\nmodel overpowers the acoustic signal in this case. In the training corpus\n“xxx” is a very common phrase and we suspect the language model implicit\nin the speller learns to associate “triple” with “xxx”. We\nnote that “triple a” occurs 4 times in the training distribution and “aaa”\n(when pronounced “triple a” rather than “a”-“a”-“a”) occurs only\nonce in the training distribution.",
+            "We are also surprised that the model is capable of handling utterances\nwith repeated words despite the fact that it uses content-based\nattention. Table 3 shows an example of an utterance with\na repeated word. Since LAS implements content-based attention,\nit is expected it to “lose its attention” during the decoding steps\nand produce a word more or less times than the number of times the\nword was spoken. As can be seen from this example, even though\n“seven” is repeated three times, the model successfully outputs\n“seven” three times. This hints that location-based priors (e.g.,\nlocation based attention or location based regularization) may not be\nneeded for repeated contents."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Example 1: “triple a” vs. “aaa” spelling variants.",
+              "headers": [
+                "Beam",
+                "Text",
+                "Log Probability",
+                "WER",
+                "Truth",
+                "call aaa roadside assistance",
+                "-",
+                "-"
+              ],
+              "rows": [
+                [
+                  "-0.5740",
+                  "0.00"
+                ],
+                [
+                  "-1.5399",
+                  "50.00"
+                ],
+                [
+                  "-3.5012",
+                  "50.00"
+                ],
+                [
+                  "-4.4375",
+                  "25.00"
+                ]
+              ],
+              "label": null
+            },
+            {
+              "caption": "Example 2: Repeated “seven”s.",
+              "headers": [
+                "Beam",
+                "Text",
+                "Log Probability",
+                "WER",
+                "Truth",
+                "eight nine four minus seven seven seven",
+                "-",
+                "-"
+              ],
+              "rows": [
+                [
+                  "1",
+                  "eight nine four minus seven seven seven",
+                  "-0.2145",
+                  "0.00"
+                ],
+                [
+                  "2",
+                  "eight nine four nine seven seven seven",
+                  "-1.9071",
+                  "14.29"
+                ],
+                [
+                  "3",
+                  "eight nine four minus seven seventy seven",
+                  "-4.7316",
+                  "14.29"
+                ],
+                [
+                  "4",
+                  "eight nine four nine s seven seven seven",
+                  "-5.1252",
+                  "28.57"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In this section, we show the outputs of the model on several\nutterances to demonstrate the capabilities of LAS. All the\nresults in this section are decoded without a dictionary or a language\nmodel."
+            },
+            {
+              "type": "para",
+              "data": "During our experiments, we observed that LAS can learn multiple\nspelling variants given the same acoustics. Table 2 shows\ntop beams for the utterance that includes “triple a”. As can be\nseen, the model produces both “triple a” and “aaa” within the top\nfour beams. The decoder is able to generate such varied parses,\nbecause the next step prediction model makes no assumptions on the\nprobability distribution by using the chain rule decomposition. It\nwould be difficult to produce such differing transcripts using CTC due\nto the conditional independence assumptions, where $p(y_{i}|x)$ is\nconditionally independent of $p(y_{i+1}|x)$. Conventional DNN-HMM\nsystems would require both spellings to be in the pronunciation\ndictionary to generate both spelling permutations."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Example 1: “triple a” vs. “aaa” spelling variants.",
+                "headers": [
+                  "Beam",
+                  "Text",
+                  "Log Probability",
+                  "WER",
+                  "Truth",
+                  "call aaa roadside assistance",
+                  "-",
+                  "-"
+                ],
+                "rows": [
+                  [
+                    "-0.5740",
+                    "0.00"
+                  ],
+                  [
+                    "-1.5399",
+                    "50.00"
+                  ],
+                  [
+                    "-3.5012",
+                    "50.00"
+                  ],
+                  [
+                    "-4.4375",
+                    "25.00"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "It can also be seen that the model produced “xxx” even though acoustically\n“x” is very different from “a” - this is presumably because the language\nmodel overpowers the acoustic signal in this case. In the training corpus\n“xxx” is a very common phrase and we suspect the language model implicit\nin the speller learns to associate “triple” with “xxx”. We\nnote that “triple a” occurs 4 times in the training distribution and “aaa”\n(when pronounced “triple a” rather than “a”-“a”-“a”) occurs only\nonce in the training distribution."
+            },
+            {
+              "type": "para",
+              "data": "We are also surprised that the model is capable of handling utterances\nwith repeated words despite the fact that it uses content-based\nattention. Table 3 shows an example of an utterance with\na repeated word. Since LAS implements content-based attention,\nit is expected it to “lose its attention” during the decoding steps\nand produce a word more or less times than the number of times the\nword was spoken. As can be seen from this example, even though\n“seven” is repeated three times, the model successfully outputs\n“seven” three times. This hints that location-based priors (e.g.,\nlocation based attention or location based regularization) may not be\nneeded for repeated contents."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Example 2: Repeated “seven”s.",
+                "headers": [
+                  "Beam",
+                  "Text",
+                  "Log Probability",
+                  "WER",
+                  "Truth",
+                  "eight nine four minus seven seven seven",
+                  "-",
+                  "-"
+                ],
+                "rows": [
+                  [
+                    "1",
+                    "eight nine four minus seven seven seven",
+                    "-0.2145",
+                    "0.00"
+                  ],
+                  [
+                    "2",
+                    "eight nine four nine seven seven seven",
+                    "-1.9071",
+                    "14.29"
+                  ],
+                  [
+                    "3",
+                    "eight nine four minus seven seventy seven",
+                    "-4.7316",
+                    "14.29"
+                  ],
+                  [
+                    "4",
+                    "eight nine four nine s seven seven seven",
+                    "-5.1252",
+                    "28.57"
+                  ]
+                ],
+                "label": null
+              }
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [
+        {
+          "caption": "WER comparison on the clean and noisy Google voice search task. The CLDNN-HMM system is the state-of-the-art system, the Listen, Attend and Spell (LAS) models are decoded with a beam size of 32. Language Model (LM) rescoring was applied to our beams, and a sampling trick was applied to bridge the gap between training and inference.",
+          "headers": [
+            "Model",
+            "Clean WER",
+            "Noisy WER"
+          ],
+          "rows": [
+            [
+              "CLDNN-HMM [20]",
+              "8.0",
+              "8.9"
+            ],
+            [
+              "LAS",
+              "16.2",
+              "19.0"
+            ],
+            [
+              "LAS + LM Rescoring",
+              "12.6",
+              "14.7"
+            ],
+            [
+              "LAS + Sampling",
+              "14.1",
+              "16.5"
+            ],
+            [
+              "LAS + Sampling + LM Rescoring",
+              "10.3",
+              "12.0"
+            ]
+          ],
+          "label": null
+        }
+      ],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We used a dataset approximately three million Google voice search utterances\n(representing 2000 hours of data) for our experiments. Approximately 10 hours\nof utterances were randomly selected as a held-out validation set. Data\naugmentation was performed using a room simulator, adding different types of\nnoise and reverberations; the noise sources were obtained from YouTube and\nenvironmental recordings of daily events [20]. This\nincreased the amount of audio data by $20$ times. 40-dimensional log-mel filter\nbank features were computed every 10ms and used as the acoustic inputs to the\nlistener. A separate set of 22K utterances representing approximately 16 hours\nof data were used as the test data. A noisy test data set was also created\nusing the same corruption strategy that was applied to the training data. All\ntraining sets are anonymized and hand-transcribed, and are representative of\nGoogle’s speech traffic."
+        },
+        {
+          "type": "para",
+          "data": "The text was normalized by converting all characters to lower case\nEnglish alphanumerics (including digits). The punctuations: space,\ncomma, period and apostrophe were kept, while all other tokens were\nconverted to the unknown $\\langle\\mathrm{unk}\\rangle$ token. As\nmentioned earlier, all utterances were padded with the\nstart-of-sentence $\\langle\\mathrm{sos}\\rangle$ and the\nend-of-sentence $\\langle\\mathrm{eos}\\rangle$ tokens."
+        },
+        {
+          "type": "para",
+          "data": "The state-of-the-art model on this dataset is a CLDNN-HMM system that\nwas described in [20]. The CLDNN system achieves\na WER of 8.0% on the clean test set and 8.9% on the noisy test\nset. However, we note that the CLDNN uses unidirectional CLDNNs and\nwould certainly benefit even further from the use of a bidirectional\nCLDNN architecture."
+        },
+        {
+          "type": "para",
+          "data": "For the $\\operatorname{Listen}$ function we used 3 layers of 512 pBLSTM nodes\n(i.e., 256 nodes per direction) on top of a BLSTM that operates on the input.\nThis reduced the time resolution by $8=2^{3}$ times. The $\\operatorname{Spell}$\nfunction used a two layer LSTM with 512 nodes each. The weights were\ninitialized with a uniform distribution $\\mathcal{U}(-0.1,0.1)$."
+        },
+        {
+          "type": "para",
+          "data": "Asynchronous Stochastic Gradient Descent (ASGD) was used for training\nour model [38]. A learning rate of $0.2$ was used\nwith a geometric decay of $0.98$ per 3M utterances\n(i.e., $\\nicefrac{{1}}{{20}}$-th of an epoch). We used the DistBelief\nframework [38] with 32 replicas, each with a\nminibatch of 32 utterances. In order to further speed up training, the\nsequences were grouped into buckets based on their frame\nlength [17]."
+        },
+        {
+          "type": "para",
+          "data": "The model was trained using groundtruth previous characters until results on the\nvalidation set stopped improving. This took approximately two weeks. The model\nwas decoded using beam width $\\beta=32$ and achieved 16.2% WER on\nthe clean test set and 19.0% WER on the noisy test set without any\ndictionary or language model. We found that constraining the beam search with a\ndictionary had no impact on the WER. Rescoring the top 32 beams with\nthe same n-gram language model that was used by the CLDNN system using a language model\nweight of $\\lambda=0.008$ improved the results for the clean\nand noisy test sets to 12.6% and 14.7% respectively. Note that for convenience,\nwe did not decode with a language model, but rather only rescored the top 32 beams.\nIt is possible that further gains could have been achieved by using the language model\nduring decoding."
+        },
+        {
+          "type": "table",
+          "data": {
+            "caption": "WER comparison on the clean and noisy Google voice search task. The CLDNN-HMM system is the state-of-the-art system, the Listen, Attend and Spell (LAS) models are decoded with a beam size of 32. Language Model (LM) rescoring was applied to our beams, and a sampling trick was applied to bridge the gap between training and inference.",
+            "headers": [
+              "Model",
+              "Clean WER",
+              "Noisy WER"
+            ],
+            "rows": [
+              [
+                "CLDNN-HMM [20]",
+                "8.0",
+                "8.9"
+              ],
+              [
+                "LAS",
+                "16.2",
+                "19.0"
+              ],
+              [
+                "LAS + LM Rescoring",
+                "12.6",
+                "14.7"
+              ],
+              [
+                "LAS + Sampling",
+                "14.1",
+                "16.5"
+              ],
+              [
+                "LAS + Sampling + LM Rescoring",
+                "10.3",
+                "12.0"
+              ]
+            ],
+            "label": null
+          }
+        },
+        {
+          "type": "para",
+          "data": "As mentioned in Section 3.3, there is a mismatch between\ntraining and testing. During training the model is conditioned on the correct\nprevious characters but during testing mistakes made by the model corrupt\nfuture predictions. We trained another model by sampling from our previous character\ndistribution with a probability of 10% (we did not use a schedule as\ndescribed in [19]). This improved our results on the clean\nand noisy test sets to 14.1% and 16.5% WER respectively when no language model rescoring\nwas used. With language model rescoring, we achevied 10.3% and 12.0% WER on the clean\nand noisy test sets, respectively. Table 1 summarizes these results."
+        },
+        {
+          "type": "para",
+          "data": "On the clean test set, this model is within 2.5% absolute WER of the\nstate-of-the-art CLDNN-HMM system, while on the noisy set it is less than\n3.0% absolute WER worse. We suspect that convolutional filters could lead to\nimproved results, as they have been reported to improve performance by 5%\nrelative WER on clean speech and 7% relative on noisy speech compared to\nnon-convolutional architectures [20]."
+        }
+      ]
+    },
+    {
+      "title": "Conclusions",
+      "level": 2,
+      "paragraphs": [
+        "We have presented Listen, Attend and Spell (LAS), an attention-based neural\nnetwork that can directly transcribe acoustic signals to characters. LAS is\nbased on the sequence to sequence framework with a pyramid structure in the\nencoder that reduces the number of timesteps that the decoder has to attend to.\nLAS is trained end-to-end and has two main components. The first component,\nthe listener, is a pyramidal acoustic RNN encoder that transforms the input\nsequence into a high level feature representation. The second component, the\nspeller, is an RNN decoder that attends to the high level features and spells\nout the transcript one character at a time. Our system does not use the\nconcepts of phonemes, nor does it rely on pronunciation dictionaries or HMMs.\nWe bypass the conditional independence assumptions of CTC, and show how we can\nlearn an implicit language model that can generate multiple spelling variants\ngiven the same acoustics. To further improve the results, we used samples from\nthe softmax classifier in the decoder as inputs to the next step prediction\nduring training. Finally, we showed how a language model trained on additional\ntext can be used to rerank our top hypotheses."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We have presented Listen, Attend and Spell (LAS), an attention-based neural\nnetwork that can directly transcribe acoustic signals to characters. LAS is\nbased on the sequence to sequence framework with a pyramid structure in the\nencoder that reduces the number of timesteps that the decoder has to attend to.\nLAS is trained end-to-end and has two main components. The first component,\nthe listener, is a pyramidal acoustic RNN encoder that transforms the input\nsequence into a high level feature representation. The second component, the\nspeller, is an RNN decoder that attends to the high level features and spells\nout the transcript one character at a time. Our system does not use the\nconcepts of phonemes, nor does it rely on pronunciation dictionaries or HMMs.\nWe bypass the conditional independence assumptions of CTC, and show how we can\nlearn an implicit language model that can generate multiple spelling variants\ngiven the same acoustics. To further improve the results, we used samples from\nthe softmax classifier in the decoder as inputs to the next step prediction\nduring training. Finally, we showed how a language model trained on additional\ntext can be used to rerank our top hypotheses."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/woodchuck.png",
+      "alt": "Refer to caption",
+      "caption": "Alignments between character outputs and audio signal produced by the Listen, Attend and Spell (LAS) model for the utterance “how much would a woodchuck chuck”. The content based attention mechanism was able to identify the start position in the audio sequence for the first character correctly. The alignment produced is generally monotonic without a need for any location based priors.",
+      "label": "S4.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "The effect of the decode beam width on WER for the clean Google voice search task. The reported WERs are without a dictionary or language model, with language model rescoring and the oracle WER for different beam widths. The figure shows that good results can be obtained even with a relatively small beam size.",
+      "label": "S4.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "The correlation between error rates (insertion, deletion, substitution and WER) and the number of words in an utterance. The WER is reported without a dictionary or language model, with language model rescoring and the oracle WER for the clean Google voice search task. The data distribution with respect to the number of words in an utterance is overlaid in the figure. LAS performs poorly with short utterances despite an abundance of data. LAS also fails to generalize well on longer utterances when trained on a distribution of shorter utterances. Insertions and substitutions are the main sources of errors for short utterances, while deletions dominate the error for long utterances.",
+      "label": "S4.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "The correlation between word frequency in the training distribution and recall in the test distribution. In general, rare words report worse recall compared to more frequent words.",
+      "label": "S4.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/aaa.png",
+      "alt": "Refer to caption",
+      "caption": "The spelling variants of “aaa” vs “triple a” produces different attention distributions, both spelling variants appear in our top beams. The ground truth is: “aaa emergency roadside service”.",
+      "label": "A1.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/saint.png",
+      "alt": "Refer to caption",
+      "caption": "The spelling variants of “st” vs “saint” produces different attention distributions, both spelling variants appear in our top beams. The ground truth is: “st mary’s animal clinic”.",
+      "label": "A1.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1508.01211/assets/cancel.png",
+      "alt": "Refer to caption",
+      "caption": "The phrase “cancel” is repeated three times. Note the parallel diagonals, the content attention mechanism gets slightly confused however the model still emits the correct hypothesis. The ground truth is: “cancel cancel cancel”.",
+      "label": "A1.F8"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "WER comparison on the clean and noisy Google voice search task. The CLDNN-HMM system is the state-of-the-art system, the Listen, Attend and Spell (LAS) models are decoded with a beam size of 32. Language Model (LM) rescoring was applied to our beams, and a sampling trick was applied to bridge the gap between training and inference.",
+      "headers": [
+        "Model",
+        "Clean WER",
+        "Noisy WER"
+      ],
+      "rows": [
+        [
+          "CLDNN-HMM [20]",
+          "8.0",
+          "8.9"
+        ],
+        [
+          "LAS",
+          "16.2",
+          "19.0"
+        ],
+        [
+          "LAS + LM Rescoring",
+          "12.6",
+          "14.7"
+        ],
+        [
+          "LAS + Sampling",
+          "14.1",
+          "16.5"
+        ],
+        [
+          "LAS + Sampling + LM Rescoring",
+          "10.3",
+          "12.0"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Example 1: “triple a” vs. “aaa” spelling variants.",
+      "headers": [
+        "Beam",
+        "Text",
+        "Log Probability",
+        "WER",
+        "Truth",
+        "call aaa roadside assistance",
+        "-",
+        "-"
+      ],
+      "rows": [
+        [
+          "-0.5740",
+          "0.00"
+        ],
+        [
+          "-1.5399",
+          "50.00"
+        ],
+        [
+          "-3.5012",
+          "50.00"
+        ],
+        [
+          "-4.4375",
+          "25.00"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Example 2: Repeated “seven”s.",
+      "headers": [
+        "Beam",
+        "Text",
+        "Log Probability",
+        "WER",
+        "Truth",
+        "eight nine four minus seven seven seven",
+        "-",
+        "-"
+      ],
+      "rows": [
+        [
+          "1",
+          "eight nine four minus seven seven seven",
+          "-0.2145",
+          "0.00"
+        ],
+        [
+          "2",
+          "eight nine four nine seven seven seven",
+          "-1.9071",
+          "14.29"
+        ],
+        [
+          "3",
+          "eight nine four minus seven seventy seven",
+          "-4.7316",
+          "14.29"
+        ],
+        [
+          "4",
+          "eight nine four nine s seven seven seven",
+          "-5.1252",
+          "28.57"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\displaystyle P(\\mathbf{y}|\\mathbf{x})=\\prod_{i}P(y_{i}|\\mathbf{x},y_{<i})",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle P(\\mathbf{y}|\\mathbf{x})=\\prod_{i}P(y_{i}|\\mathbf{x},y_{<i})",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbf{h}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbf{h}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle P(\\mathbf{y}|\\mathbf{x})",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}^{j}=\\operatorname{BLSTM}(h_{i-1}^{j},h_{i}^{j-1})",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}^{j}=\\operatorname{BLSTM}(h_{i-1}^{j},h_{i}^{j-1})",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}^{j}=\\operatorname{pBLSTM}(h_{i-1}^{j},\\left[h_{2i}^{j-1},h_{2i+1}^{j-1}\\right])",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}^{j}=\\operatorname{pBLSTM}(h_{i-1}^{j},\\left[h_{2i}^{j-1},h_{2i+1}^{j-1}\\right])",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{i}",
+      "label": "(7)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle P(y_{i}|\\mathbf{x},y_{<i})",
+      "label": "(8)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle e_{i,u}",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle e_{i,u}",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\alpha_{i,u}",
+      "label": "(10)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}",
+      "label": "(11)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\max_{\\theta}\\sum_{i}\\log P(y_{i}|\\mathbf{x},y^{*}_{<i};\\theta)",
+      "label": "(12)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\max_{\\theta}\\sum_{i}\\log P(y_{i}|\\mathbf{x},y^{*}_{<i};\\theta)",
+      "label": "(12)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{y}_{i}\\sim\\operatorname{CharacterDistribution}(s_{i},c_{i})",
+      "label": "(13)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{y}_{i}\\sim\\operatorname{CharacterDistribution}(s_{i},c_{i})",
+      "label": "(13)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\max_{\\theta}\\sum_{i}\\log P(y_{i}|\\mathbf{x},\\tilde{y}_{<i};\\theta)",
+      "label": "(14)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\hat{\\mathbf{y}}=\\arg\\max_{\\mathbf{y}}\\log P(\\mathbf{y}|\\mathbf{x})",
+      "label": "(15)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\hat{\\mathbf{y}}=\\arg\\max_{\\mathbf{y}}\\log P(\\mathbf{y}|\\mathbf{x})",
+      "label": "(15)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s(\\mathbf{y}|\\mathbf{x})",
+      "label": "(16)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s(\\mathbf{y}|\\mathbf{x})",
+      "label": "(16)",
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Nathaniel Morgan and Herve Bourlard. Continuous Speech Recognition using Multilayer Perceptrons with Hidden Markov Models. In IEEE International Conference on Acoustics, Speech and Signal Processing, 1990.",
+      "title": null,
+      "authors": [],
+      "year": "1990",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[1]"
+    },
+    {
+      "raw_text": "Abdel-rahman Mohamed, George E. Dahl, and Geoffrey E. Hinton. Deep belief networks for phone recognition. In Neural Information Processing Systems: Workshop on Deep Learning for Speech Recognition and Related Applications, 2009.",
+      "title": null,
+      "authors": [],
+      "year": "2009",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[2]"
+    },
+    {
+      "raw_text": "George E. Dahl, Dong Yu, Li Deng, and Alex Acero. Large vocabulary continuous speech recognition with context-dependent dbn-hmms. In IEEE International Conference on Acoustics, Speech and Signal Processing, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[3]"
+    },
+    {
+      "raw_text": "Abdel-rahman Mohamed, George E. Dahl, and Geoffrey Hinton. Acoustic modeling using deep belief networks. IEEE Transactions on Audio, Speech, and Language Processing, 20(1):14–22, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[4]"
+    },
+    {
+      "raw_text": "Navdeep Jaitly, Patrick Nguyen, Andrew W. Senior, and Vincent Vanhoucke. Application of Pretrained Deep Neural Networks to Large Vocabulary Speech Recognition. In INTERSPEECH, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[5]"
+    },
+    {
+      "raw_text": "Tara Sainath, Abdel-rahman Mohamed, Brian Kingsbury, and Bhuvana Ramabhadran. Deep Convolutional Neural Networks for LVCSR. In IEEE International Conference on Acoustics, Speech and Signal Processing, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[6]"
+    },
+    {
+      "raw_text": "Kanishka Rao, Fuchun Peng, Hasim Sak, and Francoise Beaufays. Grapheme-to-phoneme conversion using long short-term memory recurrent neural networks. In IEEE International Conference on Acoustics, Speech and Signal Processing, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[7]"
+    },
+    {
+      "raw_text": "Kaisheng Yao and Geoffrey Zweig. Sequence-to-Sequence Neural Net Models for Grapheme-to-Phoneme Conversion. 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[8]"
+    },
+    {
+      "raw_text": "Tomas Mikolov, Karafiat Martin, Burget Luka, Eernocky Jan, and Khudanpur Sanjeev. Recurrent neural network based language model. In INTERSPEECH, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[9]"
+    },
+    {
+      "raw_text": "Alex Graves, Santiago Fernandez, Faustino Gomez, and Jurgen Schmiduber. Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with Recurrent Neural Networks. In International Conference on Machine Learning, 2006.",
+      "title": null,
+      "authors": [],
+      "year": "2006",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[10]"
+    },
+    {
+      "raw_text": "Alex Graves. Sequence Transduction with Recurrent Neural Networks. In International Conference on Machine Learning: Representation Learning Workshop, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[11]"
+    },
+    {
+      "raw_text": "Alex Graves and Navdeep Jaitly. Towards End-to-End Speech Recognition with Recurrent Neural Networks. In International Conference on Machine Learning, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[12]"
+    },
+    {
+      "raw_text": "Awni Hannun, Carl Case, Jared Casper, Bryan Catanzaro, Greg Diamos, Erich Elsen, Ryan Prenger, Sanjeev Satheesh, Shubho Sengupta, Adam Coates, and Andrew Ng. Deep Speech: Scaling up end-to-end speech recognition. In http://arxiv.org/abs/1412.5567, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1412.5567",
+      "doi": null,
+      "url": "http://arxiv.org/abs/1412.5567",
+      "citation_key": "[13]"
+    },
+    {
+      "raw_text": "Jan Chorowski, Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. End-to-end Continuous Speech Recognition using Attention-based Recurrent NN: First Results. In Neural Information Processing Systems: Workshop Deep Learning and Representation Learning Workshop, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[14]"
+    },
+    {
+      "raw_text": "Jan Chorowski, Dzmitry Bahdanau, Dmitriy Serdyuk, Kyunghyun Cho, and Yoshua Bengio. Attention-Based Models for Speech Recognition. In http://arxiv.org/abs/1506.07503, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1506.07503",
+      "doi": null,
+      "url": "http://arxiv.org/abs/1506.07503",
+      "citation_key": "[15]"
+    },
+    {
+      "raw_text": "Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. Neural Machine Translation by Jointly Learning to Align and Translate. In International Conference on Learning Representations, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[16]"
+    },
+    {
+      "raw_text": "Ilya Sutskever, Oriol Vinyals, and Quoc Le. Sequence to Sequence Learning with Neural Networks. In Neural Information Processing Systems, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[17]"
+    },
+    {
+      "raw_text": "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwen, and Yoshua Bengio. Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation. In Conference on Empirical Methods in Natural Language Processing, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[18]"
+    },
+    {
+      "raw_text": "Samy Bengio, Oriol Vinyals, Navdeep Jaitly, and Noam Shazeer. Scheduled Sampling for Sequence Prediction with Recurrent Neural Networks. In http://arxiv.org/abs/1506.03099, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": "1506.03099",
+      "doi": null,
+      "url": "http://arxiv.org/abs/1506.03099",
+      "citation_key": "[19]"
+    },
+    {
+      "raw_text": "Tara N. Sainath, Oriol Vinyals, Andrew Senior, and Hasim Sak. Convolutional, Long Short-Term Memory, Fully Connected Deep Neural Networks. In IEEE International Conference on Acoustics, Speech and Signal Processing, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[20]"
+    },
+    {
+      "raw_text": "Alex Krizhevsky, Ilya Sutskever, and Geoffrey E. Hinton. ImageNet Classification with Deep Convolutional Neural Networks. In Neural Information Processing Systems, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[21]"
+    },
+    {
+      "raw_text": "Leonard E. Baum and Ted Petrie. Statistical Inference for Probabilistic Functions of Finite State Markov Chains. The Annals of Mathematical Statistics, 37:1554–1563, 1966.",
+      "title": null,
+      "authors": [],
+      "year": "1966",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[22]"
+    },
+    {
+      "raw_text": "John Lafferty, Andrew McCallum, and Fernando Pereira. Conditional Random Fields: Probabilistic Models for Segmenting and Labeling Sequence Data. In International Conference on Machine Learning, 2001.",
+      "title": null,
+      "authors": [],
+      "year": "2001",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[23]"
+    },
+    {
+      "raw_text": "Minh-Thang Luong, Ilya Sutskever, Quoc V. Le, Oriol Vinyals, and Wojciech Zaremba. Addressing the Rare Word Problem in Neural Machine Translation. In Association for Computational Linguistics, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[24]"
+    },
+    {
+      "raw_text": "Sebastien Jean, Kyunghyun Cho, Roland Memisevic, and Yoshua Bengio. On Using Very Large Target Vocabulary for Neural Machine Translation. In Association for Computational Linguistics, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[25]"
+    },
+    {
+      "raw_text": "Oriol Vinyals, Alexander Toshev, Samy Bengio, and Dumitru Erhan. Show and Tell: A Neural Image Caption Generator. In IEEE Conference on Computer Vision and Pattern Recognition, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[26]"
+    },
+    {
+      "raw_text": "Kelvin Xu, Jimmy Ba, Ryan Kiros, Kyunghyun Cho, Aaron Courville, Ruslan Salakhutdinov, Richard Zemel, and Yoshua Bengio. Show, Attend and Tell: Neural Image Caption Generation with Visual Attention. In International Conference on Machine Learning, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[27]"
+    },
+    {
+      "raw_text": "Oriol Vinyals, Lukasz Kaiser, Terry Koo, Slav Petrov, Ilya Sutskever, and Geoffrey E. Hinton. Grammar as a foreign language. In http://arxiv.org/abs/1412.7449, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1412.7449",
+      "doi": null,
+      "url": "http://arxiv.org/abs/1412.7449",
+      "citation_key": "[28]"
+    },
+    {
+      "raw_text": "Oriol Vinyals and Quoc V. Le. A Neural Conversational Model. In International Conference on Machine Learning: Deep Learning Workshop, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[29]"
+    },
+    {
+      "raw_text": "Sepp Hochreiter and Jurgen Schmidhuber. Long Short-Term Memory. Neural Computation, 9(8):1735–1780, November 1997.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[30]"
+    },
+    {
+      "raw_text": "Alex Graves, Navdeep Jaitly, and Abdel-rahman Mohamed. Hybrid Speech Recognition with Bidirectional LSTM. In Automatic Speech Recognition and Understanding Workshop, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[31]"
+    },
+    {
+      "raw_text": "Salah Hihi and Yoshua Bengio. Hierarchical Recurrent Neural Networks for Long-Term Dependencies. In Neural Information Processing Systems, 1996.",
+      "title": null,
+      "authors": [],
+      "year": "1996",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[32]"
+    },
+    {
+      "raw_text": "Jan Koutnik, Klaus Greff, Faustino Gomez, and Jurgen Schmidhuber. A Clockwork RNN. In International Conference on Machine Learning, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[33]"
+    },
+    {
+      "raw_text": "Navdeep Jaitly, Vincent Vanhoucke, and Geoffrey Hinton. Autoregressive product of multi-frame predictions can improve the accuracy of hybrid models. In INTERSPEECH, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[34]"
+    },
+    {
+      "raw_text": "Hasim Sak, Andrew Senior, Kanishka Rao, and Francoise Beaufays. Fast and Accurate Recurrent Neural Network Acoustic Models for Speech Recognition. In INTERSPEECH, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[35]"
+    },
+    {
+      "raw_text": "Tomas Mikolov, Ilya Sutskever, Kai Chen, Greg Corrado, and Jeffrey Dean. Distributed Representations of Words and Phrases and their Compositionality. In Neural Information Processing Systems, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[36]"
+    },
+    {
+      "raw_text": "Daniel Povey, Arnab Ghoshal, Gilles Boulianne, Lukas Burget, Ondrej Glembek, Nagendra Goel, Mirko Hannenmann, Petr Motlicek, Yanmin Qian, Petr Schwarz, Jan Silovsky, Georg Stemmer, and Karel Vesely. The Kaldi Speech Recognition Toolkit. In Automatic Speech Recognition and Understanding Workshop, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[37]"
+    },
+    {
+      "raw_text": "Jeffrey Dean, Greg S. Corrado, Rajat Monga, Kai Chen, Matthieu Devin, Quoc V. Le, Mark Z. Mao, Marc’Aurelio Ranzato, Andrew Senior, Paul Tucker, Ke Yang, and Andrew Y. Ng. Large Scale Distributed Deep Networks. In Neural Information Processing Systems, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[38]"
+    }
+  ],
+  "full_text": "## Introduction\n\nDeep Neural Networks (DNNs) have led to improvements in various components of\nspeech recognizers. They are commonly used in hybrid DNN-HMM speech recognition\nsystems for acoustic modeling\n [1, 2, 3, 4, 5, 6]. DNNs have also produced significant gains in\npronunciation models that map words to phoneme sequences\n[7, 8]. In language modeling, recurrent models have\nbeen shown to improve speech recognition accuracy by rescoring n-best lists\n[9]. Traditionally these components – acoustic,\npronunciation and language models – have all been trained separately, each\nwith a different objective. Recent work in this area attempts to rectify this\ndisjoint training issue by designing models that are trained end-to-end – from\nspeech directly to\ntranscripts [10, 11, 12, 13, 14, 15].\nTwo main approaches for this are Connectionist Temporal Classification (CTC)\n[10] and sequence to sequence models with\nattention [16]. Both of these approaches have limitations\nthat we try to address: CTC assumes that the label outputs are conditionally\nindependent of each other; whereas the sequence to sequence approach has only\nbeen applied to phoneme sequences\n[14, 15], and not trained end-to-end for\nspeech recognition.\n\nIn this paper we introduce Listen, Attend and Spell (LAS), a neural network\nthat improves upon the previous\nattempts [12, 14, 15]. The\nnetwork learns to transcribe an audio sequence signal to a word sequence, one\ncharacter at a time. Unlike previous approaches, LAS does not make\nindependence assumptions in the label sequence and it does not rely on HMMs.\nLAS is based on the sequence to sequence learning\nframework with attention [17, 18, 16, 14, 15].\nIt consists of an encoder recurrent neural network (RNN), which is named the\nlistener, and a decoder RNN, which is named the speller. The\nlistener is a pyramidal RNN that converts low level speech signals into higher\nlevel features. The speller is an RNN that converts these higher level features\ninto output utterances by specifying a probability distribution over sequences\nof characters using the attention\nmechanism [16, 14, 15].\nThe listener and the speller are trained jointly.\n\nKey to our approach is the fact that we use a pyramidal RNN model for the\nlistener, which reduces the number of time steps that the attention model has\nto extract relevant information from. Rare and out-of-vocabulary (OOV) words\nare handled automatically, since the model outputs the character sequence, one\ncharacter at a time. Another advantage of modeling characters as outputs is\nthat the network is able to generate multiple spelling variants naturally. For\nexample, for the phrase “triple a” the model produces both “triple a”\nand “aaa” in the top beams (see section 4.5). A model like\nCTC may have trouble producing such diverse transcripts for the same utterance\nbecause of conditional independence assumptions between frames.\n\nIn our experiments, we find that these components are necessary for\nLAS to work well. Without the attention mechanism, the model\noverfits the training data significantly, in spite of our large\ntraining set of three million utterances - it memorizes the training\ntranscripts without paying attention to the acoustics. Without the\npyramid structure in the encoder side, our model converges too slowly\n- even after a month of training, the error rates were significantly\nhigher than the errors we report here. Both of these problems arise\nbecause the acoustic signals can have hundreds to thousands of frames\nwhich makes it difficult to train the RNNs. Finally, to reduce the\noverfitting of the speller to the training transcripts, we use a\nsampling trick during training [19].\n\nWith these improvements, LAS achieves 14.1% WER on a subset of the Google voice\nsearch task, without a dictionary or a language model. When combined\nwith language model rescoring, LAS achieves 10.3% WER. By\ncomparison, the Google state-of-the-art CLDNN-HMM system achieves 8.0% WER on the\nsame data set [20].\n\n## Related Work\n\nEven though deep networks have been successfully used in many\napplications, until recently, they have mainly been used in\nclassification: mapping a fixed-length vector to an output\ncategory [21]. For structured problems, such as\nmapping one variable-length sequence to another variable-length\nsequence, neural networks have to be combined with other sequential\nmodels such as Hidden Markov Models (HMMs) [22]\nand Conditional Random Fields (CRFs) [23]. A drawback\nof this combining approach is that the resulting models cannot be\neasily trained end-to-end and they make simplistic assumptions about\nthe probability distribution of the data.\n\nSequence to sequence learning is a framework that attempts to address\nthe problem of learning variable-length input and output\nsequences [17]. It uses an encoder RNN to map\nthe sequential variable-length input into a fixed-length vector. A\ndecoder RNN then uses this vector to produce the variable-length\noutput sequence, one token at a time. During training, the model feeds\nthe groundtruth labels as inputs to the decoder. During inference, the\nmodel performs a beam search to generate suitable candidates for next\nstep predictions.\n\nSequence to sequence models can be improved significantly by the use of\nan attention mechanism that provides the decoder RNN more information\nwhen it produces the output tokens [16]. At each\noutput step, the last hidden state of the decoder RNN is used to generate\nan attention vector over the input sequence of the encoder. The attention\nvector is used to propagate information from the encoder to the decoder\nat every time step, instead of just once, as with the original sequence to\nsequence model [17]. This attention vector can be\nthought of as skip connections that allow the information and the gradients\nto flow more effectively in an RNN.\n\nThe sequence to sequence framework has been used extensively for many\napplications: machine translation [24, 25], image\ncaptioning [26, 27], parsing [28]\nand conversational modeling [29]. The generality of this\nframework suggests that speech recognition can also be a direct application\n[14, 15].\n\n## Model\n\nIn this section, we will formally describe LAS which accepts acoustic\nfeatures as inputs and emits English characters as outputs. Let $\\mathbf{x}=(x_{1},\\dots,x_{T})$ be our input sequence of filter bank spectra features, and\nlet $\\mathbf{y}=(\\langle\\mathrm{sos}\\rangle,y_{1},\\dots,y_{S},\\langle\\mathrm{eos}\\rangle)$, $y_{i}\\in\\{a,b,c,\\cdots,z,0,\\cdots,9,\\langle\\mathrm{space}\\rangle,\\langle\\mathrm{comma}\\rangle,\\langle\\mathrm{period}\\rangle,\\langle\\mathrm{apostrophe}\\rangle,\\langle\\mathrm{unk}\\rangle\\}$,\nbe the output sequence of characters. Here $\\langle\\mathrm{sos}\\rangle$ and\n$\\langle\\mathrm{eos}\\rangle$ are the special start-of-sentence token, and\nend-of-sentence tokens, respectively.\n\nWe want to model each character output $y_{i}$ as a conditional distribution\nover the previous characters $y_{<i}$ and the input signal $\\mathbf{x}$\nusing the chain rule:\n\nOur Listen, Attend and Spell (LAS) model consists of two\nsub-modules: the listener and the speller. The listener is an acoustic model\nencoder, whose key operation is $\\operatorname{Listen}$. The speller is an\nattention-based character decoder, whose key operation is\n$\\operatorname{AttendAndSpell}$. The $\\operatorname{Listen}$ function\ntransforms the original signal $\\mathbf{x}$ into a high level representation\n$\\mathbf{h}=(h_{1},\\dots,h_{U})$ with $U\\leq T$, while the\n$\\operatorname{AttendAndSpell}$ function consumes $\\mathbf{h}$ and produces a\nprobability distribution over character sequences:\n\nFigure 1 visualizes LAS with these two components. We\nprovide more details of these components in the following sections.\n\n### Listen\n\nThe $\\operatorname{Listen}$ operation uses a Bidirectional Long Short\nTerm Memory RNN (BLSTM)\n[30, 31, 12]\nwith a pyramid structure. This modification is required to reduce the\nlength $U$ of ${\\mathbf{h}}$, from $T$, the length of the input\n${\\mathbf{x}}$, because the input speech signals can be hundreds to\nthousands of frames long. A direct application of BLSTM for the\noperation $\\operatorname{Listen}$ converged slowly and produced\nresults inferior to those reported here, even after a month of\ntraining time. This is presumably because the operation\n$\\operatorname{AttendAndSpell}$ has a hard time extracting the\nrelevant information from a large number of input time steps.\n\nWe circumvent this problem by using a pyramid BLSTM (pBLSTM) similar\nto the Clockwork RNN [33]. In each successive stacked pBLSTM\nlayer, we reduce the time resolution by a factor of 2. In a typical deep\nBTLM architecture, the output at the $i$-th time step, from the $j$-th layer is\ncomputed as follows:\n\nIn the pBLSTM model, we concatenate the outputs at consecutive\nsteps of each layer before feeding it to the next layer, i.e.:\n\nIn our model, we stack 3 pBLSTMs on top of the bottom BLSTM layer to\nreduce the time resolution $2^{3}=8$ times. This allows the attention\nmodel (see next section) to extract the relevant information from a\nsmaller number of times steps. In addition to reducing the resolution,\nthe deep architecture allows the model to learn nonlinear feature\nrepresentations of the data. See Figure 1 for a\nvisualization of the pBLSTM.\n\nThe pyramid structure also reduces the computational complexity. In\nthe next section we show that the attention mechanism over $U$\nfeatures has a computational complexity of $O(US)$. Thus,\nreducing $U$ speeds up learning and inference significantly.\n\n### Attend and Spell\n\nWe now describe the $\\operatorname{AttendAndSpell}$ function. The\nfunction is computed using an attention-based LSTM transducer\n[16, 15].\nAt every output step, the transducer produces a probability distribution\nover the next character conditioned on all the characters seen previously.\nThe distribution for $y_{i}$ is a function of the decoder state $s_{i}$ and\ncontext $c_{i}$. The decoder state $s_{i}$ is a function of the previous\nstate $s_{i-1}$, the previously emitted character $y_{i-1}$\nand context $c_{i-1}$. The context vector $c_{i}$ is produced by an\nattention mechanism. Specifically,\n\nwhere\n$\\operatorname{CharacterDistribution}$ is an MLP with softmax outputs over\ncharacters, and $\\operatorname{RNN}$ is a 2 layer LSTM.\n\nAt each time step, $i$, the attention mechanism, $\\operatorname{AttentionContext}$\ngenerates a context vector, $c_{i}$ encapsulating the information in the acoustic\nsignal needed to generate the next character. The attention model is\ncontent based - the contents of the decoder state $s_{i}$ are matched\nto the contents of $h_{u}$ representing time step $u$ of $\\mathbf{h}$, to generate an\nattention vector $\\alpha_{i}$. $\\alpha_{i}$ is used to linearly blend vectors $h_{u}$ to\ncreate $c_{i}$.\n\nSpecifically, at each decoder timestep $i$, the $\\operatorname{AttentionContext}$\nfunction computes the scalar energy $e_{i,u}$ for each time step $u$, using\nvector $h_{u}\\in\\mathbf{h}$ and $s_{i}$. The scalar energy $e_{i,u}$ is converted into a\nprobability distribution over times steps (or attention) $\\alpha_{i}$ using a\nsoftmax function. This is used to create the context vector $c_{i}$ by linearly\nblending the listener features, $h_{u}$, at different time steps:\n\nwhere\n$\\phi$ and $\\psi$ are MLP networks. On convergence, the $\\alpha_{i}$\ndistribution is typically very sharp, and focused on only a few frames of $\\mathbf{h}$;\n$c_{i}$ can be seen as a continuous bag of weighted features of $\\mathbf{h}$. Figure\n1 shows LAS architecture.\n\n### Learning\n\nThe $\\operatorname{Listen}$ and $\\operatorname{AttendAndSpell}$ functions can\nbe trained jointly for end-to-end speech recognition. The sequence to sequence\nmethods condition the next step prediction on the previous\ncharacters [17, 16] and maximizes the log\nprobability:\n\nwhere $y^{*}_{<i}$ is the groundtruth of the previous\ncharacters.\n\nHowever during inference, the groundtruth is missing and the predictions can suffer\nbecause the model was not trained to be resilient to feeding in bad predictions\nat some time steps. To ameliorate this effect, we use a trick that was proposed in [19].\nDuring training, instead of always feeding in the ground truth transcript for next step\nprediction, we sometimes sample from our previous character distribution and use that as the\ninputs in the next step predictions:\n\nwhere $\\tilde{y}_{i-1}$ is the character chosen from the ground truth, or sampled from\nthe model with a certain sampling rate. Unlike [19], we do not use\na schedule and simply use a constant sampling rate of 10% right from the start\nof training.\n\nAs the system is a very deep network it may appear that some type of\npretraining would be required. However, in our experiments, we found no need\nfor pretraining. In particular, we attempted to pretrain the\n$\\operatorname{Listen}$ function with context independent or context dependent\nphonemes generated from a conventional GMM-HMM system. A softmax network was\nattached to the output units $h_{u}\\in\\mathbf{h}$ of the listener and used to\nmake multi-frame phoneme state predictions [34] but\nled to no improvements. We also attempted to use the phonemes as a joint\nobjective target [35], but found no improvements.\n\n### Decoding and Rescoring\n\nDuring inference we want to find the most likely character sequence given\nthe input acoustics:\n\nDecoding is performed with a simple left-to-right beam search algorithm similar\nto [17]. We maintain a set of $\\beta$ partial\nhypotheses, starting with the start-of-sentence $\\langle\\mathrm{sos}\\rangle$ token. At each timestep, each partial hypothesis in the\nbeam is expanded with every possible character and only the\n$\\beta$ most likely beams are kept. When the $\\langle\\mathrm{eos}\\rangle$\ntoken is encountered, it is removed from the beam and added to the set of\ncomplete hypothesis. A dictionary can optionally be added to constrain\nthe search space to valid words, however we found that this was not necessary\nsince the model learns to spell real words almost all the time.\n\nWe have vast quantities of text data [36], compared to\nthe amount of transcribed speech utterances. We can use language models\ntrained on text corpora alone similar to conventional speech systems [37].\nTo do so we can rescore our beams with the language model. We find that our model\nhas a small bias for shorter utterances so we normalize our probabilities by the\nnumber of characters $|\\mathbf{y}|_{c}$ in the hypothesis and combine it with a language model\nprobability $P_{\\operatorname{LM}}(\\mathbf{y})$:\n\nwhere $\\lambda$ is our\nlanguage model weight and can be determined by a held-out validation set.\n\n## Experiments\n\nWe used a dataset approximately three million Google voice search utterances\n(representing 2000 hours of data) for our experiments. Approximately 10 hours\nof utterances were randomly selected as a held-out validation set. Data\naugmentation was performed using a room simulator, adding different types of\nnoise and reverberations; the noise sources were obtained from YouTube and\nenvironmental recordings of daily events [20]. This\nincreased the amount of audio data by $20$ times. 40-dimensional log-mel filter\nbank features were computed every 10ms and used as the acoustic inputs to the\nlistener. A separate set of 22K utterances representing approximately 16 hours\nof data were used as the test data. A noisy test data set was also created\nusing the same corruption strategy that was applied to the training data. All\ntraining sets are anonymized and hand-transcribed, and are representative of\nGoogle’s speech traffic.\n\nThe text was normalized by converting all characters to lower case\nEnglish alphanumerics (including digits). The punctuations: space,\ncomma, period and apostrophe were kept, while all other tokens were\nconverted to the unknown $\\langle\\mathrm{unk}\\rangle$ token. As\nmentioned earlier, all utterances were padded with the\nstart-of-sentence $\\langle\\mathrm{sos}\\rangle$ and the\nend-of-sentence $\\langle\\mathrm{eos}\\rangle$ tokens.\n\nThe state-of-the-art model on this dataset is a CLDNN-HMM system that\nwas described in [20]. The CLDNN system achieves\na WER of 8.0% on the clean test set and 8.9% on the noisy test\nset. However, we note that the CLDNN uses unidirectional CLDNNs and\nwould certainly benefit even further from the use of a bidirectional\nCLDNN architecture.\n\nFor the $\\operatorname{Listen}$ function we used 3 layers of 512 pBLSTM nodes\n(i.e., 256 nodes per direction) on top of a BLSTM that operates on the input.\nThis reduced the time resolution by $8=2^{3}$ times. The $\\operatorname{Spell}$\nfunction used a two layer LSTM with 512 nodes each. The weights were\ninitialized with a uniform distribution $\\mathcal{U}(-0.1,0.1)$.\n\nAsynchronous Stochastic Gradient Descent (ASGD) was used for training\nour model [38]. A learning rate of $0.2$ was used\nwith a geometric decay of $0.98$ per 3M utterances\n(i.e., $\\nicefrac{{1}}{{20}}$-th of an epoch). We used the DistBelief\nframework [38] with 32 replicas, each with a\nminibatch of 32 utterances. In order to further speed up training, the\nsequences were grouped into buckets based on their frame\nlength [17].\n\nThe model was trained using groundtruth previous characters until results on the\nvalidation set stopped improving. This took approximately two weeks. The model\nwas decoded using beam width $\\beta=32$ and achieved 16.2% WER on\nthe clean test set and 19.0% WER on the noisy test set without any\ndictionary or language model. We found that constraining the beam search with a\ndictionary had no impact on the WER. Rescoring the top 32 beams with\nthe same n-gram language model that was used by the CLDNN system using a language model\nweight of $\\lambda=0.008$ improved the results for the clean\nand noisy test sets to 12.6% and 14.7% respectively. Note that for convenience,\nwe did not decode with a language model, but rather only rescored the top 32 beams.\nIt is possible that further gains could have been achieved by using the language model\nduring decoding.\n\nAs mentioned in Section 3.3, there is a mismatch between\ntraining and testing. During training the model is conditioned on the correct\nprevious characters but during testing mistakes made by the model corrupt\nfuture predictions. We trained another model by sampling from our previous character\ndistribution with a probability of 10% (we did not use a schedule as\ndescribed in [19]). This improved our results on the clean\nand noisy test sets to 14.1% and 16.5% WER respectively when no language model rescoring\nwas used. With language model rescoring, we achevied 10.3% and 12.0% WER on the clean\nand noisy test sets, respectively. Table 1 summarizes these results.\n\nOn the clean test set, this model is within 2.5% absolute WER of the\nstate-of-the-art CLDNN-HMM system, while on the noisy set it is less than\n3.0% absolute WER worse. We suspect that convolutional filters could lead to\nimproved results, as they have been reported to improve performance by 5%\nrelative WER on clean speech and 7% relative on noisy speech compared to\nnon-convolutional architectures [20].\n\n### Attention Visualization\n\nThe content-based attention mechanism creates an explicit alignment between the\ncharacters and audio signal. We can visualize the attention mechanism by\nrecording the attention distribution on the acoustic sequence at every\ncharacter output timestep. Figure 2 visualizes the attention\nalignment between the characters and the filterbanks for the utterance “how\nmuch would a woodchuck chuck”. For this particular utterance, the model learnt\na monotonic distribution without any location priors. The words “woodchuck”\nand “chuck” have acoustic similarities, the attention mechanism was slightly\nconfused when emitting “woodchuck” with a dilution in the distribution. The\nattention model was also able to identify the start and end of the utterance\nproperly.\n\nIn the following sections, we report results of control experiments\nthat were conducted to understand the effects of beam widths,\nutterance lengths and word frequency on the WER of our model.\n\n### Effects of Beam Width\n\nWe investigate the correlation between the performance of the model\nand the width of beam search, with and without the language model\nrescoring. Figure 3 shows the effect of the decode\nbeam width, $\\beta$, on the WER for the clean test set. We see\nconsistent WER improvements by increasing the beam width up to 16,\nafter which we observe no significant benefits. At a beam width of 32,\nthe WER is 14.1% and 10.3% after language model rescoring.\nRescoring the top 32 beams with an oracle produces a WER of 4.3% on\nthe clean test set and 5.5% on the noisy test\nset.\n\n### Effects of Utterance Length\n\nWe measure the performance of our model as a function of the number of\nwords in the utterance. We expect the model to do poorly on longer\nutterances due to limited number of long training utterances in our\ndistribution. Hence it is not surprising that longer utterances have a\nlarger error rate. The deletions dominate the error for long\nutterances, suggesting we may be missing out on words. It is\nsurprising that short utterances (e.g., 2 words or less) perform quite\npoorly. Here, the substitutions and insertions are the main sources of\nerrors, suggesting the model may split words apart.\n\nFigure 4 also suggests that our model struggles to\ngeneralize to long utterances when trained on a distribution of\nshorter utterances. It is possible location-based priors may help in\nthese situations as reported by [15].\n\n### Word Frequency\n\nWe study the performance of our model on rare words. We use the recall metric\nto indicate whether a word appears in the utterance regardless of position\n(higher is better). Figure 5 reports the recall of each word\nin the test distribution as a function of the word frequency in the training\ndistribution. Rare words have higher variance and lower recall while more\nfrequent words typically have higher recall. The word “and” occurs 85k times\nin the training set, however it has a recall of only 80% even after language\nmodel rescoring. The word “and” is frequently mis-transcribed as “in”\n(which has 95% recall). This suggests improvements are needed in the language\nmodel. By contrast, the word “walkerville” occurs just once in the training\nset but it has a recall of 100%. This suggests that the recall for a word\ndepends both on its frequency in the training set and its acoustic uniqueness.\n\n### Interesting Decoding Examples\n\nIn this section, we show the outputs of the model on several\nutterances to demonstrate the capabilities of LAS. All the\nresults in this section are decoded without a dictionary or a language\nmodel.\n\nDuring our experiments, we observed that LAS can learn multiple\nspelling variants given the same acoustics. Table 2 shows\ntop beams for the utterance that includes “triple a”. As can be\nseen, the model produces both “triple a” and “aaa” within the top\nfour beams. The decoder is able to generate such varied parses,\nbecause the next step prediction model makes no assumptions on the\nprobability distribution by using the chain rule decomposition. It\nwould be difficult to produce such differing transcripts using CTC due\nto the conditional independence assumptions, where $p(y_{i}|x)$ is\nconditionally independent of $p(y_{i+1}|x)$. Conventional DNN-HMM\nsystems would require both spellings to be in the pronunciation\ndictionary to generate both spelling permutations.\n\nIt can also be seen that the model produced “xxx” even though acoustically\n“x” is very different from “a” - this is presumably because the language\nmodel overpowers the acoustic signal in this case. In the training corpus\n“xxx” is a very common phrase and we suspect the language model implicit\nin the speller learns to associate “triple” with “xxx”. We\nnote that “triple a” occurs 4 times in the training distribution and “aaa”\n(when pronounced “triple a” rather than “a”-“a”-“a”) occurs only\nonce in the training distribution.\n\nWe are also surprised that the model is capable of handling utterances\nwith repeated words despite the fact that it uses content-based\nattention. Table 3 shows an example of an utterance with\na repeated word. Since LAS implements content-based attention,\nit is expected it to “lose its attention” during the decoding steps\nand produce a word more or less times than the number of times the\nword was spoken. As can be seen from this example, even though\n“seven” is repeated three times, the model successfully outputs\n“seven” three times. This hints that location-based priors (e.g.,\nlocation based attention or location based regularization) may not be\nneeded for repeated contents.\n\n## Conclusions\n\nWe have presented Listen, Attend and Spell (LAS), an attention-based neural\nnetwork that can directly transcribe acoustic signals to characters. LAS is\nbased on the sequence to sequence framework with a pyramid structure in the\nencoder that reduces the number of timesteps that the decoder has to attend to.\nLAS is trained end-to-end and has two main components. The first component,\nthe listener, is a pyramidal acoustic RNN encoder that transforms the input\nsequence into a high level feature representation. The second component, the\nspeller, is an RNN decoder that attends to the high level features and spells\nout the transcript one character at a time. Our system does not use the\nconcepts of phonemes, nor does it rely on pronunciation dictionaries or HMMs.\nWe bypass the conditional independence assumptions of CTC, and show how we can\nlearn an implicit language model that can generate multiple spelling variants\ngiven the same acoustics. To further improve the results, we used samples from\nthe softmax classifier in the decoder as inputs to the next step prediction\nduring training. Finally, we showed how a language model trained on additional\ntext can be used to rerank our top hypotheses.\n",
+  "extracted_at": "2026-04-13T15:33:06.319181"
+}

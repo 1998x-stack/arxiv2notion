@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "2510.23883v3",
+  "title": "Agentic AI Security: Threats, Defenses, Evaluation, and Open Challenges",
+  "authors": [
+    "Anshuman Chhabra",
+    "Shrestha Datta",
+    "Shahriar Kabir Nahin",
+    "Prasant Mohapatra"
+  ],
+  "abstract": "Agentic AI systems powered by large language models (LLMs) and endowed with planning, tool use, memory, and autonomy, are emerging as powerful, flexible platforms for automation. Their ability to autonomously execute tasks across web, software, and physical environments creates new and amplified security risks, distinct from both traditional AI safety and conventional software security. This survey outlines a taxonomy of threats specific to agentic AI, reviews recent benchmarks and evaluation methodologies, and discusses defense strategies from both technical and governance perspectives. We synthesize current research and highlight open challenges, aiming to support the development of secure-by-design agent systems.",
+  "categories": [
+    "cs.AI"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2025-10-27T21:48:11+00:00",
+  "updated": "2026-04-03T16:27:34+00:00",
+  "doi": "10.1109/ACCESS.2026.3675554",
+  "journal_ref": null,
+  "comment": "Published in IEEE Access. DOI: https://doi.org/10.1109/access.2026.3675554",
+  "pdf_url": "https://arxiv.org/pdf/2510.23883v3.pdf"
+}

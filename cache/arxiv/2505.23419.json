@@ -1,0 +1,34 @@
+{
+  "arxiv_id": "2505.23419v2",
+  "title": "SWE-bench Goes Live!",
+  "authors": [
+    "Linghao Zhang",
+    "Shilin He",
+    "Chaoyun Zhang",
+    "Yu Kang",
+    "Bowen Li",
+    "Chengxing Xie",
+    "Junhao Wang",
+    "Maoquan Wang",
+    "Yufan Huang",
+    "Shengyu Fu",
+    "Elsie Nallipogu",
+    "Qingwei Lin",
+    "Yingnong Dang",
+    "Saravan Rajmohan",
+    "Dongmei Zhang"
+  ],
+  "abstract": "The issue-resolving task, where a model generates patches to fix real-world bugs, has emerged as a critical benchmark for evaluating the capabilities of large language models (LLMs). While SWE-bench and its variants have become standard in this domain, they suffer from key limitations: they have not been updated since their initial releases, cover a narrow set of repositories, and depend heavily on manual effort for instance construction and environment setup. These factors hinder scalability and introduce risks of overfitting and data contamination. In this work, we present SWE-bench-Live, a live-updatable benchmark designed to overcome these challenges. Our initial release consists of 1,319 tasks derived from real GitHub issues created since 2024, spanning 93 repositories. Each task is accompanied by a dedicated Docker image to ensure reproducible execution. Central to our benchmark is \\method, an automated curation pipeline that streamlines the entire process from instance creation to environment setup, removing manual bottlenecks and enabling scalability and continuous updates. We evaluate a range of state-of-the-art agent frameworks and LLMs on SWE-bench-Live, revealing a substantial performance gap compared to static benchmarks like SWE-bench, even under controlled evaluation conditions. To better understand this discrepancy, we perform detailed analyses across repository origin, issue recency, and task difficulty. By providing a fresh, diverse, and executable benchmark grounded in live repository activity, SWE-bench-Live facilitates rigorous, contamination-resistant evaluation of LLMs and agents in dynamic, real-world software development settings.",
+  "categories": [
+    "cs.SE",
+    "cs.AI",
+    "cs.CL"
+  ],
+  "primary_category": "cs.SE",
+  "published": "2025-05-29T13:09:44+00:00",
+  "updated": "2025-06-01T14:53:40+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Homepage: \\url{https://swe-bench-live.github.io/}, Code: \\url{https://github.com/SWE-bench-Live}, Dataset: \\url{https://huggingface.co/SWE-bench-Live}",
+  "pdf_url": "https://arxiv.org/pdf/2505.23419v2.pdf"
+}

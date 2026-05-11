@@ -1,0 +1,20 @@
+{
+  "arxiv_id": "1605.07648v4",
+  "title": "FractalNet: Ultra-Deep Neural Networks without Residuals",
+  "authors": [
+    "Gustav Larsson",
+    "Michael Maire",
+    "Gregory Shakhnarovich"
+  ],
+  "abstract": "We introduce a design strategy for neural network macro-architecture based on self-similarity. Repeated application of a simple expansion rule generates deep networks whose structural layouts are precisely truncated fractals. These networks contain interacting subpaths of different lengths, but do not include any pass-through or residual connections; every internal signal is transformed by a filter and nonlinearity before being seen by subsequent layers. In experiments, fractal networks match the excellent performance of standard residual networks on both CIFAR and ImageNet classification tasks, thereby demonstrating that residual representations may not be fundamental to the success of extremely deep convolutional neural networks. Rather, the key may be the ability to transition, during training, from effectively shallow to deep. We note similarities with student-teacher behavior and develop drop-path, a natural extension of dropout, to regularize co-adaptation of subpaths in fractal architectures. Such regularization allows extraction of high-performance fixed-depth subnetworks. Additionally, fractal networks exhibit an anytime property: shallow subnetworks provide a quick answer, while deeper subnetworks, with higher latency, provide a more accurate answer.",
+  "categories": [
+    "cs.CV"
+  ],
+  "primary_category": "cs.CV",
+  "published": "2016-05-24T20:28:53+00:00",
+  "updated": "2017-05-26T18:53:56+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "updated with ImageNet results; published as a conference paper at ICLR 2017; project page at http://people.cs.uchicago.edu/~larsson/fractalnet/",
+  "pdf_url": "https://arxiv.org/pdf/1605.07648v4.pdf"
+}

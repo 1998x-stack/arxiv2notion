@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "2512.18470v5",
+  "title": "SWE-EVO: Benchmarking Coding Agents in Long-Horizon Software Evolution Scenarios",
+  "authors": [
+    "Minh V. T. Thai",
+    "Tue Le",
+    "Dung Nguyen Manh",
+    "Huy Phan Nhat",
+    "Nghi D. Q. Bui"
+  ],
+  "abstract": "Existing benchmarks for AI coding agents focus on isolated, single-issue tasks such as fixing a bug or adding a small feature. However, real-world software engineering is a long-horizon endeavor: developers interpret high-level requirements, coordinate changes across many files, and evolve codebases over multiple iterations while preserving functionality. We introduce SWE-EVO, a benchmark for this long-horizon software evolution challenge. Constructed from release notes of seven mature open-source Python projects, SWE-EVO comprises 48 tasks requiring multi-step modifications spanning an average of 21 files, validated against test suites averaging 874 tests per instance. Experiments reveal a striking capability gap: GPT-5.4 with OpenHands achieves only 25% on SWE-EVO versus 72.80% achieved by GPT-5.2 on SWE-Bench Verified, showing that current agents struggle with sustained, multi-file reasoning. We also propose Fix Rate, a metric capturing partial progress on these complex, long-horizon tasks.",
+  "categories": [
+    "cs.SE",
+    "cs.AI",
+    "cs.MA"
+  ],
+  "primary_category": "cs.SE",
+  "published": "2025-12-20T19:08:15+00:00",
+  "updated": "2026-04-04T09:52:04+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2512.18470v5.pdf"
+}

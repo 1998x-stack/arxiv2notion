@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "1412.1602v1",
+  "title": "End-to-end Continuous Speech Recognition using Attention-based Recurrent NN: First Results",
+  "authors": [
+    "Jan Chorowski",
+    "Dzmitry Bahdanau",
+    "Kyunghyun Cho",
+    "Yoshua Bengio"
+  ],
+  "abstract": "We replace the Hidden Markov Model (HMM) which is traditionally used in in continuous speech recognition with a bi-directional recurrent neural network encoder coupled to a recurrent neural network decoder that directly emits a stream of phonemes. The alignment between the input and output sequences is established using an attention mechanism: the decoder emits each symbol based on a context created with a subset of input symbols elected by the attention mechanism. We report initial results demonstrating that this new approach achieves phoneme error rates that are comparable to the state-of-the-art HMM-based decoders, on the TIMIT dataset.",
+  "categories": [
+    "cs.NE",
+    "cs.LG",
+    "stat.ML"
+  ],
+  "primary_category": "cs.NE",
+  "published": "2014-12-04T10:00:19+00:00",
+  "updated": "2014-12-04T10:00:19+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "As accepted to: Deep Learning and Representation Learning Workshop, NIPS 2014",
+  "pdf_url": "https://arxiv.org/pdf/1412.1602v1.pdf"
+}

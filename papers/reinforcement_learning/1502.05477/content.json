@@ -1,0 +1,2137 @@
+{
+  "paper_id": "1502.05477",
+  "title": "Trust Region Policy Optimization",
+  "authors": [
+    "John Schulman",
+    "Sergey Levine",
+    "Philipp Moritz",
+    "Michael Jordan",
+    "Pieter Abbeel",
+    "John Schulman, Sergey Levine, Philipp Moritz, Michael I. Jordan, Pieter Abbeel"
+  ],
+  "affiliations": [
+    "University of California, Berkeley, Department of Electrical Engineering and Computer Sciences"
+  ],
+  "abstract": "We describe an iterative procedure for optimizing policies, with guaranteed monotonic improvement. By making several approximations to the theoretically-justified procedure, we develop a practical algorithm, called Trust Region Policy Optimization (TRPO). This algorithm is similar to natural policy gradient methods and is effective for optimizing large nonlinear policies such as neural networks. Our experiments demonstrate its robust performance on a wide variety of tasks: learning simulated robotic swimming, hopping, and walking gaits; and playing Atari games using images of the screen as input. Despite its approximations that deviate from the theory, TRPO tends to give monotonic improvement, with little tuning of hyperparameters.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Most algorithms for policy optimization can be classified into three broad categories:\n(1) policy iteration methods, which alternate between estimating the value function under the current policy and improving the policy (Bertsekas, 2005); (2) policy gradient methods, which use an estimator of the gradient of the expected return (total reward) obtained from sample trajectories (Peters & Schaal, 2008a) (and which, as we later discuss, have a close connection to policy iteration); and (3) derivative-free optimization methods, such as the cross-entropy method (CEM) and covariance matrix adaptation (CMA), which treat the return as a black box function to be optimized in terms of the policy parameters (Szita & Lörincz, 2006).",
+        "General derivative-free stochastic optimization methods such as CEM and CMA are preferred on many problems, because they achieve good results while being simple to understand and implement.\nFor example, while Tetris is a classic benchmark problem for approximate dynamic programming (ADP) methods, stochastic optimization methods are difficult to beat on this task (Gabillon et al., 2013).\nFor continuous control problems, methods like CMA have been successful at learning control policies for challenging tasks like locomotion when provided with hand-engineered policy classes with low-dimensional parameterizations (Wampler & Popović, 2009).\nThe inability of ADP and gradient-based methods to consistently beat gradient-free random search is unsatisfying, since gradient-based optimization algorithms enjoy much better sample complexity guarantees than gradient-free methods (Nemirovski, 2005).\nContinuous gradient-based optimization has been very successful at learning function approximators for supervised learning tasks with huge numbers of parameters, and extending their success to reinforcement learning would allow for efficient training of complex and powerful policies.",
+        "In this article, we first prove that minimizing a certain surrogate objective function guarantees policy improvement with non-trivial step sizes.\nThen we make a series of approximations to the theoretically-justified algorithm, yielding a practical algorithm, which we call trust region policy optimization (TRPO).\nWe describe two variants of this algorithm: first, the single-path method, which can be applied in the model-free setting; second, the vine method, which requires the system to be restored to particular states, which is typically only possible in simulation.\nThese algorithms are scalable and can optimize nonlinear policies with tens of thousands of parameters, which have previously posed a major challenge for model-free policy search (Deisenroth et al., 2013).\nIn our experiments, we show that the same TRPO methods can learn complex policies for swimming, hopping, and walking, as well as playing Atari games directly from raw images."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Most algorithms for policy optimization can be classified into three broad categories:\n(1) policy iteration methods, which alternate between estimating the value function under the current policy and improving the policy (Bertsekas, 2005); (2) policy gradient methods, which use an estimator of the gradient of the expected return (total reward) obtained from sample trajectories (Peters & Schaal, 2008a) (and which, as we later discuss, have a close connection to policy iteration); and (3) derivative-free optimization methods, such as the cross-entropy method (CEM) and covariance matrix adaptation (CMA), which treat the return as a black box function to be optimized in terms of the policy parameters (Szita & Lörincz, 2006)."
+        },
+        {
+          "type": "para",
+          "data": "General derivative-free stochastic optimization methods such as CEM and CMA are preferred on many problems, because they achieve good results while being simple to understand and implement.\nFor example, while Tetris is a classic benchmark problem for approximate dynamic programming (ADP) methods, stochastic optimization methods are difficult to beat on this task (Gabillon et al., 2013).\nFor continuous control problems, methods like CMA have been successful at learning control policies for challenging tasks like locomotion when provided with hand-engineered policy classes with low-dimensional parameterizations (Wampler & Popović, 2009).\nThe inability of ADP and gradient-based methods to consistently beat gradient-free random search is unsatisfying, since gradient-based optimization algorithms enjoy much better sample complexity guarantees than gradient-free methods (Nemirovski, 2005).\nContinuous gradient-based optimization has been very successful at learning function approximators for supervised learning tasks with huge numbers of parameters, and extending their success to reinforcement learning would allow for efficient training of complex and powerful policies."
+        },
+        {
+          "type": "para",
+          "data": "In this article, we first prove that minimizing a certain surrogate objective function guarantees policy improvement with non-trivial step sizes.\nThen we make a series of approximations to the theoretically-justified algorithm, yielding a practical algorithm, which we call trust region policy optimization (TRPO).\nWe describe two variants of this algorithm: first, the single-path method, which can be applied in the model-free setting; second, the vine method, which requires the system to be restored to particular states, which is typically only possible in simulation.\nThese algorithms are scalable and can optimize nonlinear policies with tens of thousands of parameters, which have previously posed a major challenge for model-free policy search (Deisenroth et al., 2013).\nIn our experiments, we show that the same TRPO methods can learn complex policies for swimming, hopping, and walking, as well as playing Atari games directly from raw images."
+        }
+      ]
+    },
+    {
+      "title": "Preliminaries",
+      "level": 2,
+      "paragraphs": [
+        "Consider an infinite-horizon discounted Markov decision process (MDP), defined by the tuple $(\\mathcal{S},\\mathcal{A},P,r,\\rho_{0},\\gamma)$,\nwhere $\\mathcal{S}$ is a finite set of states, $\\mathcal{A}$ is a finite set of actions, $P:\\mathcal{S}\\times\\mathcal{A}\\times\\mathcal{S}\\rightarrow\\mathbb{R}$ is the transition probability distribution, $r:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the reward function, $\\rho_{0}:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the distribution of the initial state $s_{0}$, and $\\gamma\\in(0,1)$ is the discount factor.",
+        "Let $\\pi$ denote a stochastic policy $\\pi:\\mathcal{S}\\times\\mathcal{A}\\rightarrow[0,1]$, and let $\\eta(\\pi)$ denote its expected discounted reward:",
+        "We will use the following standard definitions of the state-action value function $Q_{\\pi}$, the value function $V_{\\pi}$, and the advantage function $A_{\\pi}$:",
+        "The following useful identity expresses the expected return of another policy $\\tilde{\\pi}$ in terms of the advantage over $\\pi$, accumulated over timesteps (see Kakade & Langford (2002) or Appendix A for proof):",
+        "where the notation $\\mathbb{E}_{s_{0},a_{0},\\dots\\sim\\tilde{\\pi}}\\left[\\dots\\right]$ indicates that actions are sampled $a_{t}\\sim\\tilde{\\pi}(\\cdot|s_{t})$.\nLet $\\rho_{\\pi}$ be the (unnormalized) discounted visitation frequencies",
+        "where $s_{0}\\sim\\rho_{0}$ and the actions are chosen according to $\\pi$.\nWe can rewrite Equation 1 with a sum over states instead of timesteps:",
+        "This equation implies that any policy update $\\pi\\rightarrow\\tilde{\\pi}$ that has a nonnegative expected advantage at every state $s$, i.e., $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)\\geq 0$, is guaranteed to increase the policy performance $\\eta$, or leave it constant in the case that the expected advantage is zero everywhere.\nThis implies the classic result that the update performed by exact policy iteration, which uses the deterministic policy $\\tilde{\\pi}(s)=\\operatorname*{arg\\,max}_{a}A_{\\pi}(s,a)$, improves the policy if there is at least one state-action pair with a positive advantage value and nonzero state visitation probability, otherwise the algorithm has converged to the optimal policy.\nHowever, in the approximate setting, it will typically be unavoidable, due to estimation and approximation error,\nthat there will be some states $s$ for which the expected advantage is negative, that is, $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)<0$.\nThe complex dependency of $\\rho_{\\tilde{\\pi}}(s)$ on $\\tilde{\\pi}$ makes Equation (2) difficult to optimize directly. Instead, we introduce the following local approximation to $\\eta$:",
+        "Note that $L_{\\pi}$ uses the visitation frequency $\\rho_{\\pi}$ rather than $\\rho_{\\tilde{\\pi}}$, ignoring changes in state visitation density due to changes in the policy.\nHowever, if we have a parameterized policy $\\pi_{\\theta}$, where $\\pi_{\\theta}(a|s)$ is a differentiable function of the parameter vector $\\theta$, then $L_{\\pi}$ matches $\\eta$ to first order (see Kakade & Langford (2002)).\nThat is, for any parameter value $\\theta_{0}$,",
+        "Equation 4 implies that a sufficiently small step $\\pi_{\\theta_{0}}\\rightarrow\\tilde{\\pi}$ that improves $L_{\\pi_{\\theta_{\\mathrm{old}}}}$ will also improve $\\eta$, but does not give us any guidance on how big of a step to take.",
+        "To address this issue, Kakade & Langford (2002) proposed a policy updating scheme called conservative policy iteration, for which they could provide explicit lower bounds on the improvement of $\\eta$.\nTo define the conservative policy iteration update, let $\\pi_{\\mathrm{old}}$ denote the current policy, and let $\\pi^{\\prime}=\\operatorname*{arg\\,max}_{\\pi^{\\prime}}L_{\\pi_{\\mathrm{old}}}(\\pi^{\\prime})$.\nThe new policy $\\pi_{\\mathrm{new}}$ was defined to be the following mixture:",
+        "Kakade and Langford derived the following lower bound:",
+        "(We have modified it to make it slightly weaker but simpler.)\nNote, however, that so far this bound only applies to mixture policies generated by Equation (5). This policy class is unwieldy and restrictive in practice, and it is desirable for a practical policy update scheme to be applicable to all general stochastic policy classes."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Consider an infinite-horizon discounted Markov decision process (MDP), defined by the tuple $(\\mathcal{S},\\mathcal{A},P,r,\\rho_{0},\\gamma)$,\nwhere $\\mathcal{S}$ is a finite set of states, $\\mathcal{A}$ is a finite set of actions, $P:\\mathcal{S}\\times\\mathcal{A}\\times\\mathcal{S}\\rightarrow\\mathbb{R}$ is the transition probability distribution, $r:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the reward function, $\\rho_{0}:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the distribution of the initial state $s_{0}$, and $\\gamma\\in(0,1)$ is the discount factor."
+        },
+        {
+          "type": "para",
+          "data": "Let $\\pi$ denote a stochastic policy $\\pi:\\mathcal{S}\\times\\mathcal{A}\\rightarrow[0,1]$, and let $\\eta(\\pi)$ denote its expected discounted reward:"
+        },
+        {
+          "type": "para",
+          "data": "We will use the following standard definitions of the state-action value function $Q_{\\pi}$, the value function $V_{\\pi}$, and the advantage function $A_{\\pi}$:"
+        },
+        {
+          "type": "para",
+          "data": "The following useful identity expresses the expected return of another policy $\\tilde{\\pi}$ in terms of the advantage over $\\pi$, accumulated over timesteps (see Kakade & Langford (2002) or Appendix A for proof):"
+        },
+        {
+          "type": "para",
+          "data": "where the notation $\\mathbb{E}_{s_{0},a_{0},\\dots\\sim\\tilde{\\pi}}\\left[\\dots\\right]$ indicates that actions are sampled $a_{t}\\sim\\tilde{\\pi}(\\cdot|s_{t})$.\nLet $\\rho_{\\pi}$ be the (unnormalized) discounted visitation frequencies"
+        },
+        {
+          "type": "para",
+          "data": "where $s_{0}\\sim\\rho_{0}$ and the actions are chosen according to $\\pi$.\nWe can rewrite Equation 1 with a sum over states instead of timesteps:"
+        },
+        {
+          "type": "para",
+          "data": "This equation implies that any policy update $\\pi\\rightarrow\\tilde{\\pi}$ that has a nonnegative expected advantage at every state $s$, i.e., $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)\\geq 0$, is guaranteed to increase the policy performance $\\eta$, or leave it constant in the case that the expected advantage is zero everywhere.\nThis implies the classic result that the update performed by exact policy iteration, which uses the deterministic policy $\\tilde{\\pi}(s)=\\operatorname*{arg\\,max}_{a}A_{\\pi}(s,a)$, improves the policy if there is at least one state-action pair with a positive advantage value and nonzero state visitation probability, otherwise the algorithm has converged to the optimal policy.\nHowever, in the approximate setting, it will typically be unavoidable, due to estimation and approximation error,\nthat there will be some states $s$ for which the expected advantage is negative, that is, $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)<0$.\nThe complex dependency of $\\rho_{\\tilde{\\pi}}(s)$ on $\\tilde{\\pi}$ makes Equation (2) difficult to optimize directly. Instead, we introduce the following local approximation to $\\eta$:"
+        },
+        {
+          "type": "para",
+          "data": "Note that $L_{\\pi}$ uses the visitation frequency $\\rho_{\\pi}$ rather than $\\rho_{\\tilde{\\pi}}$, ignoring changes in state visitation density due to changes in the policy.\nHowever, if we have a parameterized policy $\\pi_{\\theta}$, where $\\pi_{\\theta}(a|s)$ is a differentiable function of the parameter vector $\\theta$, then $L_{\\pi}$ matches $\\eta$ to first order (see Kakade & Langford (2002)).\nThat is, for any parameter value $\\theta_{0}$,"
+        },
+        {
+          "type": "para",
+          "data": "Equation 4 implies that a sufficiently small step $\\pi_{\\theta_{0}}\\rightarrow\\tilde{\\pi}$ that improves $L_{\\pi_{\\theta_{\\mathrm{old}}}}$ will also improve $\\eta$, but does not give us any guidance on how big of a step to take."
+        },
+        {
+          "type": "para",
+          "data": "To address this issue, Kakade & Langford (2002) proposed a policy updating scheme called conservative policy iteration, for which they could provide explicit lower bounds on the improvement of $\\eta$.\nTo define the conservative policy iteration update, let $\\pi_{\\mathrm{old}}$ denote the current policy, and let $\\pi^{\\prime}=\\operatorname*{arg\\,max}_{\\pi^{\\prime}}L_{\\pi_{\\mathrm{old}}}(\\pi^{\\prime})$.\nThe new policy $\\pi_{\\mathrm{new}}$ was defined to be the following mixture:"
+        },
+        {
+          "type": "para",
+          "data": "Kakade and Langford derived the following lower bound:"
+        },
+        {
+          "type": "para",
+          "data": "(We have modified it to make it slightly weaker but simpler.)\nNote, however, that so far this bound only applies to mixture policies generated by Equation (5). This policy class is unwieldy and restrictive in practice, and it is desirable for a practical policy update scheme to be applicable to all general stochastic policy classes."
+        }
+      ]
+    },
+    {
+      "title": "Monotonic Improvement Guarantee for General Stochastic Policies",
+      "level": 2,
+      "paragraphs": [
+        "Equation 6, which applies to conservative policy iteration, implies that a policy update that improves the right-hand side is guaranteed to improve the true performance $\\eta$.\nOur principal theoretical result is that the policy improvement bound in Equation 6 can be extended to general stochastic policies, rather than just mixture polices, by replacing $\\alpha$ with a distance measure between $\\pi$ and $\\tilde{\\pi}$, and changing the constant $\\epsilon$ appropriately. Since mixture policies are rarely used in practice, this result is crucial for extending the improvement guarantee to practical problems. The particular distance measure we use is the total variation divergence, which is defined by\n$D_{TV}(p\\ \\|\\ q)=\\frac{1}{2}\\sum_{i}|p_{i}-q_{i}|$ for discrete probability distributions $p,q$.11Our result is straightforward to extend to continuous states and actions by replacing the sums with integrals.\nDefine $D^{\\rm max}_{\\rm TV}(\\pi,\\tilde{\\pi})$ as",
+        "We provide two proofs in the appendix.\nThe first proof extends Kakade and Langford’s result\nusing the fact that the random variables from two distributions with total variation divergence less than $\\alpha$ can be coupled, so that they are equal with probability $1-\\alpha$.\nThe second proof uses perturbation theory.",
+        "Next, we note the following relationship between the total variation divergence and the KL divergence (Pollard (2000), Ch.\n3):\n$D_{TV}(p\\ \\|\\ q)^{2}\\leq D_{\\rm KL}(p\\ \\|\\ q)$.\nLet ${D^{\\rm max}_{\\rm KL}}(\\pi,\\tilde{\\pi})=\\max_{s}D_{\\rm KL}(\\pi(\\cdot|s)\\ \\|\\ \\tilde{\\pi}(\\cdot|s))$. The following bound then follows directly from 1:",
+        "Algorithm 1 describes an approximate policy iteration scheme based on the policy improvement bound in Equation (9). Note that for now, we assume exact evaluation of the advantage values $A_{\\pi}$.",
+        "It follows from Equation 9 that Algorithm 1 is guaranteed to generate a monotonically improving sequence of policies\n$\\eta(\\pi_{0})\\leq\\eta(\\pi_{1})\\leq\\eta(\\pi_{2})\\leq\\dots$.\nTo see this, let $M_{i}(\\pi)=L_{\\pi_{i}}(\\pi)-C{D^{\\rm max}_{\\rm KL}}(\\pi_{i},\\pi)$. Then",
+        "Thus, by maximizing $M_{i}$ at each iteration, we guarantee that the true objective $\\eta$ is non-decreasing.\nThis algorithm is a type of minorization-maximization (MM) algorithm (Hunter & Lange, 2004), which is a class of methods that also includes expectation maximization.\nIn the terminology of MM algorithms, $M_{i}$ is the surrogate function that minorizes $\\eta$ with equality at $\\pi_{i}$.\nThis algorithm is also reminiscent of proximal gradient methods and mirror descent.",
+        "Trust region policy optimization, which we propose in the following section, is an approximation to Algorithm 1, which uses a constraint on the KL divergence rather than a penalty to robustly allow large updates."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Equation 6, which applies to conservative policy iteration, implies that a policy update that improves the right-hand side is guaranteed to improve the true performance $\\eta$.\nOur principal theoretical result is that the policy improvement bound in Equation 6 can be extended to general stochastic policies, rather than just mixture polices, by replacing $\\alpha$ with a distance measure between $\\pi$ and $\\tilde{\\pi}$, and changing the constant $\\epsilon$ appropriately. Since mixture policies are rarely used in practice, this result is crucial for extending the improvement guarantee to practical problems. The particular distance measure we use is the total variation divergence, which is defined by\n$D_{TV}(p\\ \\|\\ q)=\\frac{1}{2}\\sum_{i}|p_{i}-q_{i}|$ for discrete probability distributions $p,q$.11Our result is straightforward to extend to continuous states and actions by replacing the sums with integrals.\nDefine $D^{\\rm max}_{\\rm TV}(\\pi,\\tilde{\\pi})$ as"
+        },
+        {
+          "type": "para",
+          "data": "We provide two proofs in the appendix.\nThe first proof extends Kakade and Langford’s result\nusing the fact that the random variables from two distributions with total variation divergence less than $\\alpha$ can be coupled, so that they are equal with probability $1-\\alpha$.\nThe second proof uses perturbation theory."
+        },
+        {
+          "type": "para",
+          "data": "Next, we note the following relationship between the total variation divergence and the KL divergence (Pollard (2000), Ch.\n3):\n$D_{TV}(p\\ \\|\\ q)^{2}\\leq D_{\\rm KL}(p\\ \\|\\ q)$.\nLet ${D^{\\rm max}_{\\rm KL}}(\\pi,\\tilde{\\pi})=\\max_{s}D_{\\rm KL}(\\pi(\\cdot|s)\\ \\|\\ \\tilde{\\pi}(\\cdot|s))$. The following bound then follows directly from 1:"
+        },
+        {
+          "type": "para",
+          "data": "Algorithm 1 describes an approximate policy iteration scheme based on the policy improvement bound in Equation (9). Note that for now, we assume exact evaluation of the advantage values $A_{\\pi}$."
+        },
+        {
+          "type": "para",
+          "data": "It follows from Equation 9 that Algorithm 1 is guaranteed to generate a monotonically improving sequence of policies\n$\\eta(\\pi_{0})\\leq\\eta(\\pi_{1})\\leq\\eta(\\pi_{2})\\leq\\dots$.\nTo see this, let $M_{i}(\\pi)=L_{\\pi_{i}}(\\pi)-C{D^{\\rm max}_{\\rm KL}}(\\pi_{i},\\pi)$. Then"
+        },
+        {
+          "type": "para",
+          "data": "Thus, by maximizing $M_{i}$ at each iteration, we guarantee that the true objective $\\eta$ is non-decreasing.\nThis algorithm is a type of minorization-maximization (MM) algorithm (Hunter & Lange, 2004), which is a class of methods that also includes expectation maximization.\nIn the terminology of MM algorithms, $M_{i}$ is the surrogate function that minorizes $\\eta$ with equality at $\\pi_{i}$.\nThis algorithm is also reminiscent of proximal gradient methods and mirror descent."
+        },
+        {
+          "type": "para",
+          "data": "Trust region policy optimization, which we propose in the following section, is an approximation to Algorithm 1, which uses a constraint on the KL divergence rather than a penalty to robustly allow large updates."
+        }
+      ]
+    },
+    {
+      "title": "Optimization of Parameterized Policies",
+      "level": 2,
+      "paragraphs": [
+        "In the previous section, we considered the policy optimization problem independently of the parameterization of $\\pi$ and under the assumption that the policy can be evaluated at all states. We now describe how to derive a practical algorithm from these theoretical foundations, under finite sample counts and arbitrary parameterizations.",
+        "Since we consider parameterized policies $\\pi_{\\theta}(a|s)$ with parameter vector $\\theta$,\nwe will overload our previous notation to use functions of $\\theta$ rather than $\\pi$,\ne.g. $\\eta(\\theta)\\vcentcolon=\\eta(\\pi_{\\theta})$, $L_{\\theta}(\\tilde{\\theta})\\vcentcolon=L_{\\pi_{\\theta}}(\\pi_{\\tilde{\\theta}})$, and $D_{\\rm KL}(\\theta\\ \\|\\ \\tilde{\\theta})\\vcentcolon=D_{\\rm KL}(\\pi_{\\theta}\\ \\|\\ \\pi_{\\tilde{\\theta}})$.\nWe will use $\\theta_{\\mathrm{old}}$ to denote the previous policy parameters that we want to improve upon.",
+        "The preceding section showed that $\\eta(\\theta)\\geq L_{\\theta_{\\mathrm{old}}}(\\theta)-C{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$, with equality at $\\theta=\\theta_{\\mathrm{old}}$.\nThus, by performing the following maximization, we are guaranteed to improve the true objective $\\eta$:",
+        "In practice, if we used the penalty coefficient $C$ recommended by the theory above, the step sizes would be very small.\nOne way to take larger steps in a robust way is to use a constraint on the KL divergence between the new policy and the old policy, i.e., a trust region constraint:",
+        "This problem imposes a constraint that the KL divergence is bounded at every point in the state space.\nWhile it is motivated by the theory, this problem is impractical to solve due to the large number of constraints.\nInstead, we can use a heuristic approximation which considers the average KL divergence:",
+        "We therefore propose solving the following optimization problem to generate a policy update:",
+        "Similar policy updates have been proposed in prior work (Bagnell & Schneider, 2003; Peters & Schaal, 2008b; Peters et al., 2010), and we compare our approach to prior methods in Section 7 and in the experiments in Section 8. Our experiments also show that this type of constrained update has similar empirical performance to the maximum KL divergence constraint in Equation (11)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In the previous section, we considered the policy optimization problem independently of the parameterization of $\\pi$ and under the assumption that the policy can be evaluated at all states. We now describe how to derive a practical algorithm from these theoretical foundations, under finite sample counts and arbitrary parameterizations."
+        },
+        {
+          "type": "para",
+          "data": "Since we consider parameterized policies $\\pi_{\\theta}(a|s)$ with parameter vector $\\theta$,\nwe will overload our previous notation to use functions of $\\theta$ rather than $\\pi$,\ne.g. $\\eta(\\theta)\\vcentcolon=\\eta(\\pi_{\\theta})$, $L_{\\theta}(\\tilde{\\theta})\\vcentcolon=L_{\\pi_{\\theta}}(\\pi_{\\tilde{\\theta}})$, and $D_{\\rm KL}(\\theta\\ \\|\\ \\tilde{\\theta})\\vcentcolon=D_{\\rm KL}(\\pi_{\\theta}\\ \\|\\ \\pi_{\\tilde{\\theta}})$.\nWe will use $\\theta_{\\mathrm{old}}$ to denote the previous policy parameters that we want to improve upon."
+        },
+        {
+          "type": "para",
+          "data": "The preceding section showed that $\\eta(\\theta)\\geq L_{\\theta_{\\mathrm{old}}}(\\theta)-C{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$, with equality at $\\theta=\\theta_{\\mathrm{old}}$.\nThus, by performing the following maximization, we are guaranteed to improve the true objective $\\eta$:"
+        },
+        {
+          "type": "para",
+          "data": "In practice, if we used the penalty coefficient $C$ recommended by the theory above, the step sizes would be very small.\nOne way to take larger steps in a robust way is to use a constraint on the KL divergence between the new policy and the old policy, i.e., a trust region constraint:"
+        },
+        {
+          "type": "para",
+          "data": "This problem imposes a constraint that the KL divergence is bounded at every point in the state space.\nWhile it is motivated by the theory, this problem is impractical to solve due to the large number of constraints.\nInstead, we can use a heuristic approximation which considers the average KL divergence:"
+        },
+        {
+          "type": "para",
+          "data": "We therefore propose solving the following optimization problem to generate a policy update:"
+        },
+        {
+          "type": "para",
+          "data": "Similar policy updates have been proposed in prior work (Bagnell & Schneider, 2003; Peters & Schaal, 2008b; Peters et al., 2010), and we compare our approach to prior methods in Section 7 and in the experiments in Section 8. Our experiments also show that this type of constrained update has similar empirical performance to the maximum KL divergence constraint in Equation (11)."
+        }
+      ]
+    },
+    {
+      "title": "Sample-Based Estimation of the Objective and Constraint",
+      "level": 2,
+      "paragraphs": [
+        "The previous section proposed a constrained optimization problem on the policy parameters (Equation (12)),\nwhich optimizes an estimate of the expected total reward $\\eta$ subject to a constraint on the change in the policy at each update.\nThis section describes how the objective and constraint functions can be approximated using Monte Carlo simulation.",
+        "We seek to solve the following optimization problem, obtained by expanding\n$L_{\\theta_{\\mathrm{old}}}$ in Equation (12):",
+        "We first replace $\\sum_{s}\\rho_{\\theta_{\\mathrm{old}}}(s)\\left[\\dots\\right]$ in the objective by the expectation $\\frac{1}{1-\\gamma}\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}}}\\left[\\dots\\right]$.\nNext, we replace the advantage values $A_{\\theta_{\\mathrm{old}}}$ by the $Q$-values $Q_{\\theta_{\\mathrm{old}}}$ in Equation (13), which only changes the objective by a constant.\nLast, we replace the sum over the actions by an importance sampling estimator. Using $q$ to denote the sampling distribution, the contribution of a single $s_{n}$ to the loss function is",
+        "Our optimization problem in Equation 13 is exactly equivalent to the following one, written in terms of expectations:",
+        "All that remains is to replace the expectations by sample averages and replace the $Q$ value by an empirical estimate.\nThe following sections describe two different schemes for performing this estimation.",
+        "The first sampling scheme, which we call single path, is the one that is typically used for policy gradient estimation (Bartlett & Baxter, 2011), and is based on sampling individual trajectories.\nThe second scheme, which we call vine, involves constructing a rollout set and then performing multiple actions from each state in the rollout set.\nThis method has mostly been explored in the context of policy iteration methods (Lagoudakis & Parr, 2003; Gabillon et al., 2013)."
+      ],
+      "subsections": [
+        {
+          "title": "Single Path",
+          "level": 3,
+          "paragraphs": [
+            "In this estimation procedure, we collect a sequence of states by sampling $s_{0}\\sim\\rho_{0}$ and then simulating the policy $\\pi_{\\theta_{\\mathrm{old}}}$ for some number of timesteps to generate a trajectory $s_{0},a_{0},s_{1},a_{1},\\dots,s_{T-1},a_{T-1},s_{T}$.\nHence, $q(a|s)=\\pi_{\\theta_{\\mathrm{old}}}(a|s)$.\n$Q_{\\theta_{\\mathrm{old}}}(s,a)$ is computed at each state-action pair $(s_{t},a_{t})$ by taking the discounted sum of future rewards along the trajectory."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In this estimation procedure, we collect a sequence of states by sampling $s_{0}\\sim\\rho_{0}$ and then simulating the policy $\\pi_{\\theta_{\\mathrm{old}}}$ for some number of timesteps to generate a trajectory $s_{0},a_{0},s_{1},a_{1},\\dots,s_{T-1},a_{T-1},s_{T}$.\nHence, $q(a|s)=\\pi_{\\theta_{\\mathrm{old}}}(a|s)$.\n$Q_{\\theta_{\\mathrm{old}}}(s,a)$ is computed at each state-action pair $(s_{t},a_{t})$ by taking the discounted sum of future rewards along the trajectory."
+            }
+          ]
+        },
+        {
+          "title": "Vine",
+          "level": 3,
+          "paragraphs": [
+            "In this estimation procedure, we first sample $s_{0}\\sim\\rho_{0}$ and simulate the policy $\\pi_{\\theta_{i}}$ to generate a number of trajectories.\nWe then choose a subset of $N$ states along these trajectories, denoted $s_{1},s_{2},\\dots,s_{N}$, which we call the “rollout set”.\nFor each state $s_{n}$ in the rollout set, we sample $K$ actions according to $a_{n,k}\\sim q(\\cdot|s_{n})$. Any choice of $q(\\cdot|s_{n})$ with a support that includes the support of $\\pi_{\\theta_{i}}(\\cdot|s_{n})$ will produce a consistent estimator. In practice, we found that $q(\\cdot|s_{n})=\\pi_{\\theta_{i}}(\\cdot|s_{n})$ works well on continuous problems, such as robotic locomotion, while the uniform distribution works well on discrete tasks, such as the Atari games, where it can sometimes achieve better exploration.",
+            "For each action $a_{n,k}$ sampled at each state $s_{n}$, we estimate $\\hat{Q}_{\\theta_{i}}(s_{n},a_{n,k})$ by performing a rollout (i.e., a short trajectory) starting with state $s_{n}$ and action $a_{n,k}$.\nWe can greatly reduce the variance of the $Q$-value differences between rollouts by using the same random number sequence for the noise in each of the $K$ rollouts, i.e., common random numbers.\nSee (Bertsekas, 2005) for additional discussion on Monte Carlo estimation of $Q$-values and (Ng & Jordan, 2000) for a discussion of common random numbers in reinforcement learning.",
+            "In small, finite action spaces, we can generate a rollout for every possible action from a given state.\nThe contribution to $L_{\\theta_{\\mathrm{old}}}$ from a single state $s_{n}$ is as follows:",
+            "where the action space is $\\mathcal{A}=\\left\\{a_{1},a_{2},\\dots,a_{K}\\right\\}$.\nIn large or continuous state spaces, we can construct an estimator of the surrogate objective using importance sampling.\nThe self-normalized estimator (Owen (2013), Chapter 9) of $L_{\\theta_{\\mathrm{old}}}$ obtained at a single state $s_{n}$ is",
+            "assuming that we performed $K$ actions $a_{n,1},a_{n,2},\\dots,a_{n,K}$ from state $s_{n}$.\nThis self-normalized estimator removes the need to use a baseline for the $Q$-values (note that the gradient is unchanged by adding a constant to the $Q$-values).\nAveraging over $s_{n}\\sim\\rho(\\pi)$, we obtain an estimator for $L_{\\theta_{\\mathrm{old}}}$, as well as its gradient.",
+            "The vine and single path methods are illustrated in Figure 1.\nWe use the term vine, since the trajectories used for sampling can be likened to the stems of vines, which branch at various points (the rollout set) into several short offshoots (the rollout trajectories).",
+            "The benefit of the vine method over the single path method that is our local estimate of the objective has much lower variance given the same number of $Q$-value samples in the surrogate objective.\nThat is, the vine method gives much better estimates of the advantage values.\nThe downside of the vine method is that we must perform far more calls to the simulator for each of these advantage estimates.\nFurthermore, the vine method requires us to generate multiple trajectories from each state in the rollout set, which limits this algorithm to settings where the system can be reset to an arbitrary state. In contrast, the single path algorithm requires no state resets and can be directly implemented on a physical system (Peters & Schaal, 2008b)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x1.png",
+              "alt": "Refer to caption",
+              "caption": "Left: illustration of single path procedure. Here, we generate a set of trajectories via simulation of the policy and incorporate all state-action pairs (sn,ansubscriptsnsubscriptans_{n},a_{n}) into the objective. Right: illustration of vine procedure. We generate a set of “trunk” trajectories, and then generate “branch” rollouts from a subset of the reached states. For each of these states snsubscriptsns_{n}, we perform multiple actions (a1subscripta1a_{1} and a2subscripta2a_{2} here) and perform a rollout after each action, using common random numbers (CRN) to reduce the variance.",
+              "label": "S5.F1"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x1.png",
+                "alt": "Refer to caption",
+                "caption": "Left: illustration of single path procedure. Here, we generate a set of trajectories via simulation of the policy and incorporate all state-action pairs (sn,ansubscriptsnsubscriptans_{n},a_{n}) into the objective. Right: illustration of vine procedure. We generate a set of “trunk” trajectories, and then generate “branch” rollouts from a subset of the reached states. For each of these states snsubscriptsns_{n}, we perform multiple actions (a1subscripta1a_{1} and a2subscripta2a_{2} here) and perform a rollout after each action, using common random numbers (CRN) to reduce the variance.",
+                "label": "S5.F1"
+              }
+            },
+            {
+              "type": "para",
+              "data": "In this estimation procedure, we first sample $s_{0}\\sim\\rho_{0}$ and simulate the policy $\\pi_{\\theta_{i}}$ to generate a number of trajectories.\nWe then choose a subset of $N$ states along these trajectories, denoted $s_{1},s_{2},\\dots,s_{N}$, which we call the “rollout set”.\nFor each state $s_{n}$ in the rollout set, we sample $K$ actions according to $a_{n,k}\\sim q(\\cdot|s_{n})$. Any choice of $q(\\cdot|s_{n})$ with a support that includes the support of $\\pi_{\\theta_{i}}(\\cdot|s_{n})$ will produce a consistent estimator. In practice, we found that $q(\\cdot|s_{n})=\\pi_{\\theta_{i}}(\\cdot|s_{n})$ works well on continuous problems, such as robotic locomotion, while the uniform distribution works well on discrete tasks, such as the Atari games, where it can sometimes achieve better exploration."
+            },
+            {
+              "type": "para",
+              "data": "For each action $a_{n,k}$ sampled at each state $s_{n}$, we estimate $\\hat{Q}_{\\theta_{i}}(s_{n},a_{n,k})$ by performing a rollout (i.e., a short trajectory) starting with state $s_{n}$ and action $a_{n,k}$.\nWe can greatly reduce the variance of the $Q$-value differences between rollouts by using the same random number sequence for the noise in each of the $K$ rollouts, i.e., common random numbers.\nSee (Bertsekas, 2005) for additional discussion on Monte Carlo estimation of $Q$-values and (Ng & Jordan, 2000) for a discussion of common random numbers in reinforcement learning."
+            },
+            {
+              "type": "para",
+              "data": "In small, finite action spaces, we can generate a rollout for every possible action from a given state.\nThe contribution to $L_{\\theta_{\\mathrm{old}}}$ from a single state $s_{n}$ is as follows:"
+            },
+            {
+              "type": "para",
+              "data": "where the action space is $\\mathcal{A}=\\left\\{a_{1},a_{2},\\dots,a_{K}\\right\\}$.\nIn large or continuous state spaces, we can construct an estimator of the surrogate objective using importance sampling.\nThe self-normalized estimator (Owen (2013), Chapter 9) of $L_{\\theta_{\\mathrm{old}}}$ obtained at a single state $s_{n}$ is"
+            },
+            {
+              "type": "para",
+              "data": "assuming that we performed $K$ actions $a_{n,1},a_{n,2},\\dots,a_{n,K}$ from state $s_{n}$.\nThis self-normalized estimator removes the need to use a baseline for the $Q$-values (note that the gradient is unchanged by adding a constant to the $Q$-values).\nAveraging over $s_{n}\\sim\\rho(\\pi)$, we obtain an estimator for $L_{\\theta_{\\mathrm{old}}}$, as well as its gradient."
+            },
+            {
+              "type": "para",
+              "data": "The vine and single path methods are illustrated in Figure 1.\nWe use the term vine, since the trajectories used for sampling can be likened to the stems of vines, which branch at various points (the rollout set) into several short offshoots (the rollout trajectories)."
+            },
+            {
+              "type": "para",
+              "data": "The benefit of the vine method over the single path method that is our local estimate of the objective has much lower variance given the same number of $Q$-value samples in the surrogate objective.\nThat is, the vine method gives much better estimates of the advantage values.\nThe downside of the vine method is that we must perform far more calls to the simulator for each of these advantage estimates.\nFurthermore, the vine method requires us to generate multiple trajectories from each state in the rollout set, which limits this algorithm to settings where the system can be reset to an arbitrary state. In contrast, the single path algorithm requires no state resets and can be directly implemented on a physical system (Peters & Schaal, 2008b)."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The previous section proposed a constrained optimization problem on the policy parameters (Equation (12)),\nwhich optimizes an estimate of the expected total reward $\\eta$ subject to a constraint on the change in the policy at each update.\nThis section describes how the objective and constraint functions can be approximated using Monte Carlo simulation."
+        },
+        {
+          "type": "para",
+          "data": "We seek to solve the following optimization problem, obtained by expanding\n$L_{\\theta_{\\mathrm{old}}}$ in Equation (12):"
+        },
+        {
+          "type": "para",
+          "data": "We first replace $\\sum_{s}\\rho_{\\theta_{\\mathrm{old}}}(s)\\left[\\dots\\right]$ in the objective by the expectation $\\frac{1}{1-\\gamma}\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}}}\\left[\\dots\\right]$.\nNext, we replace the advantage values $A_{\\theta_{\\mathrm{old}}}$ by the $Q$-values $Q_{\\theta_{\\mathrm{old}}}$ in Equation (13), which only changes the objective by a constant.\nLast, we replace the sum over the actions by an importance sampling estimator. Using $q$ to denote the sampling distribution, the contribution of a single $s_{n}$ to the loss function is"
+        },
+        {
+          "type": "para",
+          "data": "Our optimization problem in Equation 13 is exactly equivalent to the following one, written in terms of expectations:"
+        },
+        {
+          "type": "para",
+          "data": "All that remains is to replace the expectations by sample averages and replace the $Q$ value by an empirical estimate.\nThe following sections describe two different schemes for performing this estimation."
+        },
+        {
+          "type": "para",
+          "data": "The first sampling scheme, which we call single path, is the one that is typically used for policy gradient estimation (Bartlett & Baxter, 2011), and is based on sampling individual trajectories.\nThe second scheme, which we call vine, involves constructing a rollout set and then performing multiple actions from each state in the rollout set.\nThis method has mostly been explored in the context of policy iteration methods (Lagoudakis & Parr, 2003; Gabillon et al., 2013)."
+        }
+      ]
+    },
+    {
+      "title": "Practical Algorithm",
+      "level": 2,
+      "paragraphs": [
+        "Here we present two practical policy optimization algorithm based on the ideas above, which use either the single path or vine sampling scheme from the preceding section.\nThe algorithms repeatedly perform the following steps:",
+        "Use the single path or vine procedures to collect a set of state-action pairs along with Monte Carlo estimates of their $Q$-values.",
+        "By averaging over samples, construct the estimated objective and constraint in Equation 14.",
+        "Approximately solve this constrained optimization problem to update the policy’s parameter vector $\\theta$.\nWe use the conjugate gradient algorithm followed by a line search, which is altogether only slightly more expensive than computing the gradient itself. See Appendix C for details.",
+        "With regard to (3), we construct the Fisher information matrix (FIM) by analytically computing the Hessian of the KL divergence, rather than using the covariance matrix of the gradients.\nThat is, we estimate $A_{ij}$ as $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial^{2}}{\\partial\\theta_{i}\\partial\\theta_{j}}D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|s_{n})\\ \\|\\ \\pi_{\\theta}(\\cdot|s_{n}))$, rather than $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial}{\\partial\\theta_{i}}\\log\\pi_{\\theta}(a_{n}|s_{n})\\frac{\\partial}{\\partial\\theta_{j}}\\log\\pi_{\\theta}(a_{n}|s_{n})$.\nThe analytic estimator integrates over the action at each state $s_{n}$, and does not depend on the action $a_{n}$ that was sampled.\nAs described in Appendix C, this analytic estimator has computational benefits in the large-scale setting, since it removes the need to store a dense Hessian or all policy gradients from a batch of trajectories. The rate of improvement in the policy is similar to the empirical FIM, as shown in the experiments.",
+        "Let us briefly summarize the relationship between the theory from Section 3 and the practical algorithm we have described:",
+        "The theory justifies optimizing a surrogate objective with a penalty on KL divergence. However, the large penalty coefficient $C$ leads to prohibitively small steps, so we would like to decrease this coefficient.\nEmpirically, it is hard to robustly choose the penalty coefficient, so we use a hard constraint instead of a penalty, with parameter $\\delta$ (the bound on KL divergence).",
+        "The constraint on ${D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$ is hard for numerical optimization and estimation, so instead we constrain ${\\overline{D}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$.",
+        "Our theory ignores estimation error for the advantage function.\nKakade & Langford (2002) consider this error in their derivation, and the same arguments would hold in the setting of this paper, but we omit them for simplicity."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Here we present two practical policy optimization algorithm based on the ideas above, which use either the single path or vine sampling scheme from the preceding section.\nThe algorithms repeatedly perform the following steps:"
+        },
+        {
+          "type": "para",
+          "data": "Use the single path or vine procedures to collect a set of state-action pairs along with Monte Carlo estimates of their $Q$-values."
+        },
+        {
+          "type": "para",
+          "data": "By averaging over samples, construct the estimated objective and constraint in Equation 14."
+        },
+        {
+          "type": "para",
+          "data": "Approximately solve this constrained optimization problem to update the policy’s parameter vector $\\theta$.\nWe use the conjugate gradient algorithm followed by a line search, which is altogether only slightly more expensive than computing the gradient itself. See Appendix C for details."
+        },
+        {
+          "type": "para",
+          "data": "With regard to (3), we construct the Fisher information matrix (FIM) by analytically computing the Hessian of the KL divergence, rather than using the covariance matrix of the gradients.\nThat is, we estimate $A_{ij}$ as $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial^{2}}{\\partial\\theta_{i}\\partial\\theta_{j}}D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|s_{n})\\ \\|\\ \\pi_{\\theta}(\\cdot|s_{n}))$, rather than $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial}{\\partial\\theta_{i}}\\log\\pi_{\\theta}(a_{n}|s_{n})\\frac{\\partial}{\\partial\\theta_{j}}\\log\\pi_{\\theta}(a_{n}|s_{n})$.\nThe analytic estimator integrates over the action at each state $s_{n}$, and does not depend on the action $a_{n}$ that was sampled.\nAs described in Appendix C, this analytic estimator has computational benefits in the large-scale setting, since it removes the need to store a dense Hessian or all policy gradients from a batch of trajectories. The rate of improvement in the policy is similar to the empirical FIM, as shown in the experiments."
+        },
+        {
+          "type": "para",
+          "data": "Let us briefly summarize the relationship between the theory from Section 3 and the practical algorithm we have described:"
+        },
+        {
+          "type": "para",
+          "data": "The theory justifies optimizing a surrogate objective with a penalty on KL divergence. However, the large penalty coefficient $C$ leads to prohibitively small steps, so we would like to decrease this coefficient.\nEmpirically, it is hard to robustly choose the penalty coefficient, so we use a hard constraint instead of a penalty, with parameter $\\delta$ (the bound on KL divergence)."
+        },
+        {
+          "type": "para",
+          "data": "The constraint on ${D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$ is hard for numerical optimization and estimation, so instead we constrain ${\\overline{D}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$."
+        },
+        {
+          "type": "para",
+          "data": "Our theory ignores estimation error for the advantage function.\nKakade & Langford (2002) consider this error in their derivation, and the same arguments would hold in the setting of this paper, but we omit them for simplicity."
+        }
+      ]
+    },
+    {
+      "title": "Connections with Prior Work",
+      "level": 2,
+      "paragraphs": [
+        "As mentioned in Section 4, our derivation results in a policy update that is related to several prior methods, providing a unifying perspective on a number of policy update schemes. The natural policy gradient (Kakade, 2002) can be obtained as a special case of the update in Equation (12) by using a linear approximation to $L$ and a quadratic approximation to the ${\\overline{D}_{\\rm KL}}$ constraint, resulting in the following problem:",
+        "The update is $\\theta_{\\mathrm{new}}=\\theta_{\\mathrm{old}}+\\frac{1}{\\lambda}A(\\theta_{\\mathrm{old}})^{-1}\\nabla_{\\theta}L(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}$, where the stepsize $\\frac{1}{\\lambda}$ is typically treated as an algorithm parameter. This differs from our approach, which enforces the constraint at each update. Though this difference might seem subtle, our experiments demonstrate that it significantly improves the algorithm’s performance on larger problems.",
+        "We can also obtain the standard policy gradient update by using an $\\ell_{2}$ constraint or penalty:",
+        "The policy iteration update can also be obtained by solving the unconstrained problem $\\operatorname*{maximize}_{\\pi}L_{\\pi_{\\mathrm{old}}}(\\pi)$, using $L$ as defined in Equation 3.",
+        "Several other methods employ an update similar to Equation (12). Relative entropy policy search (REPS) (Peters et al., 2010) constrains the state-action marginals $p(s,a)$, while TRPO constrains the conditionals $p(a|s)$. Unlike REPS, our approach does not require a costly nonlinear optimization in the inner loop.\nLevine and Abbeel (2014) also use a KL divergence constraint, but its purpose is to encourage the policy not to stray from regions where the estimated dynamics model is valid, while we do not attempt to estimate the system dynamics explicitly.\nPirotta et al. (2013) also build on and generalize Kakade and Langford’s results, and they derive different algorithms from the ones here."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "As mentioned in Section 4, our derivation results in a policy update that is related to several prior methods, providing a unifying perspective on a number of policy update schemes. The natural policy gradient (Kakade, 2002) can be obtained as a special case of the update in Equation (12) by using a linear approximation to $L$ and a quadratic approximation to the ${\\overline{D}_{\\rm KL}}$ constraint, resulting in the following problem:"
+        },
+        {
+          "type": "para",
+          "data": "The update is $\\theta_{\\mathrm{new}}=\\theta_{\\mathrm{old}}+\\frac{1}{\\lambda}A(\\theta_{\\mathrm{old}})^{-1}\\nabla_{\\theta}L(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}$, where the stepsize $\\frac{1}{\\lambda}$ is typically treated as an algorithm parameter. This differs from our approach, which enforces the constraint at each update. Though this difference might seem subtle, our experiments demonstrate that it significantly improves the algorithm’s performance on larger problems."
+        },
+        {
+          "type": "para",
+          "data": "We can also obtain the standard policy gradient update by using an $\\ell_{2}$ constraint or penalty:"
+        },
+        {
+          "type": "para",
+          "data": "The policy iteration update can also be obtained by solving the unconstrained problem $\\operatorname*{maximize}_{\\pi}L_{\\pi_{\\mathrm{old}}}(\\pi)$, using $L$ as defined in Equation 3."
+        },
+        {
+          "type": "para",
+          "data": "Several other methods employ an update similar to Equation (12). Relative entropy policy search (REPS) (Peters et al., 2010) constrains the state-action marginals $p(s,a)$, while TRPO constrains the conditionals $p(a|s)$. Unlike REPS, our approach does not require a costly nonlinear optimization in the inner loop.\nLevine and Abbeel (2014) also use a KL divergence constraint, but its purpose is to encourage the policy not to stray from regions where the estimated dynamics model is valid, while we do not attempt to estimate the system dynamics explicitly.\nPirotta et al. (2013) also build on and generalize Kakade and Langford’s results, and they derive different algorithms from the ones here."
+        }
+      ]
+    },
+    {
+      "title": "Experiments",
+      "level": 2,
+      "paragraphs": [
+        "We designed our experiments to investigate the following questions:",
+        "What are the performance characteristics of the single path and vine sampling procedures?",
+        "TRPO is related to prior methods (e.g. natural policy gradient) but makes several changes, most notably by using a fixed KL divergence rather than a fixed penalty coefficient. How does this affect the performance of the algorithm?",
+        "Can TRPO be used to solve challenging large-scale problems? How does TRPO compare with other methods when applied to large-scale problems, with regard to final performance, computation time, and sample complexity?",
+        "To answer (1) and (2), we compare the performance of the single path and vine variants of TRPO, several ablated variants, and a number of prior policy optimization algorithms.\nWith regard to (3), we show that both the single path and vine algorithm can obtain high-quality locomotion controllers from scratch, which is considered to be a hard problem.\nWe also show that these algorithms produce competitive results when learning policies for playing Atari games from images using convolutional neural networks with tens of thousands of parameters."
+      ],
+      "subsections": [
+        {
+          "title": "Simulated Robotic Locomotion",
+          "level": 3,
+          "paragraphs": [
+            "We conducted the robotic locomotion experiments using the MuJoCo simulator (Todorov et al., 2012).\nThe three simulated robots are shown in Figure 2.\nThe states of the robots are their generalized positions and velocities, and the controls are joint torques. Underactuation, high dimensionality, and non-smooth dynamics due to contacts make these tasks very challenging.\nThe following models are included in our evaluation:",
+            "Swimmer. $10$-dimensional state space, linear reward for forward progress and a quadratic penalty on joint effort to produce the reward $r(x,u)=v_{x}-10^{-5}\\|u\\|^{2}$. The swimmer can propel itself forward by making an undulating motion.",
+            "Hopper. $12$-dimensional state space, same reward as the swimmer, with a bonus of $+1$ for being in a non-terminal state.\nWe ended the episodes when the hopper fell over, which was defined by thresholds on the torso height and angle.",
+            "Walker. $18$-dimensional state space. For the walker, we added a penalty for strong impacts of the feet against the ground to encourage a smooth walk rather than a hopping gait.",
+            "We used $\\delta=0.01$ for all experiments.\nSee Table 2 in the Appendix for more details on the experimental setup and parameters used.\nWe used neural networks to represent the policy, with the architecture shown in Figure 3, and further details provided in Appendix D. To establish a standard baseline, we also included the classic cart-pole balancing problem, based on the formulation from Barto et al. (1983), using a linear policy with six parameters that is easy to optimize with derivative-free black-box optimization methods.",
+            "The following algorithms were considered in the comparison:\nsingle path TRPO;\nvine TRPO;\ncross-entropy method (CEM), a gradient-free method (Szita & Lörincz, 2006);\ncovariance matrix adaption (CMA), another gradient-free method (Hansen & Ostermeier, 1996);\nnatural gradient, the classic natural policy gradient algorithm (Kakade, 2002), which differs from single path by the use of a fixed penalty coefficient (Lagrange multiplier) instead of the KL divergence constraint;\nempirical FIM, identical to single path, except that the FIM is estimated using the covariance matrix of the gradients rather than the analytic estimate;\nmax KL, which was only tractable on the cart-pole problem, and uses the maximum KL divergence in Equation (11), rather than the average divergence, allowing us to evaluate the quality of this approximation.\nThe parameters used in the experiments are provided in Appendix E.\nFor the natural gradient method, we swept through the possible values of the stepsize in factors of three, and took the best value according to the final performance.",
+            "Learning curves showing the total reward averaged across five runs of each algorithm are shown in Figure 4.\nSingle path and vine TRPO solved all of the problems, yielding the best solutions.\nNatural gradient performed well on the two easier problems, but was unable to generate hopping and walking gaits that made forward progress.\nThese results provide empirical evidence that constraining the KL divergence is a more robust way to choose step sizes and make fast, consistent progress, compared to using a fixed penalty.\nCEM and CMA are derivative-free algorithms, hence their sample complexity scales unfavorably with the number of parameters, and they performed poorly on the larger problems.\nThe max KL method learned somewhat more slowly than our final method, due to the more restrictive form of the constraint, but overall the result suggests that the average KL divergence constraint has a similar effect as the theorecally justified maximum KL divergence. Videos of the policies learned by TRPO may be viewed on the project website: http://sites.google.com/site/trpopaper/.",
+            "Note that TRPO learned all of the gaits with general-purpose policies and simple reward functions, using minimal prior knowledge. This is in contrast with most prior methods for learning locomotion, which typically rely on hand-architected policy classes that explicitly encode notions of balance and stepping (Tedrake et al., 2004; Geng et al., 2006; Wampler & Popović, 2009)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x4.png",
+              "alt": "Refer to caption",
+              "caption": "Neural networks used for the locomotion task (top) and for playing Atari games (bottom).",
+              "label": "S8.F3"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x6.png",
+              "alt": "Refer to caption",
+              "caption": "Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+              "label": "S8.F4"
+            }
+          ],
+          "tables": [
+            {
+              "caption": "Figure 4: Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+              "headers": [],
+              "rows": [
+                [
+                  "B. Rider",
+                  "Breakout",
+                  "Enduro",
+                  "Pong",
+                  "Q*bert",
+                  "Seaquest",
+                  "S. Invaders"
+                ],
+                [
+                  "354",
+                  "1.2",
+                  "0",
+                  "−20.420.4-20.4",
+                  "157",
+                  "110",
+                  "179"
+                ],
+                [
+                  "7456",
+                  "31.0",
+                  "368",
+                  "−3.03.0-3.0",
+                  "18900",
+                  "28010",
+                  "3690"
+                ],
+                [
+                  "4092",
+                  "168.0",
+                  "470",
+                  "20.0",
+                  "1952",
+                  "1705",
+                  "581"
+                ],
+                [
+                  "5702",
+                  "380",
+                  "741",
+                  "21",
+                  "20025",
+                  "2995",
+                  "692"
+                ],
+                [
+                  "1425.2",
+                  "10.8",
+                  "534.6",
+                  "20.9",
+                  "1973.5",
+                  "1908.6",
+                  "568.4"
+                ],
+                [
+                  "859.5",
+                  "34.2",
+                  "430.8",
+                  "20.9",
+                  "7732.5",
+                  "788.4",
+                  "450.2"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x4.png",
+                "alt": "Refer to caption",
+                "caption": "Neural networks used for the locomotion task (top) and for playing Atari games (bottom).",
+                "label": "S8.F3"
+              }
+            },
+            {
+              "type": "para",
+              "data": "We conducted the robotic locomotion experiments using the MuJoCo simulator (Todorov et al., 2012).\nThe three simulated robots are shown in Figure 2.\nThe states of the robots are their generalized positions and velocities, and the controls are joint torques. Underactuation, high dimensionality, and non-smooth dynamics due to contacts make these tasks very challenging.\nThe following models are included in our evaluation:"
+            },
+            {
+              "type": "para",
+              "data": "Swimmer. $10$-dimensional state space, linear reward for forward progress and a quadratic penalty on joint effort to produce the reward $r(x,u)=v_{x}-10^{-5}\\|u\\|^{2}$. The swimmer can propel itself forward by making an undulating motion."
+            },
+            {
+              "type": "para",
+              "data": "Hopper. $12$-dimensional state space, same reward as the swimmer, with a bonus of $+1$ for being in a non-terminal state.\nWe ended the episodes when the hopper fell over, which was defined by thresholds on the torso height and angle."
+            },
+            {
+              "type": "para",
+              "data": "Walker. $18$-dimensional state space. For the walker, we added a penalty for strong impacts of the feet against the ground to encourage a smooth walk rather than a hopping gait."
+            },
+            {
+              "type": "para",
+              "data": "We used $\\delta=0.01$ for all experiments.\nSee Table 2 in the Appendix for more details on the experimental setup and parameters used.\nWe used neural networks to represent the policy, with the architecture shown in Figure 3, and further details provided in Appendix D. To establish a standard baseline, we also included the classic cart-pole balancing problem, based on the formulation from Barto et al. (1983), using a linear policy with six parameters that is easy to optimize with derivative-free black-box optimization methods."
+            },
+            {
+              "type": "para",
+              "data": "The following algorithms were considered in the comparison:\nsingle path TRPO;\nvine TRPO;\ncross-entropy method (CEM), a gradient-free method (Szita & Lörincz, 2006);\ncovariance matrix adaption (CMA), another gradient-free method (Hansen & Ostermeier, 1996);\nnatural gradient, the classic natural policy gradient algorithm (Kakade, 2002), which differs from single path by the use of a fixed penalty coefficient (Lagrange multiplier) instead of the KL divergence constraint;\nempirical FIM, identical to single path, except that the FIM is estimated using the covariance matrix of the gradients rather than the analytic estimate;\nmax KL, which was only tractable on the cart-pole problem, and uses the maximum KL divergence in Equation (11), rather than the average divergence, allowing us to evaluate the quality of this approximation.\nThe parameters used in the experiments are provided in Appendix E.\nFor the natural gradient method, we swept through the possible values of the stepsize in factors of three, and took the best value according to the final performance."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x6.png",
+                "alt": "Refer to caption",
+                "caption": "Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+                "label": "S8.F4"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Learning curves showing the total reward averaged across five runs of each algorithm are shown in Figure 4.\nSingle path and vine TRPO solved all of the problems, yielding the best solutions.\nNatural gradient performed well on the two easier problems, but was unable to generate hopping and walking gaits that made forward progress.\nThese results provide empirical evidence that constraining the KL divergence is a more robust way to choose step sizes and make fast, consistent progress, compared to using a fixed penalty.\nCEM and CMA are derivative-free algorithms, hence their sample complexity scales unfavorably with the number of parameters, and they performed poorly on the larger problems.\nThe max KL method learned somewhat more slowly than our final method, due to the more restrictive form of the constraint, but overall the result suggests that the average KL divergence constraint has a similar effect as the theorecally justified maximum KL divergence. Videos of the policies learned by TRPO may be viewed on the project website: http://sites.google.com/site/trpopaper/."
+            },
+            {
+              "type": "para",
+              "data": "Note that TRPO learned all of the gaits with general-purpose policies and simple reward functions, using minimal prior knowledge. This is in contrast with most prior methods for learning locomotion, which typically rely on hand-architected policy classes that explicitly encode notions of balance and stepping (Tedrake et al., 2004; Geng et al., 2006; Wampler & Popović, 2009)."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Figure 4: Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+                "headers": [],
+                "rows": [
+                  [
+                    "B. Rider",
+                    "Breakout",
+                    "Enduro",
+                    "Pong",
+                    "Q*bert",
+                    "Seaquest",
+                    "S. Invaders"
+                  ],
+                  [
+                    "354",
+                    "1.2",
+                    "0",
+                    "−20.420.4-20.4",
+                    "157",
+                    "110",
+                    "179"
+                  ],
+                  [
+                    "7456",
+                    "31.0",
+                    "368",
+                    "−3.03.0-3.0",
+                    "18900",
+                    "28010",
+                    "3690"
+                  ],
+                  [
+                    "4092",
+                    "168.0",
+                    "470",
+                    "20.0",
+                    "1952",
+                    "1705",
+                    "581"
+                  ],
+                  [
+                    "5702",
+                    "380",
+                    "741",
+                    "21",
+                    "20025",
+                    "2995",
+                    "692"
+                  ],
+                  [
+                    "1425.2",
+                    "10.8",
+                    "534.6",
+                    "20.9",
+                    "1973.5",
+                    "1908.6",
+                    "568.4"
+                  ],
+                  [
+                    "859.5",
+                    "34.2",
+                    "430.8",
+                    "20.9",
+                    "7732.5",
+                    "788.4",
+                    "450.2"
+                  ]
+                ],
+                "label": null
+              }
+            }
+          ]
+        },
+        {
+          "title": "Playing Games from Images",
+          "level": 3,
+          "paragraphs": [
+            "To evaluate TRPO on a partially observed task with complex observations, we trained policies for playing Atari games, using raw images as input. The games require learning a variety of behaviors, such as dodging bullets and hitting balls with paddles.\nAside from the high dimensionality, challenging elements of these games include delayed rewards (no immediate penalty is incurred when a life is lost in Breakout or Space Invaders); complex sequences of behavior (Q*bert requires a character to hop on $21$ different platforms); and non-stationary image statistics (Enduro involves a changing and flickering background).",
+            "We tested our algorithms on the same seven games reported on in (Mnih et al., 2013) and (Guo et al., 2014), which are made available through the Arcade Learning Environment (Bellemare et al., 2013)\nThe images were preprocessed following the protocol in Mnih et al (2013), and\nthe policy was represented by the convolutional neural network shown in Figure 3, with two convolutional layers with $16$ channels and stride $2$, followed by one fully-connected layer with $20$ units, yielding 33,500 parameters.",
+            "The results of the vine and single path algorithms are summarized in Table 1, which also includes an expert human performance and two recent methods: deep $Q$-learning (Mnih et al., 2013), and a combination of Monte-Carlo Tree Search with supervised training (Guo et al., 2014), called UCC-I. The 500 iterations of our algorithm took about 30 hours (with slight variation between games) on a 16-core computer. While our method only outperformed the prior methods on some of the games, it consistently achieved reasonable scores. Unlike the prior methods, our approach was not designed specifically for this task. The ability to apply the same policy search method to methods as diverse as robotic locomotion and image-based game playing demonstrates the generality of TRPO."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To evaluate TRPO on a partially observed task with complex observations, we trained policies for playing Atari games, using raw images as input. The games require learning a variety of behaviors, such as dodging bullets and hitting balls with paddles.\nAside from the high dimensionality, challenging elements of these games include delayed rewards (no immediate penalty is incurred when a life is lost in Breakout or Space Invaders); complex sequences of behavior (Q*bert requires a character to hop on $21$ different platforms); and non-stationary image statistics (Enduro involves a changing and flickering background)."
+            },
+            {
+              "type": "para",
+              "data": "We tested our algorithms on the same seven games reported on in (Mnih et al., 2013) and (Guo et al., 2014), which are made available through the Arcade Learning Environment (Bellemare et al., 2013)\nThe images were preprocessed following the protocol in Mnih et al (2013), and\nthe policy was represented by the convolutional neural network shown in Figure 3, with two convolutional layers with $16$ channels and stride $2$, followed by one fully-connected layer with $20$ units, yielding 33,500 parameters."
+            },
+            {
+              "type": "para",
+              "data": "The results of the vine and single path algorithms are summarized in Table 1, which also includes an expert human performance and two recent methods: deep $Q$-learning (Mnih et al., 2013), and a combination of Monte-Carlo Tree Search with supervised training (Guo et al., 2014), called UCC-I. The 500 iterations of our algorithm took about 30 hours (with slight variation between games) on a 16-core computer. While our method only outperformed the prior methods on some of the games, it consistently achieved reasonable scores. Unlike the prior methods, our approach was not designed specifically for this task. The ability to apply the same policy search method to methods as diverse as robotic locomotion and image-based game playing demonstrates the generality of TRPO."
+            }
+          ]
+        }
+      ],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x3.png",
+          "alt": "Refer to caption",
+          "caption": "2D robot models used for locomotion experiments. From left to right: swimmer, hopper, walker. The hopper and walker present a particular challenge, due to underactuation and contact discontinuities.",
+          "label": "S8.F2"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We designed our experiments to investigate the following questions:"
+        },
+        {
+          "type": "para",
+          "data": "What are the performance characteristics of the single path and vine sampling procedures?"
+        },
+        {
+          "type": "para",
+          "data": "TRPO is related to prior methods (e.g. natural policy gradient) but makes several changes, most notably by using a fixed KL divergence rather than a fixed penalty coefficient. How does this affect the performance of the algorithm?"
+        },
+        {
+          "type": "para",
+          "data": "Can TRPO be used to solve challenging large-scale problems? How does TRPO compare with other methods when applied to large-scale problems, with regard to final performance, computation time, and sample complexity?"
+        },
+        {
+          "type": "para",
+          "data": "To answer (1) and (2), we compare the performance of the single path and vine variants of TRPO, several ablated variants, and a number of prior policy optimization algorithms.\nWith regard to (3), we show that both the single path and vine algorithm can obtain high-quality locomotion controllers from scratch, which is considered to be a hard problem.\nWe also show that these algorithms produce competitive results when learning policies for playing Atari games from images using convolutional neural networks with tens of thousands of parameters."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x3.png",
+            "alt": "Refer to caption",
+            "caption": "2D robot models used for locomotion experiments. From left to right: swimmer, hopper, walker. The hopper and walker present a particular challenge, due to underactuation and contact discontinuities.",
+            "label": "S8.F2"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Discussion",
+      "level": 2,
+      "paragraphs": [
+        "We proposed and analyzed trust region methods for optimizing stochastic control policies.\nWe proved monotonic improvement for an algorithm that repeatedly optimizes a local approximation to the expected return of the policy with a KL divergence penalty, and we showed that an approximation to this method that incorporates a KL divergence constraint achieves good empirical results on a range of challenging policy learning tasks, outperforming prior methods. Our analysis also provides a perspective that unifies policy gradient and policy iteration methods, and shows them to be special limiting cases of an algorithm that optimizes a certain objective subject to a trust region constraint.",
+        "In the domain of robotic locomotion, we successfully learned controllers for swimming, walking and hopping in a physics simulator, using general purpose neural networks and minimally informative rewards.\nTo our knowledge, no prior work has learned controllers from scratch for all of these tasks, using a generic policy search method and non-engineered, general-purpose policy representations.\nIn the game-playing domain, we learned convolutional neural network policies that used raw images as inputs. This requires optimizing extremely high-dimensional policies, and only two prior methods report successful results on this task.",
+        "Since the method we proposed is scalable and has strong theoretical foundations, we hope that it will serve as a jumping-off point for future work on training large, rich function approximators for a range of challenging problems.\nAt the intersection of the two experimental domains we explored, there is the possibility of learning robotic control policies that use vision and raw sensory data as input, providing a unified scheme for training robotic controllers that perform both perception and control.\nThe use of more sophisticated policies, including recurrent policies with hidden state, could further make it possible to roll state estimation and control into the same policy in the partially-observed setting.\nBy combining our method with model learning, it would also be possible to substantially reduce its sample complexity, making it applicable to real-world settings where samples are expensive."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We proposed and analyzed trust region methods for optimizing stochastic control policies.\nWe proved monotonic improvement for an algorithm that repeatedly optimizes a local approximation to the expected return of the policy with a KL divergence penalty, and we showed that an approximation to this method that incorporates a KL divergence constraint achieves good empirical results on a range of challenging policy learning tasks, outperforming prior methods. Our analysis also provides a perspective that unifies policy gradient and policy iteration methods, and shows them to be special limiting cases of an algorithm that optimizes a certain objective subject to a trust region constraint."
+        },
+        {
+          "type": "para",
+          "data": "In the domain of robotic locomotion, we successfully learned controllers for swimming, walking and hopping in a physics simulator, using general purpose neural networks and minimally informative rewards.\nTo our knowledge, no prior work has learned controllers from scratch for all of these tasks, using a generic policy search method and non-engineered, general-purpose policy representations.\nIn the game-playing domain, we learned convolutional neural network policies that used raw images as inputs. This requires optimizing extremely high-dimensional policies, and only two prior methods report successful results on this task."
+        },
+        {
+          "type": "para",
+          "data": "Since the method we proposed is scalable and has strong theoretical foundations, we hope that it will serve as a jumping-off point for future work on training large, rich function approximators for a range of challenging problems.\nAt the intersection of the two experimental domains we explored, there is the possibility of learning robotic control policies that use vision and raw sensory data as input, providing a unified scheme for training robotic controllers that perform both perception and control.\nThe use of more sophisticated policies, including recurrent policies with hidden state, could further make it possible to roll state estimation and control into the same policy in the partially-observed setting.\nBy combining our method with model learning, it would also be possible to substantially reduce its sample complexity, making it applicable to real-world settings where samples are expensive."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Left: illustration of single path procedure. Here, we generate a set of trajectories via simulation of the policy and incorporate all state-action pairs (sn,ansubscriptsnsubscriptans_{n},a_{n}) into the objective. Right: illustration of vine procedure. We generate a set of “trunk” trajectories, and then generate “branch” rollouts from a subset of the reached states. For each of these states snsubscriptsns_{n}, we perform multiple actions (a1subscripta1a_{1} and a2subscripta2a_{2} here) and perform a rollout after each action, using common random numbers (CRN) to reduce the variance.",
+      "label": "S5.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "2D robot models used for locomotion experiments. From left to right: swimmer, hopper, walker. The hopper and walker present a particular challenge, due to underactuation and contact discontinuities.",
+      "label": "S8.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Neural networks used for the locomotion task (top) and for playing Atari games (bottom).",
+      "label": "S8.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+      "label": "S8.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1502.05477/assets/x10.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for the Atari domain. For historical reasons, the plots show cost = negative reward.",
+      "label": "A6.F5"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 4: Learning curves for locomotion tasks, averaged across five runs of each algorithm with random initializations. Note that for the hopper and walker, a score of −11-1 is achievable without any forward velocity, indicating a policy that simply learned balanced standing, but not walking.",
+      "headers": [],
+      "rows": [
+        [
+          "B. Rider",
+          "Breakout",
+          "Enduro",
+          "Pong",
+          "Q*bert",
+          "Seaquest",
+          "S. Invaders"
+        ],
+        [
+          "354",
+          "1.2",
+          "0",
+          "−20.420.4-20.4",
+          "157",
+          "110",
+          "179"
+        ],
+        [
+          "7456",
+          "31.0",
+          "368",
+          "−3.03.0-3.0",
+          "18900",
+          "28010",
+          "3690"
+        ],
+        [
+          "4092",
+          "168.0",
+          "470",
+          "20.0",
+          "1952",
+          "1705",
+          "581"
+        ],
+        [
+          "5702",
+          "380",
+          "741",
+          "21",
+          "20025",
+          "2995",
+          "692"
+        ],
+        [
+          "1425.2",
+          "10.8",
+          "534.6",
+          "20.9",
+          "1973.5",
+          "1908.6",
+          "568.4"
+        ],
+        [
+          "859.5",
+          "34.2",
+          "430.8",
+          "20.9",
+          "7732.5",
+          "788.4",
+          "450.2"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Performance comparison for vision-based RL algorithms on the Atari domain. Our algorithms (bottom rows) were run once on each task, with the same architecture and parameters. Performance varies substantially from run to run (with different random initializations of the policy), but we could not obtain error statistics due to time constraints.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Swimmer",
+          "Hopper",
+          "Walker"
+        ],
+        [
+          "State space dim.",
+          "10",
+          "12",
+          "20"
+        ],
+        [
+          "Control space dim.",
+          "2",
+          "3",
+          "6"
+        ],
+        [
+          "Total num. policy params",
+          "364",
+          "4806",
+          "8206"
+        ],
+        [
+          "Sim. steps per iter.",
+          "50K",
+          "1M",
+          "1M"
+        ],
+        [
+          "Policy iter.",
+          "200",
+          "200",
+          "200"
+        ],
+        [
+          "Stepsize (D ̄KLsubscript ̄DKL{\\overline{D}_{\\rm KL}}{})",
+          "0.01",
+          "0.01",
+          "0.01"
+        ],
+        [
+          "Hidden layer size",
+          "30",
+          "50",
+          "50"
+        ],
+        [
+          "Discount (γγ\\gamma)",
+          "0.99",
+          "0.99",
+          "0.99"
+        ],
+        [
+          "Vine: rollout length",
+          "50",
+          "100",
+          "100"
+        ],
+        [
+          "Vine: rollouts per state",
+          "4",
+          "4",
+          "4"
+        ],
+        [
+          "Vine: QQQ-values per batch",
+          "500",
+          "2500",
+          "2500"
+        ],
+        [
+          "Vine: num. rollouts for sampling",
+          "16",
+          "16",
+          "16"
+        ],
+        [
+          "Vine: len. rollouts for sampling",
+          "1000",
+          "1000",
+          "1000"
+        ],
+        [
+          "Vine: computation time (minutes)",
+          "2",
+          "14",
+          "40"
+        ],
+        [
+          "SP: num. path",
+          "50",
+          "1000",
+          "10000"
+        ],
+        [
+          "SP: path len.",
+          "1000",
+          "1000",
+          "1000"
+        ],
+        [
+          "SP: computation time",
+          "5",
+          "35",
+          "100"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Parameters for continuous control tasks, vine and single path (SP) algorithms.",
+      "headers": [],
+      "rows": [
+        [
+          "All games"
+        ],
+        [
+          "33500"
+        ],
+        [
+          "400K"
+        ],
+        [
+          "100K"
+        ],
+        [
+          "500"
+        ],
+        [
+          "0.01"
+        ],
+        [
+          "0.99"
+        ],
+        [
+          "≈4absent4\\approx 4"
+        ],
+        [
+          "≈30absent30\\approx 30 hrs"
+        ],
+        [
+          "≈30absent30\\approx 30 hrs"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\displaystyle\\eta(\\pi)=\\mathbb{E}_{s_{0},a_{0},\\dots}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}r(s_{t})\\right],\\text{ where}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi)=\\mathbb{E}_{s_{0},a_{0},\\dots}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}r(s_{t})\\right],\\text{ where}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{0}\\sim\\rho_{0}(s_{0}),\\ a_{t}\\sim\\pi(a_{t}|s_{t}),\\ s_{t+1}\\sim P(s_{t+1}|s_{t},a_{t}).",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle Q_{\\pi}(s_{t},a_{t})=\\mathbb{E}_{s_{t+1},a_{t+1},\\dots}\\left[\\sum_{l=0}^{\\infty}\\gamma^{l}r(s_{t+l})\\right],",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle Q_{\\pi}(s_{t},a_{t})=\\mathbb{E}_{s_{t+1},a_{t+1},\\dots}\\left[\\sum_{l=0}^{\\infty}\\gamma^{l}r(s_{t+l})\\right],",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle V_{\\pi}(s_{t})=\\ \\mathbb{E}_{a_{t},s_{t+1},\\dots}\\left[\\sum_{l=0}^{\\infty}\\gamma^{l}r(s_{t+l})\\right],",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle A_{\\pi}(s,a)=\\ Q_{\\pi}(s,a)-V_{\\pi}(s),\\text{ where}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\quad a_{t}\\sim\\pi(a_{t}|s_{t}),s_{t+1}\\sim P(s_{t+1}|s_{t},a_{t})\\text{\\ for $t\\geq 0$}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{s_{0},a_{0},\\dots\\sim\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}A_{\\pi}(s_{t},a_{t})\\right]",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{s_{0},a_{0},\\dots\\sim\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}A_{\\pi}(s_{t},a_{t})\\right]",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\rho_{\\pi}(s)\\!=\\!P(s_{0}=s)\\!+\\!\\gamma P(s_{1}=s)\\!+\\!\\gamma^{2}P(s_{2}=s)\\!+\\!\\dots,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\rho_{\\pi}(s)\\!=\\!P(s_{0}=s)\\!+\\!\\gamma P(s_{1}=s)\\!+\\!\\gamma^{2}P(s_{2}=s)\\!+\\!\\dots,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\eta(\\pi)+\\sum_{s}\\sum_{t=0}^{\\infty}\\gamma^{t}P(s_{t}=s|\\tilde{\\pi})\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\eta(\\pi)+\\sum_{s}\\rho_{\\tilde{\\pi}}(s)\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a).",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})=\\eta(\\pi)+\\sum_{s}\\rho_{\\pi}(s)\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a).",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})=\\eta(\\pi)+\\sum_{s}\\rho_{\\pi}(s)\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a).",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi_{\\theta_{0}}}(\\pi_{\\theta_{0}})",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi_{\\theta_{0}}}(\\pi_{\\theta_{0}})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\nabla_{\\theta}L_{\\pi_{\\theta_{0}}}(\\pi_{\\theta})\\big{\\rvert}_{\\theta=\\theta_{0}}",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\pi_{\\mathrm{new}}(a|s)=(1-\\alpha)\\pi_{\\mathrm{old}}(a|s)+\\alpha\\pi^{\\prime}(a|s).",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\pi_{\\mathrm{new}}(a|s)=(1-\\alpha)\\pi_{\\mathrm{old}}(a|s)+\\alpha\\pi^{\\prime}(a|s).",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{\\mathrm{new}})",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{\\mathrm{new}})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{ where }\\epsilon=\\max_{s}\\left|\\mathbb{E}_{a\\sim\\pi^{\\prime}(a|s)}\\left[A_{\\pi}(s,a)\\right]\\right|.",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle D^{\\rm max}_{\\rm TV}(\\pi,\\tilde{\\pi})=\\max_{s}D_{TV}(\\pi(\\cdot|s)\\ \\|\\ \\tilde{\\pi}(\\cdot|s)).",
+      "label": "(7)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle D^{\\rm max}_{\\rm TV}(\\pi,\\tilde{\\pi})=\\max_{s}D_{TV}(\\pi(\\cdot|s)\\ \\|\\ \\tilde{\\pi}(\\cdot|s)).",
+      "label": "(7)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{\\mathrm{new}})\\geq L_{\\pi_{\\mathrm{old}}}(\\pi_{\\mathrm{new}})-\\frac{4\\epsilon\\gamma}{(1-\\gamma)^{2}}\\alpha^{2}",
+      "label": "(8)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{\\mathrm{new}})\\geq L_{\\pi_{\\mathrm{old}}}(\\pi_{\\mathrm{new}})-\\frac{4\\epsilon\\gamma}{(1-\\gamma)^{2}}\\alpha^{2}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\quad\\text{ where }\\epsilon=\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(8)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})\\geq L_{\\pi}(\\tilde{\\pi})-C{D^{\\rm max}_{\\rm KL}}(\\pi,\\tilde{\\pi}),",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})\\geq L_{\\pi}(\\tilde{\\pi})-C{D^{\\rm max}_{\\rm KL}}(\\pi,\\tilde{\\pi}),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\qquad\\text{ where }C=\\frac{4\\epsilon\\gamma}{(1-\\gamma)^{2}}.",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\qquad\\pi_{i+1}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\qquad\\pi_{i+1}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "C=4\\epsilon\\gamma/(1-\\gamma)^{2}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\!\\!\\!\\!\\!\\text{ and }L_{\\pi_{i}}(\\pi)\\!=\\!\\eta(\\pi_{i})\\!+\\!\\sum_{s}\\rho_{\\pi_{i}}\\!(s)\\!\\sum_{a}\\!\\pi(a|s)A_{\\pi_{i}}(s,a)",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{i+1})\\geq M_{i}(\\pi_{i+1})\\text{ by Equation~{}\\eqref{eq:klminorizer}}",
+      "label": "(10)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{i+1})\\geq M_{i}(\\pi_{i+1})\\text{ by Equation~{}\\eqref{eq:klminorizer}}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{i})=M_{i}(\\pi_{i}),\\text{ therefore,}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\pi_{i+1})-\\eta(\\pi_{i})\\geq M_{i}(\\pi_{i+1})-M(\\pi_{i}).",
+      "label": "(10)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[L_{\\theta_{\\mathrm{old}}}(\\theta)-C{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[L_{\\theta_{\\mathrm{old}}}(\\theta)-C{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)",
+      "label": "(11)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)",
+      "label": "(11)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)\\leq\\delta.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle{\\overline{D}_{\\rm KL}^{\\rho}}(\\theta_{1},\\theta_{2})\\vcentcolon=\\mathbb{E}_{s\\sim\\rho}\\left[D_{\\rm KL}(\\pi_{\\theta_{1}}(\\cdot|s)\\ \\|\\ \\pi_{\\theta_{2}}(\\cdot|s))\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle{\\overline{D}_{\\rm KL}^{\\rho}}(\\theta_{1},\\theta_{2})\\vcentcolon=\\mathbb{E}_{s\\sim\\rho}\\left[D_{\\rm KL}(\\pi_{\\theta_{1}}(\\cdot|s)\\ \\|\\ \\pi_{\\theta_{2}}(\\cdot|s))\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)",
+      "label": "(12)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)",
+      "label": "(12)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }{\\overline{D}_{\\rm KL}^{\\rho_{\\theta_{\\mathrm{old}}}}}(\\theta_{\\mathrm{old}},\\theta)\\leq\\delta.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\sum_{s}",
+      "label": "(13)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\sum_{s}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }{\\overline{D}_{\\rm KL}^{\\rho_{\\theta_{\\mathrm{old}}}}}(\\theta_{\\mathrm{old}},\\theta)\\leq\\delta.",
+      "label": "(13)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\sum_{a}\\pi_{\\theta}(a|s_{n})A_{\\theta_{\\mathrm{old}}}(s_{n},a)=\\mathbb{E}_{a\\sim q}\\left[\\frac{\\pi_{\\theta}(a|s_{n})}{q(a|s_{n})}A_{\\theta_{\\mathrm{old}}}(s_{n},a)\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\sum_{a}\\pi_{\\theta}(a|s_{n})A_{\\theta_{\\mathrm{old}}}(s_{n},a)=\\mathbb{E}_{a\\sim q}\\left[\\frac{\\pi_{\\theta}(a|s_{n})}{q(a|s_{n})}A_{\\theta_{\\mathrm{old}}}(s_{n},a)\\right].",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}},a\\sim q}\\left[\\frac{\\pi_{\\theta}(a|s)}{q(a|s)}Q_{\\theta_{\\mathrm{old}}}(s,a)\\right]",
+      "label": "(14)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}},a\\sim q}\\left[\\frac{\\pi_{\\theta}(a|s)}{q(a|s)}Q_{\\theta_{\\mathrm{old}}}(s,a)\\right]",
+      "label": "(14)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}}}\\left[D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|s)\\ \\|\\ \\pi_{\\theta}(\\cdot|s))\\right]\\leq\\delta.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{n}(\\theta)=\\sum_{k=1}^{K}\\pi_{\\theta}(a_{k}|s_{n})\\hat{Q}(s_{n},a_{k}),",
+      "label": "(15)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{n}(\\theta)=\\sum_{k=1}^{K}\\pi_{\\theta}(a_{k}|s_{n})\\hat{Q}(s_{n},a_{k}),",
+      "label": "(15)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{n}(\\theta)=\\frac{\\sum_{k=1}^{K}\\frac{\\pi_{\\theta}(a_{n,k}|s_{n})}{\\pi_{\\theta_{\\mathrm{old}}}(a_{n,k}|s_{n})}\\hat{Q}(s_{n},a_{n,k})}{\\sum_{k=1}^{K}\\frac{\\pi_{\\theta}(a_{n,k}|s_{n})}{\\pi_{\\theta_{\\mathrm{old}}}(a_{n,k}|s_{n})}},",
+      "label": "(16)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{n}(\\theta)=\\frac{\\sum_{k=1}^{K}\\frac{\\pi_{\\theta}(a_{n,k}|s_{n})}{\\pi_{\\theta_{\\mathrm{old}}}(a_{n,k}|s_{n})}\\hat{Q}(s_{n},a_{n,k})}{\\sum_{k=1}^{K}\\frac{\\pi_{\\theta}(a_{n,k}|s_{n})}{\\pi_{\\theta_{\\mathrm{old}}}(a_{n,k}|s_{n})}},",
+      "label": "(16)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[\\nabla_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}\\cdot(\\theta-\\theta_{\\mathrm{old}})\\right]",
+      "label": "(17)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[\\nabla_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}\\cdot(\\theta-\\theta_{\\mathrm{old}})\\right]",
+      "label": "(17)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }\\frac{1}{2}(\\theta_{\\mathrm{old}}-\\theta)^{T}A(\\theta_{\\mathrm{old}})(\\theta_{\\mathrm{old}}-\\theta)\\leq\\delta,",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\ where }A(\\theta_{\\mathrm{old}})_{ij}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\quad\\frac{\\partial}{\\partial\\theta_{i}}\\frac{\\partial}{\\partial\\theta_{j}}\\mathbb{E}_{s\\sim\\rho_{\\pi}}\\left[D_{\\rm KL}(\\pi(\\cdot|s,\\theta_{\\mathrm{old}})\\ \\|\\ \\pi(\\cdot|s,\\theta))\\right]\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[\\nabla_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}\\cdot(\\theta-\\theta_{\\mathrm{old}})\\right]",
+      "label": "(18)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}_{\\theta}\\left[\\nabla_{\\theta}L_{\\theta_{\\mathrm{old}}}(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}\\cdot(\\theta-\\theta_{\\mathrm{old}})\\right]",
+      "label": "(18)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\text{\\ \\  subject to }\\frac{1}{2}\\|\\theta-\\theta_{\\mathrm{old}}\\|^{2}\\leq\\delta.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{\\tau|\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}A_{\\pi}(s_{t},a_{t})\\right]",
+      "label": "(20)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{\\tau|\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}A_{\\pi}(s_{t},a_{t})\\right]",
+      "label": "(20)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\mathbb{E}_{\\tau|\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}(r(s_{t})+\\gamma V_{\\pi}(s_{t+1})-V_{\\pi}(s_{t}))\\right]",
+      "label": "(21)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\mathbb{E}_{\\tau|\\tilde{\\pi}}\\left[-V_{\\pi}(s_{0})+\\sum_{t=0}^{\\infty}\\gamma^{t}r(s_{t})\\right]",
+      "label": "(22)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=-\\mathbb{E}_{s_{0}}\\left[V_{\\pi}(s_{0})\\right]+\\mathbb{E}_{\\tau|\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}r(s_{t})\\right]",
+      "label": "(23)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=-\\eta(\\pi)+\\eta(\\tilde{\\pi})",
+      "label": "(24)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\bar{A}(s)=\\mathbb{E}_{a\\sim\\tilde{\\pi}(\\cdot|s)}\\left[A_{\\pi}(s,a)\\right].",
+      "label": "(25)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\bar{A}(s)=\\mathbb{E}_{a\\sim\\tilde{\\pi}(\\cdot|s)}\\left[A_{\\pi}(s,a)\\right].",
+      "label": "(25)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{\\tau\\sim\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}\\bar{A}(s_{t})\\right]",
+      "label": "(26)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{\\tau\\sim\\tilde{\\pi}}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}\\bar{A}(s_{t})\\right]",
+      "label": "(26)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{\\tau\\sim\\pi}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}\\bar{A}(s_{t})\\right]",
+      "label": "(27)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})=\\eta(\\pi)+\\mathbb{E}_{\\tau\\sim\\pi}\\left[\\sum_{t=0}^{\\infty}\\gamma^{t}\\bar{A}(s_{t})\\right]",
+      "label": "(27)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\bar{A}(s)\\right|\\leq 2\\alpha\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(28)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\bar{A}(s)\\right|\\leq 2\\alpha\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(28)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\bar{A}(s)",
+      "label": "(29)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\bar{A}(s)",
+      "label": "(29)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=P(a\\neq\\tilde{a}|s)\\mathbb{E}_{(a,\\tilde{a})\\sim(\\pi,\\tilde{\\pi})|a\\neq\\tilde{a}}\\left[A_{\\pi}(s,\\tilde{a})-A_{\\pi}(s,a)\\right]",
+      "label": "(30)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle|\\bar{A}(s)|",
+      "label": "(31)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]\\right|",
+      "label": "(32)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]\\right|",
+      "label": "(32)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]=P(n_{t}=0)\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]+P(n_{t}>0)\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(33)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]=P(n_{t}=0)\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]+P(n_{t}>0)\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(33)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]=P(n_{t}=0)\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]+P(n_{t}>0)\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(34)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]=P(n_{t}=0)\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]+P(n_{t}>0)\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(34)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim{\\color[rgb]{1,0,0}\\tilde{\\pi}}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]=\\mathbb{E}_{s_{t}\\sim{\\color[rgb]{1,0,0}\\pi}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right],",
+      "label": "(35)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim{\\color[rgb]{1,0,0}\\tilde{\\pi}}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right]=\\mathbb{E}_{s_{t}\\sim{\\color[rgb]{1,0,0}\\pi}|n_{t}=0}\\left[\\bar{A}(s_{t})\\right],",
+      "label": "(35)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(36)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]",
+      "label": "(36)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle P(n_{t}>0)\\leq 1-(1-\\alpha)^{t}",
+      "label": "(37)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle P(n_{t}>0)\\leq 1-(1-\\alpha)^{t}",
+      "label": "(37)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]\\right|",
+      "label": "(38)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi|n_{t}>0}\\left[\\bar{A}(s_{t})\\right]\\right|",
+      "label": "(38)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq 4\\alpha\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(39)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]\\right|\\leq 4\\alpha(1-(1-\\alpha)^{t})\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(40)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\mathbb{E}_{s_{t}\\sim\\tilde{\\pi}}\\left[\\bar{A}(s_{t})\\right]-\\mathbb{E}_{s_{t}\\sim\\pi}\\left[\\bar{A}(s_{t})\\right]\\right|\\leq 4\\alpha(1-(1-\\alpha)^{t})\\max_{s,a}{\\left|A_{\\pi}(s,a)\\right|}",
+      "label": "(40)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\eta(\\tilde{\\pi})-L_{\\pi}(\\tilde{\\pi})\\right|",
+      "label": "(41)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\left|\\eta(\\tilde{\\pi})-L_{\\pi}(\\tilde{\\pi})\\right|",
+      "label": "(41)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq\\sum_{t=0}^{\\infty}\\gamma^{t}\\cdot 4\\epsilon\\alpha(1-(1-\\alpha)^{t})",
+      "label": "(42)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=4\\epsilon\\alpha\\left(\\frac{1}{1-\\gamma}-\\frac{1}{1-\\gamma(1-\\alpha)}\\right)",
+      "label": "(43)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\frac{4\\alpha^{2}\\gamma\\epsilon}{(1-\\gamma)(1-\\gamma(1-\\alpha))}",
+      "label": "(44)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq\\frac{4\\alpha^{2}\\gamma\\epsilon}{(1-\\gamma)^{2}}",
+      "label": "(45)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle G^{-1}-\\tilde{G}^{-1}",
+      "label": "(46)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle G^{-1}-\\tilde{G}^{-1}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\gamma\\Delta.",
+      "label": "(46)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{G}-G",
+      "label": "(47)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{G}-G",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{G}",
+      "label": "(47)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{G}",
+      "label": "(48)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{G}",
+      "label": "(48)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})-\\eta(\\pi)=r(\\tilde{G}-G)\\rho=\\gamma rG\\Delta G\\rho_{0}+\\gamma^{2}rG\\Delta G\\Delta\\tilde{G}\\rho_{0}",
+      "label": "(49)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\eta(\\tilde{\\pi})-\\eta(\\pi)=r(\\tilde{G}-G)\\rho=\\gamma rG\\Delta G\\rho_{0}+\\gamma^{2}rG\\Delta G\\Delta\\tilde{G}\\rho_{0}",
+      "label": "(49)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})-L_{\\pi}(\\pi)",
+      "label": "(50)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle L_{\\pi}(\\tilde{\\pi})-L_{\\pi}(\\pi)",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\sum_{s}\\rho_{\\pi}(s)\\sum_{a}\\left(\\pi_{\\theta}(a|s)-\\pi_{\\tilde{\\theta}}(a|s)\\right)\\left[r(s)+\\sum_{s^{\\prime}}p(s^{\\prime}|s,a)\\gamma v(s^{\\prime})-v(s)\\right]",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\sum_{s}\\rho_{\\pi}(s)\\sum_{s^{\\prime}}\\sum_{a}\\left(\\pi(a|s)-\\tilde{\\pi}(a|s)\\right)p(s^{\\prime}|s,a)\\gamma v(s^{\\prime})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\sum_{s}\\rho_{\\pi}(s)\\sum_{s^{\\prime}}(p_{\\pi}(s^{\\prime}|s)-p_{\\tilde{\\pi}}(s^{\\prime}|s))\\gamma v(s^{\\prime})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\gamma v\\Delta\\rho_{\\pi}",
+      "label": "(50)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle|(\\gamma v\\Delta)_{s}|",
+      "label": "(51)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle|(\\gamma v\\Delta)_{s}|",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\left|\\sum_{a}(\\tilde{\\pi}(s,a)-\\pi(s,a))A_{\\pi}(s,a)\\right|",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq\\sum_{a}\\left|\\tilde{\\pi}(s,a)-\\pi(s,a)\\right|\\cdot\\max_{a}|A_{\\pi}(s,a)|",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq 2\\alpha\\epsilon",
+      "label": "(51)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\|A\\|_{1}=\\sup_{\\rho}\\left\\{\\frac{\\|A\\rho\\|_{1}}{\\|\\rho\\|_{1}}\\right\\}",
+      "label": "(52)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\|A\\|_{1}=\\sup_{\\rho}\\left\\{\\frac{\\|A\\rho\\|_{1}}{\\|\\rho\\|_{1}}\\right\\}",
+      "label": "(52)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\|G\\Delta\\tilde{G}\\rho\\|_{1}",
+      "label": "(53)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\|G\\Delta\\tilde{G}\\rho\\|_{1}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\frac{1}{1-\\gamma}\\cdot 2\\alpha\\cdot\\frac{1}{1-\\gamma}\\cdot 1",
+      "label": "(53)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\gamma^{2}\\left|rG\\Delta G\\Delta\\tilde{G}\\rho\\right|",
+      "label": "(54)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\gamma^{2}\\left|rG\\Delta G\\Delta\\tilde{G}\\rho\\right|",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq\\gamma\\|v\\Delta\\|_{\\infty}\\|G\\Delta\\tilde{G}\\rho\\|_{1}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\leq\\gamma\\cdot 2\\alpha\\epsilon\\cdot\\frac{2\\alpha}{(1-\\gamma)^{2}}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=\\frac{4\\gamma\\epsilon}{(1-\\gamma)^{2}}\\alpha^{2}",
+      "label": "(54)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}L(\\theta)\\text{\\ \\  subject to }{\\overline{D}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)\\leq\\delta.",
+      "label": "(55)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\operatorname*{maximize}L(\\theta)\\text{\\ \\  subject to }{\\overline{D}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)\\leq\\delta.",
+      "label": "(55)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|x)\\ \\|\\ \\pi_{\\theta}(\\cdot|x))=\\operatorname{kl}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})",
+      "label": "(56)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|x)\\ \\|\\ \\pi_{\\theta}(\\cdot|x))=\\operatorname{kl}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})",
+      "label": "(56)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\frac{\\partial\\mu_{a}(x)}{\\partial\\theta_{i}}\\frac{\\partial\\mu_{b}(x)}{\\partial\\theta_{j}}\\operatorname{kl}^{\\prime\\prime}_{ab}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})+\\frac{\\partial^{2}\\mu_{a}(x)}{\\partial\\theta_{i}\\partial\\theta_{j}}\\operatorname{kl}^{\\prime}_{a}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})",
+      "label": "(57)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\frac{\\partial\\mu_{a}(x)}{\\partial\\theta_{i}}\\frac{\\partial\\mu_{b}(x)}{\\partial\\theta_{j}}\\operatorname{kl}^{\\prime\\prime}_{ab}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})+\\frac{\\partial^{2}\\mu_{a}(x)}{\\partial\\theta_{i}\\partial\\theta_{j}}\\operatorname{kl}^{\\prime}_{a}(\\mu_{\\theta}(x),\\mu_{\\mathrm{old}})",
+      "label": "(57)",
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Bagnell & Schneider (2003) Bagnell, J. A. and Schneider, J. Covariant policy search. IJCAI, 2003.",
+      "title": null,
+      "authors": [],
+      "year": "2003",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bagnell & Schneider (2003)"
+    },
+    {
+      "raw_text": "Bartlett & Baxter (2011) Bartlett, P. L. and Baxter, J. Infinite-horizon policy-gradient estimation. arXiv preprint arXiv:1106.0665, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": "1106.0665",
+      "doi": null,
+      "url": null,
+      "citation_key": "Bartlett & Baxter (2011)"
+    },
+    {
+      "raw_text": "Barto et al. (1983) Barto, A., Sutton, R., and Anderson, C. Neuronlike adaptive elements that can solve difficult learning control problems. IEEE Transactions on Systems, Man and Cybernetics, (5):834–846, 1983.",
+      "title": null,
+      "authors": [],
+      "year": "1983",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Barto et al. (1983)"
+    },
+    {
+      "raw_text": "Bellemare et al. (2013) Bellemare, M. G., Naddaf, Y., Veness, J., and Bowling, M. The arcade learning environment: An evaluation platform for general agents. Journal of Artificial Intelligence Research, 47:253–279, jun 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bellemare et al. (2013)"
+    },
+    {
+      "raw_text": "Bertsekas (2005) Bertsekas, D. Dynamic programming and optimal control, volume 1. 2005.",
+      "title": null,
+      "authors": [],
+      "year": "2005",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bertsekas (2005)"
+    },
+    {
+      "raw_text": "Deisenroth et al. (2013) Deisenroth, M., Neumann, G., and Peters, J. A survey on policy search for robotics. Foundations and Trends in Robotics, 2(1-2):1–142, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Deisenroth et al. (2013)"
+    },
+    {
+      "raw_text": "Gabillon et al. (2013) Gabillon, Victor, Ghavamzadeh, Mohammad, and Scherrer, Bruno. Approximate dynamic programming finally performs well in the game of Tetris. In Advances in Neural Information Processing Systems, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Gabillon et al. (2013)"
+    },
+    {
+      "raw_text": "Geng et al. (2006) Geng, T., Porr, B., and Wörgötter, F. Fast biped walking with a reflexive controller and realtime policy searching. In Advances in Neural Information Processing Systems (NIPS), 2006.",
+      "title": null,
+      "authors": [],
+      "year": "2006",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Geng et al. (2006)"
+    },
+    {
+      "raw_text": "Guo et al. (2014) Guo, X., Singh, S., Lee, H., Lewis, R. L., and Wang, X. Deep learning for real-time atari game play using offline Monte-Carlo tree search planning. In Advances in Neural Information Processing Systems, pp. 3338–3346, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Guo et al. (2014)"
+    },
+    {
+      "raw_text": "Hansen & Ostermeier (1996) Hansen, Nikolaus and Ostermeier, Andreas. Adapting arbitrary normal mutation distributions in evolution strategies: The covariance matrix adaptation. In Evolutionary Computation, 1996., Proceedings of IEEE International Conference on, pp. 312–317. IEEE, 1996.",
+      "title": null,
+      "authors": [],
+      "year": "1996",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hansen & Ostermeier (1996)"
+    },
+    {
+      "raw_text": "Hunter & Lange (2004) Hunter, David R and Lange, Kenneth. A tutorial on MM algorithms. The American Statistician, 58(1):30–37, 2004.",
+      "title": null,
+      "authors": [],
+      "year": "2004",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hunter & Lange (2004)"
+    },
+    {
+      "raw_text": "Kakade (2002) Kakade, Sham. A natural policy gradient. In Advances in Neural Information Processing Systems, pp. 1057–1063. MIT Press, 2002.",
+      "title": null,
+      "authors": [],
+      "year": "2002",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kakade (2002)"
+    },
+    {
+      "raw_text": "Kakade & Langford (2002) Kakade, Sham and Langford, John. Approximately optimal approximate reinforcement learning. In ICML, volume 2, pp. 267–274, 2002.",
+      "title": null,
+      "authors": [],
+      "year": "2002",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kakade & Langford (2002)"
+    },
+    {
+      "raw_text": "Lagoudakis & Parr (2003) Lagoudakis, Michail G and Parr, Ronald. Reinforcement learning as classification: Leveraging modern classifiers. In ICML, volume 3, pp. 424–431, 2003.",
+      "title": null,
+      "authors": [],
+      "year": "2003",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lagoudakis & Parr (2003)"
+    },
+    {
+      "raw_text": "Levin et al. (2009) Levin, D. A., Peres, Y., and Wilmer, E. L. Markov chains and mixing times. American Mathematical Society, 2009.",
+      "title": null,
+      "authors": [],
+      "year": "2009",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Levin et al. (2009)"
+    },
+    {
+      "raw_text": "Levine & Abbeel (2014) Levine, Sergey and Abbeel, Pieter. Learning neural network policies with guided policy search under unknown dynamics. In Advances in Neural Information Processing Systems, pp. 1071–1079, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Levine & Abbeel (2014)"
+    },
+    {
+      "raw_text": "Martens & Sutskever (2012) Martens, J. and Sutskever, I. Training deep and recurrent networks with hessian-free optimization. In Neural Networks: Tricks of the Trade, pp. 479–535. Springer, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Martens & Sutskever (2012)"
+    },
+    {
+      "raw_text": "Mnih et al. (2013) Mnih, V., Kavukcuoglu, K., Silver, D., Graves, A., Antonoglou, I., Wierstra, D., and Riedmiller, M. Playing Atari with deep reinforcement learning. arXiv preprint arXiv:1312.5602, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1312.5602",
+      "doi": null,
+      "url": null,
+      "citation_key": "Mnih et al. (2013)"
+    },
+    {
+      "raw_text": "Nemirovski (2005) Nemirovski, Arkadi. Efficient methods in convex programming. 2005.",
+      "title": null,
+      "authors": [],
+      "year": "2005",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Nemirovski (2005)"
+    },
+    {
+      "raw_text": "Ng & Jordan (2000) Ng, A. Y. and Jordan, M. PEGASUS: A policy search method for large mdps and pomdps. In Uncertainty in artificial intelligence (UAI), 2000.",
+      "title": null,
+      "authors": [],
+      "year": "2000",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Ng & Jordan (2000)"
+    },
+    {
+      "raw_text": "Owen (2013) Owen, Art B. Monte Carlo theory, methods and examples. 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Owen (2013)"
+    },
+    {
+      "raw_text": "Pascanu & Bengio (2013) Pascanu, Razvan and Bengio, Yoshua. Revisiting natural gradient for deep networks. arXiv preprint arXiv:1301.3584, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1301.3584",
+      "doi": null,
+      "url": null,
+      "citation_key": "Pascanu & Bengio (2013)"
+    },
+    {
+      "raw_text": "Peters & Schaal (2008a) Peters, J. and Schaal, S. Reinforcement learning of motor skills with policy gradients. Neural Networks, 21(4):682–697, 2008a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Peters & Schaal (2008a)"
+    },
+    {
+      "raw_text": "Peters et al. (2010) Peters, J., Mülling, K., and Altün, Y. Relative entropy policy search. In AAAI Conference on Artificial Intelligence, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Peters et al. (2010)"
+    },
+    {
+      "raw_text": "Peters & Schaal (2008b) Peters, Jan and Schaal, Stefan. Natural actor-critic. Neurocomputing, 71(7):1180–1190, 2008b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Peters & Schaal (2008b)"
+    },
+    {
+      "raw_text": "Pirotta et al. (2013) Pirotta, Matteo, Restelli, Marcello, Pecorino, Alessio, and Calandriello, Daniele. Safe policy iteration. In Proceedings of The 30th International Conference on Machine Learning, pp. 307–315, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pirotta et al. (2013)"
+    },
+    {
+      "raw_text": "Pollard (2000) Pollard, David. Asymptopia: an exposition of statistical asymptotic theory. 2000. URL http://www.stat.yale.edu/~pollard/Books/Asymptopia.",
+      "title": null,
+      "authors": [],
+      "year": "2000",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://www.stat.yale.edu/~pollard/Books/Asymptopia",
+      "citation_key": "Pollard (2000)"
+    },
+    {
+      "raw_text": "Szita & Lörincz (2006) Szita, István and Lörincz, András. Learning tetris using the noisy cross-entropy method. Neural computation, 18(12):2936–2941, 2006.",
+      "title": null,
+      "authors": [],
+      "year": "2006",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Szita & Lörincz (2006)"
+    },
+    {
+      "raw_text": "Tedrake et al. (2004) Tedrake, R., Zhang, T., and Seung, H. Stochastic policy gradient reinforcement learning on a simple 3d biped. In IEEE/RSJ International Conference on Intelligent Robots and Systems, 2004.",
+      "title": null,
+      "authors": [],
+      "year": "2004",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Tedrake et al. (2004)"
+    },
+    {
+      "raw_text": "Todorov et al. (2012) Todorov, Emanuel, Erez, Tom, and Tassa, Yuval. MuJoCo: A physics engine for model-based control. In Intelligent Robots and Systems (IROS), 2012 IEEE/RSJ International Conference on, pp. 5026–5033. IEEE, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Todorov et al. (2012)"
+    },
+    {
+      "raw_text": "Wampler & Popović (2009) Wampler, Kevin and Popović, Zoran. Optimal gait and form for animal locomotion. In ACM Transactions on Graphics (TOG), volume 28, pp. 60. ACM, 2009.",
+      "title": null,
+      "authors": [],
+      "year": "2009",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wampler & Popović (2009)"
+    },
+    {
+      "raw_text": "Wright & Nocedal (1999) Wright, Stephen J and Nocedal, Jorge. Numerical optimization, volume 2. Springer New York, 1999.",
+      "title": null,
+      "authors": [],
+      "year": "1999",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wright & Nocedal (1999)"
+    }
+  ],
+  "full_text": "## Introduction\n\nMost algorithms for policy optimization can be classified into three broad categories:\n(1) policy iteration methods, which alternate between estimating the value function under the current policy and improving the policy (Bertsekas, 2005); (2) policy gradient methods, which use an estimator of the gradient of the expected return (total reward) obtained from sample trajectories (Peters & Schaal, 2008a) (and which, as we later discuss, have a close connection to policy iteration); and (3) derivative-free optimization methods, such as the cross-entropy method (CEM) and covariance matrix adaptation (CMA), which treat the return as a black box function to be optimized in terms of the policy parameters (Szita & Lörincz, 2006).\n\nGeneral derivative-free stochastic optimization methods such as CEM and CMA are preferred on many problems, because they achieve good results while being simple to understand and implement.\nFor example, while Tetris is a classic benchmark problem for approximate dynamic programming (ADP) methods, stochastic optimization methods are difficult to beat on this task (Gabillon et al., 2013).\nFor continuous control problems, methods like CMA have been successful at learning control policies for challenging tasks like locomotion when provided with hand-engineered policy classes with low-dimensional parameterizations (Wampler & Popović, 2009).\nThe inability of ADP and gradient-based methods to consistently beat gradient-free random search is unsatisfying, since gradient-based optimization algorithms enjoy much better sample complexity guarantees than gradient-free methods (Nemirovski, 2005).\nContinuous gradient-based optimization has been very successful at learning function approximators for supervised learning tasks with huge numbers of parameters, and extending their success to reinforcement learning would allow for efficient training of complex and powerful policies.\n\nIn this article, we first prove that minimizing a certain surrogate objective function guarantees policy improvement with non-trivial step sizes.\nThen we make a series of approximations to the theoretically-justified algorithm, yielding a practical algorithm, which we call trust region policy optimization (TRPO).\nWe describe two variants of this algorithm: first, the single-path method, which can be applied in the model-free setting; second, the vine method, which requires the system to be restored to particular states, which is typically only possible in simulation.\nThese algorithms are scalable and can optimize nonlinear policies with tens of thousands of parameters, which have previously posed a major challenge for model-free policy search (Deisenroth et al., 2013).\nIn our experiments, we show that the same TRPO methods can learn complex policies for swimming, hopping, and walking, as well as playing Atari games directly from raw images.\n\n## Preliminaries\n\nConsider an infinite-horizon discounted Markov decision process (MDP), defined by the tuple $(\\mathcal{S},\\mathcal{A},P,r,\\rho_{0},\\gamma)$,\nwhere $\\mathcal{S}$ is a finite set of states, $\\mathcal{A}$ is a finite set of actions, $P:\\mathcal{S}\\times\\mathcal{A}\\times\\mathcal{S}\\rightarrow\\mathbb{R}$ is the transition probability distribution, $r:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the reward function, $\\rho_{0}:\\mathcal{S}\\rightarrow\\mathbb{R}$ is the distribution of the initial state $s_{0}$, and $\\gamma\\in(0,1)$ is the discount factor.\n\nLet $\\pi$ denote a stochastic policy $\\pi:\\mathcal{S}\\times\\mathcal{A}\\rightarrow[0,1]$, and let $\\eta(\\pi)$ denote its expected discounted reward:\n\nWe will use the following standard definitions of the state-action value function $Q_{\\pi}$, the value function $V_{\\pi}$, and the advantage function $A_{\\pi}$:\n\nThe following useful identity expresses the expected return of another policy $\\tilde{\\pi}$ in terms of the advantage over $\\pi$, accumulated over timesteps (see Kakade & Langford (2002) or Appendix A for proof):\n\nwhere the notation $\\mathbb{E}_{s_{0},a_{0},\\dots\\sim\\tilde{\\pi}}\\left[\\dots\\right]$ indicates that actions are sampled $a_{t}\\sim\\tilde{\\pi}(\\cdot|s_{t})$.\nLet $\\rho_{\\pi}$ be the (unnormalized) discounted visitation frequencies\n\nwhere $s_{0}\\sim\\rho_{0}$ and the actions are chosen according to $\\pi$.\nWe can rewrite Equation 1 with a sum over states instead of timesteps:\n\nThis equation implies that any policy update $\\pi\\rightarrow\\tilde{\\pi}$ that has a nonnegative expected advantage at every state $s$, i.e., $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)\\geq 0$, is guaranteed to increase the policy performance $\\eta$, or leave it constant in the case that the expected advantage is zero everywhere.\nThis implies the classic result that the update performed by exact policy iteration, which uses the deterministic policy $\\tilde{\\pi}(s)=\\operatorname*{arg\\,max}_{a}A_{\\pi}(s,a)$, improves the policy if there is at least one state-action pair with a positive advantage value and nonzero state visitation probability, otherwise the algorithm has converged to the optimal policy.\nHowever, in the approximate setting, it will typically be unavoidable, due to estimation and approximation error,\nthat there will be some states $s$ for which the expected advantage is negative, that is, $\\sum_{a}\\tilde{\\pi}(a|s)A_{\\pi}(s,a)<0$.\nThe complex dependency of $\\rho_{\\tilde{\\pi}}(s)$ on $\\tilde{\\pi}$ makes Equation (2) difficult to optimize directly. Instead, we introduce the following local approximation to $\\eta$:\n\nNote that $L_{\\pi}$ uses the visitation frequency $\\rho_{\\pi}$ rather than $\\rho_{\\tilde{\\pi}}$, ignoring changes in state visitation density due to changes in the policy.\nHowever, if we have a parameterized policy $\\pi_{\\theta}$, where $\\pi_{\\theta}(a|s)$ is a differentiable function of the parameter vector $\\theta$, then $L_{\\pi}$ matches $\\eta$ to first order (see Kakade & Langford (2002)).\nThat is, for any parameter value $\\theta_{0}$,\n\nEquation 4 implies that a sufficiently small step $\\pi_{\\theta_{0}}\\rightarrow\\tilde{\\pi}$ that improves $L_{\\pi_{\\theta_{\\mathrm{old}}}}$ will also improve $\\eta$, but does not give us any guidance on how big of a step to take.\n\nTo address this issue, Kakade & Langford (2002) proposed a policy updating scheme called conservative policy iteration, for which they could provide explicit lower bounds on the improvement of $\\eta$.\nTo define the conservative policy iteration update, let $\\pi_{\\mathrm{old}}$ denote the current policy, and let $\\pi^{\\prime}=\\operatorname*{arg\\,max}_{\\pi^{\\prime}}L_{\\pi_{\\mathrm{old}}}(\\pi^{\\prime})$.\nThe new policy $\\pi_{\\mathrm{new}}$ was defined to be the following mixture:\n\nKakade and Langford derived the following lower bound:\n\n(We have modified it to make it slightly weaker but simpler.)\nNote, however, that so far this bound only applies to mixture policies generated by Equation (5). This policy class is unwieldy and restrictive in practice, and it is desirable for a practical policy update scheme to be applicable to all general stochastic policy classes.\n\n## Monotonic Improvement Guarantee for General Stochastic Policies\n\nEquation 6, which applies to conservative policy iteration, implies that a policy update that improves the right-hand side is guaranteed to improve the true performance $\\eta$.\nOur principal theoretical result is that the policy improvement bound in Equation 6 can be extended to general stochastic policies, rather than just mixture polices, by replacing $\\alpha$ with a distance measure between $\\pi$ and $\\tilde{\\pi}$, and changing the constant $\\epsilon$ appropriately. Since mixture policies are rarely used in practice, this result is crucial for extending the improvement guarantee to practical problems. The particular distance measure we use is the total variation divergence, which is defined by\n$D_{TV}(p\\ \\|\\ q)=\\frac{1}{2}\\sum_{i}|p_{i}-q_{i}|$ for discrete probability distributions $p,q$.11Our result is straightforward to extend to continuous states and actions by replacing the sums with integrals.\nDefine $D^{\\rm max}_{\\rm TV}(\\pi,\\tilde{\\pi})$ as\n\nWe provide two proofs in the appendix.\nThe first proof extends Kakade and Langford’s result\nusing the fact that the random variables from two distributions with total variation divergence less than $\\alpha$ can be coupled, so that they are equal with probability $1-\\alpha$.\nThe second proof uses perturbation theory.\n\nNext, we note the following relationship between the total variation divergence and the KL divergence (Pollard (2000), Ch.\n3):\n$D_{TV}(p\\ \\|\\ q)^{2}\\leq D_{\\rm KL}(p\\ \\|\\ q)$.\nLet ${D^{\\rm max}_{\\rm KL}}(\\pi,\\tilde{\\pi})=\\max_{s}D_{\\rm KL}(\\pi(\\cdot|s)\\ \\|\\ \\tilde{\\pi}(\\cdot|s))$. The following bound then follows directly from 1:\n\nAlgorithm 1 describes an approximate policy iteration scheme based on the policy improvement bound in Equation (9). Note that for now, we assume exact evaluation of the advantage values $A_{\\pi}$.\n\nIt follows from Equation 9 that Algorithm 1 is guaranteed to generate a monotonically improving sequence of policies\n$\\eta(\\pi_{0})\\leq\\eta(\\pi_{1})\\leq\\eta(\\pi_{2})\\leq\\dots$.\nTo see this, let $M_{i}(\\pi)=L_{\\pi_{i}}(\\pi)-C{D^{\\rm max}_{\\rm KL}}(\\pi_{i},\\pi)$. Then\n\nThus, by maximizing $M_{i}$ at each iteration, we guarantee that the true objective $\\eta$ is non-decreasing.\nThis algorithm is a type of minorization-maximization (MM) algorithm (Hunter & Lange, 2004), which is a class of methods that also includes expectation maximization.\nIn the terminology of MM algorithms, $M_{i}$ is the surrogate function that minorizes $\\eta$ with equality at $\\pi_{i}$.\nThis algorithm is also reminiscent of proximal gradient methods and mirror descent.\n\nTrust region policy optimization, which we propose in the following section, is an approximation to Algorithm 1, which uses a constraint on the KL divergence rather than a penalty to robustly allow large updates.\n\n## Optimization of Parameterized Policies\n\nIn the previous section, we considered the policy optimization problem independently of the parameterization of $\\pi$ and under the assumption that the policy can be evaluated at all states. We now describe how to derive a practical algorithm from these theoretical foundations, under finite sample counts and arbitrary parameterizations.\n\nSince we consider parameterized policies $\\pi_{\\theta}(a|s)$ with parameter vector $\\theta$,\nwe will overload our previous notation to use functions of $\\theta$ rather than $\\pi$,\ne.g. $\\eta(\\theta)\\vcentcolon=\\eta(\\pi_{\\theta})$, $L_{\\theta}(\\tilde{\\theta})\\vcentcolon=L_{\\pi_{\\theta}}(\\pi_{\\tilde{\\theta}})$, and $D_{\\rm KL}(\\theta\\ \\|\\ \\tilde{\\theta})\\vcentcolon=D_{\\rm KL}(\\pi_{\\theta}\\ \\|\\ \\pi_{\\tilde{\\theta}})$.\nWe will use $\\theta_{\\mathrm{old}}$ to denote the previous policy parameters that we want to improve upon.\n\nThe preceding section showed that $\\eta(\\theta)\\geq L_{\\theta_{\\mathrm{old}}}(\\theta)-C{D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$, with equality at $\\theta=\\theta_{\\mathrm{old}}$.\nThus, by performing the following maximization, we are guaranteed to improve the true objective $\\eta$:\n\nIn practice, if we used the penalty coefficient $C$ recommended by the theory above, the step sizes would be very small.\nOne way to take larger steps in a robust way is to use a constraint on the KL divergence between the new policy and the old policy, i.e., a trust region constraint:\n\nThis problem imposes a constraint that the KL divergence is bounded at every point in the state space.\nWhile it is motivated by the theory, this problem is impractical to solve due to the large number of constraints.\nInstead, we can use a heuristic approximation which considers the average KL divergence:\n\nWe therefore propose solving the following optimization problem to generate a policy update:\n\nSimilar policy updates have been proposed in prior work (Bagnell & Schneider, 2003; Peters & Schaal, 2008b; Peters et al., 2010), and we compare our approach to prior methods in Section 7 and in the experiments in Section 8. Our experiments also show that this type of constrained update has similar empirical performance to the maximum KL divergence constraint in Equation (11).\n\n## Sample-Based Estimation of the Objective and Constraint\n\nThe previous section proposed a constrained optimization problem on the policy parameters (Equation (12)),\nwhich optimizes an estimate of the expected total reward $\\eta$ subject to a constraint on the change in the policy at each update.\nThis section describes how the objective and constraint functions can be approximated using Monte Carlo simulation.\n\nWe seek to solve the following optimization problem, obtained by expanding\n$L_{\\theta_{\\mathrm{old}}}$ in Equation (12):\n\nWe first replace $\\sum_{s}\\rho_{\\theta_{\\mathrm{old}}}(s)\\left[\\dots\\right]$ in the objective by the expectation $\\frac{1}{1-\\gamma}\\mathbb{E}_{s\\sim\\rho_{\\theta_{\\mathrm{old}}}}\\left[\\dots\\right]$.\nNext, we replace the advantage values $A_{\\theta_{\\mathrm{old}}}$ by the $Q$-values $Q_{\\theta_{\\mathrm{old}}}$ in Equation (13), which only changes the objective by a constant.\nLast, we replace the sum over the actions by an importance sampling estimator. Using $q$ to denote the sampling distribution, the contribution of a single $s_{n}$ to the loss function is\n\nOur optimization problem in Equation 13 is exactly equivalent to the following one, written in terms of expectations:\n\nAll that remains is to replace the expectations by sample averages and replace the $Q$ value by an empirical estimate.\nThe following sections describe two different schemes for performing this estimation.\n\nThe first sampling scheme, which we call single path, is the one that is typically used for policy gradient estimation (Bartlett & Baxter, 2011), and is based on sampling individual trajectories.\nThe second scheme, which we call vine, involves constructing a rollout set and then performing multiple actions from each state in the rollout set.\nThis method has mostly been explored in the context of policy iteration methods (Lagoudakis & Parr, 2003; Gabillon et al., 2013).\n\n### Single Path\n\nIn this estimation procedure, we collect a sequence of states by sampling $s_{0}\\sim\\rho_{0}$ and then simulating the policy $\\pi_{\\theta_{\\mathrm{old}}}$ for some number of timesteps to generate a trajectory $s_{0},a_{0},s_{1},a_{1},\\dots,s_{T-1},a_{T-1},s_{T}$.\nHence, $q(a|s)=\\pi_{\\theta_{\\mathrm{old}}}(a|s)$.\n$Q_{\\theta_{\\mathrm{old}}}(s,a)$ is computed at each state-action pair $(s_{t},a_{t})$ by taking the discounted sum of future rewards along the trajectory.\n\n### Vine\n\nIn this estimation procedure, we first sample $s_{0}\\sim\\rho_{0}$ and simulate the policy $\\pi_{\\theta_{i}}$ to generate a number of trajectories.\nWe then choose a subset of $N$ states along these trajectories, denoted $s_{1},s_{2},\\dots,s_{N}$, which we call the “rollout set”.\nFor each state $s_{n}$ in the rollout set, we sample $K$ actions according to $a_{n,k}\\sim q(\\cdot|s_{n})$. Any choice of $q(\\cdot|s_{n})$ with a support that includes the support of $\\pi_{\\theta_{i}}(\\cdot|s_{n})$ will produce a consistent estimator. In practice, we found that $q(\\cdot|s_{n})=\\pi_{\\theta_{i}}(\\cdot|s_{n})$ works well on continuous problems, such as robotic locomotion, while the uniform distribution works well on discrete tasks, such as the Atari games, where it can sometimes achieve better exploration.\n\nFor each action $a_{n,k}$ sampled at each state $s_{n}$, we estimate $\\hat{Q}_{\\theta_{i}}(s_{n},a_{n,k})$ by performing a rollout (i.e., a short trajectory) starting with state $s_{n}$ and action $a_{n,k}$.\nWe can greatly reduce the variance of the $Q$-value differences between rollouts by using the same random number sequence for the noise in each of the $K$ rollouts, i.e., common random numbers.\nSee (Bertsekas, 2005) for additional discussion on Monte Carlo estimation of $Q$-values and (Ng & Jordan, 2000) for a discussion of common random numbers in reinforcement learning.\n\nIn small, finite action spaces, we can generate a rollout for every possible action from a given state.\nThe contribution to $L_{\\theta_{\\mathrm{old}}}$ from a single state $s_{n}$ is as follows:\n\nwhere the action space is $\\mathcal{A}=\\left\\{a_{1},a_{2},\\dots,a_{K}\\right\\}$.\nIn large or continuous state spaces, we can construct an estimator of the surrogate objective using importance sampling.\nThe self-normalized estimator (Owen (2013), Chapter 9) of $L_{\\theta_{\\mathrm{old}}}$ obtained at a single state $s_{n}$ is\n\nassuming that we performed $K$ actions $a_{n,1},a_{n,2},\\dots,a_{n,K}$ from state $s_{n}$.\nThis self-normalized estimator removes the need to use a baseline for the $Q$-values (note that the gradient is unchanged by adding a constant to the $Q$-values).\nAveraging over $s_{n}\\sim\\rho(\\pi)$, we obtain an estimator for $L_{\\theta_{\\mathrm{old}}}$, as well as its gradient.\n\nThe vine and single path methods are illustrated in Figure 1.\nWe use the term vine, since the trajectories used for sampling can be likened to the stems of vines, which branch at various points (the rollout set) into several short offshoots (the rollout trajectories).\n\nThe benefit of the vine method over the single path method that is our local estimate of the objective has much lower variance given the same number of $Q$-value samples in the surrogate objective.\nThat is, the vine method gives much better estimates of the advantage values.\nThe downside of the vine method is that we must perform far more calls to the simulator for each of these advantage estimates.\nFurthermore, the vine method requires us to generate multiple trajectories from each state in the rollout set, which limits this algorithm to settings where the system can be reset to an arbitrary state. In contrast, the single path algorithm requires no state resets and can be directly implemented on a physical system (Peters & Schaal, 2008b).\n\n## Practical Algorithm\n\nHere we present two practical policy optimization algorithm based on the ideas above, which use either the single path or vine sampling scheme from the preceding section.\nThe algorithms repeatedly perform the following steps:\n\nUse the single path or vine procedures to collect a set of state-action pairs along with Monte Carlo estimates of their $Q$-values.\n\nBy averaging over samples, construct the estimated objective and constraint in Equation 14.\n\nApproximately solve this constrained optimization problem to update the policy’s parameter vector $\\theta$.\nWe use the conjugate gradient algorithm followed by a line search, which is altogether only slightly more expensive than computing the gradient itself. See Appendix C for details.\n\nWith regard to (3), we construct the Fisher information matrix (FIM) by analytically computing the Hessian of the KL divergence, rather than using the covariance matrix of the gradients.\nThat is, we estimate $A_{ij}$ as $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial^{2}}{\\partial\\theta_{i}\\partial\\theta_{j}}D_{\\rm KL}(\\pi_{\\theta_{\\mathrm{old}}}(\\cdot|s_{n})\\ \\|\\ \\pi_{\\theta}(\\cdot|s_{n}))$, rather than $\\frac{1}{N}\\sum_{n=1}^{N}\\frac{\\partial}{\\partial\\theta_{i}}\\log\\pi_{\\theta}(a_{n}|s_{n})\\frac{\\partial}{\\partial\\theta_{j}}\\log\\pi_{\\theta}(a_{n}|s_{n})$.\nThe analytic estimator integrates over the action at each state $s_{n}$, and does not depend on the action $a_{n}$ that was sampled.\nAs described in Appendix C, this analytic estimator has computational benefits in the large-scale setting, since it removes the need to store a dense Hessian or all policy gradients from a batch of trajectories. The rate of improvement in the policy is similar to the empirical FIM, as shown in the experiments.\n\nLet us briefly summarize the relationship between the theory from Section 3 and the practical algorithm we have described:\n\nThe theory justifies optimizing a surrogate objective with a penalty on KL divergence. However, the large penalty coefficient $C$ leads to prohibitively small steps, so we would like to decrease this coefficient.\nEmpirically, it is hard to robustly choose the penalty coefficient, so we use a hard constraint instead of a penalty, with parameter $\\delta$ (the bound on KL divergence).\n\nThe constraint on ${D^{\\rm max}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$ is hard for numerical optimization and estimation, so instead we constrain ${\\overline{D}_{\\rm KL}}(\\theta_{\\mathrm{old}},\\theta)$.\n\nOur theory ignores estimation error for the advantage function.\nKakade & Langford (2002) consider this error in their derivation, and the same arguments would hold in the setting of this paper, but we omit them for simplicity.\n\n## Connections with Prior Work\n\nAs mentioned in Section 4, our derivation results in a policy update that is related to several prior methods, providing a unifying perspective on a number of policy update schemes. The natural policy gradient (Kakade, 2002) can be obtained as a special case of the update in Equation (12) by using a linear approximation to $L$ and a quadratic approximation to the ${\\overline{D}_{\\rm KL}}$ constraint, resulting in the following problem:\n\nThe update is $\\theta_{\\mathrm{new}}=\\theta_{\\mathrm{old}}+\\frac{1}{\\lambda}A(\\theta_{\\mathrm{old}})^{-1}\\nabla_{\\theta}L(\\theta)\\big{\\rvert}_{\\theta=\\theta_{\\mathrm{old}}}$, where the stepsize $\\frac{1}{\\lambda}$ is typically treated as an algorithm parameter. This differs from our approach, which enforces the constraint at each update. Though this difference might seem subtle, our experiments demonstrate that it significantly improves the algorithm’s performance on larger problems.\n\nWe can also obtain the standard policy gradient update by using an $\\ell_{2}$ constraint or penalty:\n\nThe policy iteration update can also be obtained by solving the unconstrained problem $\\operatorname*{maximize}_{\\pi}L_{\\pi_{\\mathrm{old}}}(\\pi)$, using $L$ as defined in Equation 3.\n\nSeveral other methods employ an update similar to Equation (12). Relative entropy policy search (REPS) (Peters et al., 2010) constrains the state-action marginals $p(s,a)$, while TRPO constrains the conditionals $p(a|s)$. Unlike REPS, our approach does not require a costly nonlinear optimization in the inner loop.\nLevine and Abbeel (2014) also use a KL divergence constraint, but its purpose is to encourage the policy not to stray from regions where the estimated dynamics model is valid, while we do not attempt to estimate the system dynamics explicitly.\nPirotta et al. (2013) also build on and generalize Kakade and Langford’s results, and they derive different algorithms from the ones here.\n\n## Experiments\n\nWe designed our experiments to investigate the following questions:\n\nWhat are the performance characteristics of the single path and vine sampling procedures?\n\nTRPO is related to prior methods (e.g. natural policy gradient) but makes several changes, most notably by using a fixed KL divergence rather than a fixed penalty coefficient. How does this affect the performance of the algorithm?\n\nCan TRPO be used to solve challenging large-scale problems? How does TRPO compare with other methods when applied to large-scale problems, with regard to final performance, computation time, and sample complexity?\n\nTo answer (1) and (2), we compare the performance of the single path and vine variants of TRPO, several ablated variants, and a number of prior policy optimization algorithms.\nWith regard to (3), we show that both the single path and vine algorithm can obtain high-quality locomotion controllers from scratch, which is considered to be a hard problem.\nWe also show that these algorithms produce competitive results when learning policies for playing Atari games from images using convolutional neural networks with tens of thousands of parameters.\n\n### Simulated Robotic Locomotion\n\nWe conducted the robotic locomotion experiments using the MuJoCo simulator (Todorov et al., 2012).\nThe three simulated robots are shown in Figure 2.\nThe states of the robots are their generalized positions and velocities, and the controls are joint torques. Underactuation, high dimensionality, and non-smooth dynamics due to contacts make these tasks very challenging.\nThe following models are included in our evaluation:\n\nSwimmer. $10$-dimensional state space, linear reward for forward progress and a quadratic penalty on joint effort to produce the reward $r(x,u)=v_{x}-10^{-5}\\|u\\|^{2}$. The swimmer can propel itself forward by making an undulating motion.\n\nHopper. $12$-dimensional state space, same reward as the swimmer, with a bonus of $+1$ for being in a non-terminal state.\nWe ended the episodes when the hopper fell over, which was defined by thresholds on the torso height and angle.\n\nWalker. $18$-dimensional state space. For the walker, we added a penalty for strong impacts of the feet against the ground to encourage a smooth walk rather than a hopping gait.\n\nWe used $\\delta=0.01$ for all experiments.\nSee Table 2 in the Appendix for more details on the experimental setup and parameters used.\nWe used neural networks to represent the policy, with the architecture shown in Figure 3, and further details provided in Appendix D. To establish a standard baseline, we also included the classic cart-pole balancing problem, based on the formulation from Barto et al. (1983), using a linear policy with six parameters that is easy to optimize with derivative-free black-box optimization methods.\n\nThe following algorithms were considered in the comparison:\nsingle path TRPO;\nvine TRPO;\ncross-entropy method (CEM), a gradient-free method (Szita & Lörincz, 2006);\ncovariance matrix adaption (CMA), another gradient-free method (Hansen & Ostermeier, 1996);\nnatural gradient, the classic natural policy gradient algorithm (Kakade, 2002), which differs from single path by the use of a fixed penalty coefficient (Lagrange multiplier) instead of the KL divergence constraint;\nempirical FIM, identical to single path, except that the FIM is estimated using the covariance matrix of the gradients rather than the analytic estimate;\nmax KL, which was only tractable on the cart-pole problem, and uses the maximum KL divergence in Equation (11), rather than the average divergence, allowing us to evaluate the quality of this approximation.\nThe parameters used in the experiments are provided in Appendix E.\nFor the natural gradient method, we swept through the possible values of the stepsize in factors of three, and took the best value according to the final performance.\n\nLearning curves showing the total reward averaged across five runs of each algorithm are shown in Figure 4.\nSingle path and vine TRPO solved all of the problems, yielding the best solutions.\nNatural gradient performed well on the two easier problems, but was unable to generate hopping and walking gaits that made forward progress.\nThese results provide empirical evidence that constraining the KL divergence is a more robust way to choose step sizes and make fast, consistent progress, compared to using a fixed penalty.\nCEM and CMA are derivative-free algorithms, hence their sample complexity scales unfavorably with the number of parameters, and they performed poorly on the larger problems.\nThe max KL method learned somewhat more slowly than our final method, due to the more restrictive form of the constraint, but overall the result suggests that the average KL divergence constraint has a similar effect as the theorecally justified maximum KL divergence. Videos of the policies learned by TRPO may be viewed on the project website: http://sites.google.com/site/trpopaper/.\n\nNote that TRPO learned all of the gaits with general-purpose policies and simple reward functions, using minimal prior knowledge. This is in contrast with most prior methods for learning locomotion, which typically rely on hand-architected policy classes that explicitly encode notions of balance and stepping (Tedrake et al., 2004; Geng et al., 2006; Wampler & Popović, 2009).\n\n### Playing Games from Images\n\nTo evaluate TRPO on a partially observed task with complex observations, we trained policies for playing Atari games, using raw images as input. The games require learning a variety of behaviors, such as dodging bullets and hitting balls with paddles.\nAside from the high dimensionality, challenging elements of these games include delayed rewards (no immediate penalty is incurred when a life is lost in Breakout or Space Invaders); complex sequences of behavior (Q*bert requires a character to hop on $21$ different platforms); and non-stationary image statistics (Enduro involves a changing and flickering background).\n\nWe tested our algorithms on the same seven games reported on in (Mnih et al., 2013) and (Guo et al., 2014), which are made available through the Arcade Learning Environment (Bellemare et al., 2013)\nThe images were preprocessed following the protocol in Mnih et al (2013), and\nthe policy was represented by the convolutional neural network shown in Figure 3, with two convolutional layers with $16$ channels and stride $2$, followed by one fully-connected layer with $20$ units, yielding 33,500 parameters.\n\nThe results of the vine and single path algorithms are summarized in Table 1, which also includes an expert human performance and two recent methods: deep $Q$-learning (Mnih et al., 2013), and a combination of Monte-Carlo Tree Search with supervised training (Guo et al., 2014), called UCC-I. The 500 iterations of our algorithm took about 30 hours (with slight variation between games) on a 16-core computer. While our method only outperformed the prior methods on some of the games, it consistently achieved reasonable scores. Unlike the prior methods, our approach was not designed specifically for this task. The ability to apply the same policy search method to methods as diverse as robotic locomotion and image-based game playing demonstrates the generality of TRPO.\n\n## Discussion\n\nWe proposed and analyzed trust region methods for optimizing stochastic control policies.\nWe proved monotonic improvement for an algorithm that repeatedly optimizes a local approximation to the expected return of the policy with a KL divergence penalty, and we showed that an approximation to this method that incorporates a KL divergence constraint achieves good empirical results on a range of challenging policy learning tasks, outperforming prior methods. Our analysis also provides a perspective that unifies policy gradient and policy iteration methods, and shows them to be special limiting cases of an algorithm that optimizes a certain objective subject to a trust region constraint.\n\nIn the domain of robotic locomotion, we successfully learned controllers for swimming, walking and hopping in a physics simulator, using general purpose neural networks and minimally informative rewards.\nTo our knowledge, no prior work has learned controllers from scratch for all of these tasks, using a generic policy search method and non-engineered, general-purpose policy representations.\nIn the game-playing domain, we learned convolutional neural network policies that used raw images as inputs. This requires optimizing extremely high-dimensional policies, and only two prior methods report successful results on this task.\n\nSince the method we proposed is scalable and has strong theoretical foundations, we hope that it will serve as a jumping-off point for future work on training large, rich function approximators for a range of challenging problems.\nAt the intersection of the two experimental domains we explored, there is the possibility of learning robotic control policies that use vision and raw sensory data as input, providing a unified scheme for training robotic controllers that perform both perception and control.\nThe use of more sophisticated policies, including recurrent policies with hidden state, could further make it possible to roll state estimation and control into the same policy in the partially-observed setting.\nBy combining our method with model learning, it would also be possible to substantially reduce its sample complexity, making it applicable to real-world settings where samples are expensive.\n",
+  "extracted_at": "2026-04-13T15:49:48.518817"
+}

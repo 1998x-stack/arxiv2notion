@@ -1,0 +1,1286 @@
+{
+  "paper_id": "2210.03629",
+  "title": "\\model: Synergizing Reasoning and Acting in Language Models",
+  "authors": [
+    "Shunyu Yao",
+    "Jeffrey Zhao",
+    "Dian Yu",
+    "Nan Du",
+    "Izhak Shafran",
+    "Karthik Narasimhan",
+    "Yuan Cao"
+  ],
+  "affiliations": [],
+  "abstract": "While large language models (LLMs) have demonstrated impressive performance across tasks in language understanding and interactive decision making, their abilities for reasoning (e.g. chain-of-thought prompting) and acting (e.g. action plan generation) have primarily been studied as separate topics. In this paper, we explore the use of LLMs to generate both reasoning traces and task-specific actions in an interleaved manner, allowing for greater synergy between the two: reasoning traces help the model induce, track, and update action plans as well as handle exceptions, while actions allow it to interface with and gather additional information from external sources such as knowledge bases or environments. We apply our approach, named \\model, to a diverse set of language and decision making tasks and demonstrate its effectiveness over state-of-the-art baselines in addition to improved human interpretability and trustworthiness. Concretely, on question answering (HotpotQA) and fact verification (Fever), \\model overcomes prevalent issues of hallucination and error propagation in chain-of-thought reasoning by interacting with a simple Wikipedia API, and generating human-like task-solving trajectories that are more interpretable than baselines without reasoning traces. Furthermore, on two interactive decision making benchmarks (ALFWorld and WebShop), \\model outperforms imitation and reinforcement learning methods by an absolute success rate of 34% and 10% respectively, while being prompted with only one or two in-context examples.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "A unique feature of human intelligence is the ability to seamlessly combine task-oriented actions with verbal reasoning (or inner speech,  Alderson-Day & Fernyhough, 2015), which has been theorized to play an important role in human cognition for enabling self-regulation or strategization (Vygotsky, 1987; Luria, 1965; Fernyhough, 2010) and maintaining a working memory (Baddeley, 1992).\nConsider the example of cooking up a dish in the kitchen. Between any two specific actions, we may reason in language in order to track progress (“now that everything is cut, I should heat up the pot of water”), to handle exceptions or adjust the plan according to the situation (“I don’t have salt, so let me use soy sauce and pepper instead”), and to realize when external information is needed (“how do I prepare dough? Let me search on the Internet”).\nWe may also act (open a cookbook to read the recipe, open the fridge, check ingredients) to support the reasoning and to answer questions (“What dish can I make right now?”).\nThis tight synergy between “acting” and “reasoning” allows humans to learn new tasks quickly and perform robust decision making or reasoning, even under previously unseen circumstances or facing information uncertainties.",
+        "Recent results have hinted at the possibility of combining verbal reasoning with interactive decision making in autonomous systems.\nOn one hand, properly prompted large language models (LLMs) have demonstrated emergent capabilities to carry out several steps of reasoning traces to derive answers from questions in arithmetic, commonsense, and symbolic reasoning tasks (Wei et al., 2022). However, this “chain-of-thought” reasoning is a static black box, in that the model uses its own internal representations to generate thoughts and is not grounded in the external world,\nwhich limits its ability to reason reactively or update its knowledge. This can lead to issues like fact hallucination and error propagation over the reasoning process (Figure 1 (1b)).\nOn the other hand, recent work has explored the use of pre-trained language models for planning and acting in interactive environments (Ahn et al., 2022; Nakano et al., 2021; Yao et al., 2020; Huang et al., 2022a), with a focus on predicting actions via language priors. These approaches usually convert multi-modal observations into text, use a language model to generate domain-specific actions or plans, and then use a controller to choose or execute them.\nHowever, they do not employ language models to reason abstractly about high-level goals or maintain a working memory to support acting, barring Huang et al. (2022b) who perform a limited form of verbal reasoning to reiterate spatial facts about the current state.\nBeyond such simple embodied tasks to interact with a few blocks, there have not been studies on how reasoning and acting can be combined in a synergistic manner for general task solving, and if such a combination can bring systematic benefits compared to reasoning or acting alone.",
+        "In this work, we present \\model, a general paradigm to combine reasoning and acting with language models for solving diverse language reasoning and decision making tasks (Figure 1).\n\\model prompts LLMs to generate both verbal reasoning traces and actions pertaining to a task in an interleaved manner, which allows the model to perform dynamic reasoning to create, maintain, and adjust high-level plans for acting (reason to act), while also interact with the external environments (e.g. Wikipedia) to incorporate additional information into reasoning (act to reason).",
+        "We conduct empirical evaluations of \\model and state-of-the-art baselines on four diverse benchmarks: question answering (HotPotQA, Yang et al., 2018), fact verification (Fever, Thorne et al., 2018), text-based game (ALFWorld, Shridhar et al., 2020b), and webpage navigation (WebShop, Yao et al., 2022).\nFor HotPotQA and Fever, with access to a Wikipedia API that the model can interact with, \\model outperforms vanilla action generation models while being competitive with chain-of-thought reasoning (CoT) (Wei et al., 2022). The best approach overall is a combination of \\model and CoT that allows for the use of both internal knowledge and externally obtained information during reasoning.\nOn ALFWorld and WebShop, two or even one-shot \\model prompting is able to outperform imitation or reinforcement learning methods trained with $10^{3}\\sim 10^{5}$ task instances, with an absolute improvement of 34% and 10% in success rates respectively. We also demonstrate the importance of sparse, versatile reasoning in decision making by showing consistent advantages over controlled baselines with actions only.\nBesides general applicability and performance boost, the combination of reasoning and acting also contributes to model interpretability, trustworthiness, and diagnosability across all domains, as humans can readily distinguish information from model’s internal knowledge versus external environments, as well as inspect reasoning traces to understand the decision basis of model actions.",
+        "To summarize, our key contributions are the following:\n(1) we introduce \\model, a novel prompt-based paradigm to synergize reasoning and acting in language models for general task solving;\n(2) we perform extensive experiments across diverse benchmarks to showcase the advantage of \\model in a few-shot learning setup over prior approaches that perform either reasoning or action generation in isolation;\n(3) we present systematic ablations and analysis to understand the importance of acting in reasoning tasks, and reasoning in interactive tasks;\n(4) we analyze the limitations of \\model under the prompting setup (i.e. limited support of reasoning and acting behaviors), and perform initial finetuning experiments showing the potential of \\model to improve with additional training data.\nScaling up \\model to train and operate on more tasks and combining it with complementary paradigms like reinforcement learning could further unlock the potential of large language models."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "(1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT, Reason Only), (c) Act-only, and (d) \\model (Reason+Act), solving a HotpotQA (Yang et al., 2018) question. (2) Comparison of (a) Act-only and (b) \\model prompting to solve an AlfWorld (Shridhar et al., 2020b) game. In both domains, we omit in-context examples in the prompt, and only show task solving trajectories generated by the model (Act, Thought) and the environment (Obs).",
+          "label": "S1.F1"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "A unique feature of human intelligence is the ability to seamlessly combine task-oriented actions with verbal reasoning (or inner speech,  Alderson-Day & Fernyhough, 2015), which has been theorized to play an important role in human cognition for enabling self-regulation or strategization (Vygotsky, 1987; Luria, 1965; Fernyhough, 2010) and maintaining a working memory (Baddeley, 1992).\nConsider the example of cooking up a dish in the kitchen. Between any two specific actions, we may reason in language in order to track progress (“now that everything is cut, I should heat up the pot of water”), to handle exceptions or adjust the plan according to the situation (“I don’t have salt, so let me use soy sauce and pepper instead”), and to realize when external information is needed (“how do I prepare dough? Let me search on the Internet”).\nWe may also act (open a cookbook to read the recipe, open the fridge, check ingredients) to support the reasoning and to answer questions (“What dish can I make right now?”).\nThis tight synergy between “acting” and “reasoning” allows humans to learn new tasks quickly and perform robust decision making or reasoning, even under previously unseen circumstances or facing information uncertainties."
+        },
+        {
+          "type": "para",
+          "data": "Recent results have hinted at the possibility of combining verbal reasoning with interactive decision making in autonomous systems.\nOn one hand, properly prompted large language models (LLMs) have demonstrated emergent capabilities to carry out several steps of reasoning traces to derive answers from questions in arithmetic, commonsense, and symbolic reasoning tasks (Wei et al., 2022). However, this “chain-of-thought” reasoning is a static black box, in that the model uses its own internal representations to generate thoughts and is not grounded in the external world,\nwhich limits its ability to reason reactively or update its knowledge. This can lead to issues like fact hallucination and error propagation over the reasoning process (Figure 1 (1b)).\nOn the other hand, recent work has explored the use of pre-trained language models for planning and acting in interactive environments (Ahn et al., 2022; Nakano et al., 2021; Yao et al., 2020; Huang et al., 2022a), with a focus on predicting actions via language priors. These approaches usually convert multi-modal observations into text, use a language model to generate domain-specific actions or plans, and then use a controller to choose or execute them.\nHowever, they do not employ language models to reason abstractly about high-level goals or maintain a working memory to support acting, barring Huang et al. (2022b) who perform a limited form of verbal reasoning to reiterate spatial facts about the current state.\nBeyond such simple embodied tasks to interact with a few blocks, there have not been studies on how reasoning and acting can be combined in a synergistic manner for general task solving, and if such a combination can bring systematic benefits compared to reasoning or acting alone."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x1.png",
+            "alt": "Refer to caption",
+            "caption": "(1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT, Reason Only), (c) Act-only, and (d) \\model (Reason+Act), solving a HotpotQA (Yang et al., 2018) question. (2) Comparison of (a) Act-only and (b) \\model prompting to solve an AlfWorld (Shridhar et al., 2020b) game. In both domains, we omit in-context examples in the prompt, and only show task solving trajectories generated by the model (Act, Thought) and the environment (Obs).",
+            "label": "S1.F1"
+          }
+        },
+        {
+          "type": "para",
+          "data": "In this work, we present \\model, a general paradigm to combine reasoning and acting with language models for solving diverse language reasoning and decision making tasks (Figure 1).\n\\model prompts LLMs to generate both verbal reasoning traces and actions pertaining to a task in an interleaved manner, which allows the model to perform dynamic reasoning to create, maintain, and adjust high-level plans for acting (reason to act), while also interact with the external environments (e.g. Wikipedia) to incorporate additional information into reasoning (act to reason)."
+        },
+        {
+          "type": "para",
+          "data": "We conduct empirical evaluations of \\model and state-of-the-art baselines on four diverse benchmarks: question answering (HotPotQA, Yang et al., 2018), fact verification (Fever, Thorne et al., 2018), text-based game (ALFWorld, Shridhar et al., 2020b), and webpage navigation (WebShop, Yao et al., 2022).\nFor HotPotQA and Fever, with access to a Wikipedia API that the model can interact with, \\model outperforms vanilla action generation models while being competitive with chain-of-thought reasoning (CoT) (Wei et al., 2022). The best approach overall is a combination of \\model and CoT that allows for the use of both internal knowledge and externally obtained information during reasoning.\nOn ALFWorld and WebShop, two or even one-shot \\model prompting is able to outperform imitation or reinforcement learning methods trained with $10^{3}\\sim 10^{5}$ task instances, with an absolute improvement of 34% and 10% in success rates respectively. We also demonstrate the importance of sparse, versatile reasoning in decision making by showing consistent advantages over controlled baselines with actions only.\nBesides general applicability and performance boost, the combination of reasoning and acting also contributes to model interpretability, trustworthiness, and diagnosability across all domains, as humans can readily distinguish information from model’s internal knowledge versus external environments, as well as inspect reasoning traces to understand the decision basis of model actions."
+        },
+        {
+          "type": "para",
+          "data": "To summarize, our key contributions are the following:\n(1) we introduce \\model, a novel prompt-based paradigm to synergize reasoning and acting in language models for general task solving;\n(2) we perform extensive experiments across diverse benchmarks to showcase the advantage of \\model in a few-shot learning setup over prior approaches that perform either reasoning or action generation in isolation;\n(3) we present systematic ablations and analysis to understand the importance of acting in reasoning tasks, and reasoning in interactive tasks;\n(4) we analyze the limitations of \\model under the prompting setup (i.e. limited support of reasoning and acting behaviors), and perform initial finetuning experiments showing the potential of \\model to improve with additional training data.\nScaling up \\model to train and operate on more tasks and combining it with complementary paradigms like reinforcement learning could further unlock the potential of large language models."
+        }
+      ]
+    },
+    {
+      "title": "\\model: Synergizing Reasoning + Acting",
+      "level": 2,
+      "paragraphs": [
+        "Consider a general setup of an agent interacting with an environment for task solving. At time step $t$, an agent receives an observation $o_{t}\\in\\mathcal{O}$ from the environment and takes an action $a_{t}\\in\\mathcal{A}$ following some policy $\\pi(a_{t}|c_{t})$, where $c_{t}=(o_{1},a_{1},\\cdots,o_{t-1},a_{t-1},o_{t})$ is the context to the agent. Learning a policy is challenging when the mapping $c_{t}\\mapsto a_{t}$ is highly implicit and requires extensive computation.\nFor example, the agent shown in Figure 1(1c) is unable to generate the correct final action (Act 4) to finish the QA task as it requires complex reasoning over the trajectory context (Question, Act 1-3, Obs 1-3).\nSimilarly, the agent shown in Figure 1(2a) fails to comprehend from the context that sinkbasin 1 does not contain peppershaker 1, thus keep producing hallucinating actions.",
+        "The idea of \\model is simple: we augment the agent’s action space to $\\mathcal{\\hat{A}}=\\mathcal{A}\\cup\\mathcal{L}$, where $\\mathcal{L}$ is the space of language. An action $\\hat{a}_{t}\\in\\mathcal{L}$ in the language space, which we will refer to as a thought or a reasoning trace, does not affect the external environment, thus leading to no observation feedback. Instead, a thought $\\hat{a}_{t}$ aims to compose useful information by reasoning over the current context $c_{t}$, and update the context $c_{t+1}=(c_{t},\\hat{a}_{t})$ to support future reasoning or acting.\nAs shown in Figure 1, there could be various types of useful thoughts, e.g. decomposing task goals and create action plans (2b, Act 1; 1d, Thought 1), injecting commonsense knowledge relevant to task solving (2b, Act 1), extracting important parts from observations (1d, Thought2, 4), track progress and transit action plans (2b, Act 8), handle exceptions and adjust action plans (1d, Thought 3), and so on.",
+        "However, as the language space $\\mathcal{L}$ is unlimited, learning in this augmented action space is difficult and requires strong language priors. In this paper, we mainly focus on\nthe setup where a frozen large language model, PaLM-540B (Chowdhery et al., 2022)11We show some GPT-3 (Brown et al., 2020) results in Appendix A.1, which outperforms PaLM-540B., is prompted with few-shot in-context examples to generate both domain-specific actions and free-form language thoughts for task solving (Figure 1 (1d), (2b)). Each in-context example is a human trajectory of actions, thoughts, and environment observations to solve a task instance (see Appendix C).\nFor the tasks where reasoning is of primary importance (Figure 1(1)), we alternate the generation of thoughts and actions so that the task-solving trajectory consists of multiple thought-action-observation steps.\nIn contrast, for decision making tasks that potentially involve a large number of actions (Figure 1(2)), thoughts only need to appear sparsely in the most relevant positions of a trajectory, so we let the language model decide the asynchronous occurrence of thoughts and actions for itself.",
+        "Since decision making and reasoning capabilities are integrated into a large language model, \\model enjoys several unique features:\nA) Intuitive and easy to design: Designing \\model prompts is straightforward as human annotators just type down their thoughts in language on top of their actions taken. No ad-hoc format choice, thought design, or example selection is used in this paper. We detail prompt design for each task in Sections 3 and 4.\nB) General and flexible: Due to the flexible thought space and thought-action occurrence format, \\model works for diverse tasks with distinct action spaces and reasoning needs, including but not limited to QA, fact verification, text game, and web navigation.\nC) Performant and robust: \\model shows strong generalization to new task instances while learning solely from one to six in-context examples, consistently outperforming baselines with only reasoning or acting across different domains. We also show in Section 3 additional benefits when finetuning is enabled, and in Section 4 how \\model performance is robust to prompt selections.\nD) Human aligned and controllable: \\model promises an interpretable sequential decision making and reasoning process where humans can easily inspect reasoning and factual correctness. Moreover, humans can also control or correct the agent behavior on the go by thought editing, as shown in Figure 5 in Section 4."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Consider a general setup of an agent interacting with an environment for task solving. At time step $t$, an agent receives an observation $o_{t}\\in\\mathcal{O}$ from the environment and takes an action $a_{t}\\in\\mathcal{A}$ following some policy $\\pi(a_{t}|c_{t})$, where $c_{t}=(o_{1},a_{1},\\cdots,o_{t-1},a_{t-1},o_{t})$ is the context to the agent. Learning a policy is challenging when the mapping $c_{t}\\mapsto a_{t}$ is highly implicit and requires extensive computation.\nFor example, the agent shown in Figure 1(1c) is unable to generate the correct final action (Act 4) to finish the QA task as it requires complex reasoning over the trajectory context (Question, Act 1-3, Obs 1-3).\nSimilarly, the agent shown in Figure 1(2a) fails to comprehend from the context that sinkbasin 1 does not contain peppershaker 1, thus keep producing hallucinating actions."
+        },
+        {
+          "type": "para",
+          "data": "The idea of \\model is simple: we augment the agent’s action space to $\\mathcal{\\hat{A}}=\\mathcal{A}\\cup\\mathcal{L}$, where $\\mathcal{L}$ is the space of language. An action $\\hat{a}_{t}\\in\\mathcal{L}$ in the language space, which we will refer to as a thought or a reasoning trace, does not affect the external environment, thus leading to no observation feedback. Instead, a thought $\\hat{a}_{t}$ aims to compose useful information by reasoning over the current context $c_{t}$, and update the context $c_{t+1}=(c_{t},\\hat{a}_{t})$ to support future reasoning or acting.\nAs shown in Figure 1, there could be various types of useful thoughts, e.g. decomposing task goals and create action plans (2b, Act 1; 1d, Thought 1), injecting commonsense knowledge relevant to task solving (2b, Act 1), extracting important parts from observations (1d, Thought2, 4), track progress and transit action plans (2b, Act 8), handle exceptions and adjust action plans (1d, Thought 3), and so on."
+        },
+        {
+          "type": "para",
+          "data": "However, as the language space $\\mathcal{L}$ is unlimited, learning in this augmented action space is difficult and requires strong language priors. In this paper, we mainly focus on\nthe setup where a frozen large language model, PaLM-540B (Chowdhery et al., 2022)11We show some GPT-3 (Brown et al., 2020) results in Appendix A.1, which outperforms PaLM-540B., is prompted with few-shot in-context examples to generate both domain-specific actions and free-form language thoughts for task solving (Figure 1 (1d), (2b)). Each in-context example is a human trajectory of actions, thoughts, and environment observations to solve a task instance (see Appendix C).\nFor the tasks where reasoning is of primary importance (Figure 1(1)), we alternate the generation of thoughts and actions so that the task-solving trajectory consists of multiple thought-action-observation steps.\nIn contrast, for decision making tasks that potentially involve a large number of actions (Figure 1(2)), thoughts only need to appear sparsely in the most relevant positions of a trajectory, so we let the language model decide the asynchronous occurrence of thoughts and actions for itself."
+        },
+        {
+          "type": "para",
+          "data": "Since decision making and reasoning capabilities are integrated into a large language model, \\model enjoys several unique features:\nA) Intuitive and easy to design: Designing \\model prompts is straightforward as human annotators just type down their thoughts in language on top of their actions taken. No ad-hoc format choice, thought design, or example selection is used in this paper. We detail prompt design for each task in Sections 3 and 4.\nB) General and flexible: Due to the flexible thought space and thought-action occurrence format, \\model works for diverse tasks with distinct action spaces and reasoning needs, including but not limited to QA, fact verification, text game, and web navigation.\nC) Performant and robust: \\model shows strong generalization to new task instances while learning solely from one to six in-context examples, consistently outperforming baselines with only reasoning or acting across different domains. We also show in Section 3 additional benefits when finetuning is enabled, and in Section 4 how \\model performance is robust to prompt selections.\nD) Human aligned and controllable: \\model promises an interpretable sequential decision making and reasoning process where humans can easily inspect reasoning and factual correctness. Moreover, humans can also control or correct the agent behavior on the go by thought editing, as shown in Figure 5 in Section 4."
+        }
+      ]
+    },
+    {
+      "title": "Knowledge-Intensive Reasoning Tasks",
+      "level": 2,
+      "paragraphs": [
+        "We begin with knowledge-intensive reasoning tasks like multi-hop question answering and fact verification.\nAs shown in Figure 1(1d), by interacting with a Wikipedia API, \\model is able to retrieve information to support reasoning, while also use reasoning to target what to retrieve next, demonstrating a synergy of reasoning and acting."
+      ],
+      "subsections": [
+        {
+          "title": "Setup",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Methods",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Results and Observations",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We begin with knowledge-intensive reasoning tasks like multi-hop question answering and fact verification.\nAs shown in Figure 1(1d), by interacting with a Wikipedia API, \\model is able to retrieve information to support reasoning, while also use reasoning to target what to retrieve next, demonstrating a synergy of reasoning and acting."
+        }
+      ]
+    },
+    {
+      "title": "Decision Making Tasks",
+      "level": 2,
+      "paragraphs": [
+        "We also test \\model on two language-based interactive decision-making tasks, ALFWorld and WebShop,\nboth of which feature complex environments that require agents to act over long horizons with sparse rewards, warranting the need for reasoning to act and explore effectively."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We also test \\model on two language-based interactive decision-making tasks, ALFWorld and WebShop,\nboth of which feature complex environments that require agents to act over long horizons with sparse rewards, warranting the need for reasoning to act and explore effectively."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "We have proposed \\model – a simple yet effective method for synergizing reasoning and acting in large language models. Through a diverse set of experiments on multi-hop question-answering, fact checking, and interactive decision-making tasks, we show that \\model leads to superior performance with interpretable decision traces. Despite the simplicity of our method, complex tasks with large action spaces require more demonstrations to learn well, which unfortunately can easily go beyond the input length limit of in-context learning. We explore the fine-tuning approach on HotpotQA with initial promising results, but learning from more high-quality human annotations will be the desiderata to further improve the performance. Scaling up \\model with multi-task training and combining it with complementary paradigms like reinforcement learning could result in stronger agents that further unlock the potential of LLMs for more applications."
+      ],
+      "subsections": [
+        {
+          "title": "Acknowledgments",
+          "level": 4,
+          "paragraphs": [
+            "We thank the support and feedback of many people from Google Brain team and Princeton NLP Group.\nThis work was supported in part by the National Science Foundation under Grant No. 2107048. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We thank the support and feedback of many people from Google Brain team and Princeton NLP Group.\nThis work was supported in part by the National Science Foundation under Grant No. 2107048. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation."
+            }
+          ]
+        },
+        {
+          "title": "Reproducibility Statement",
+          "level": 4,
+          "paragraphs": [
+            "Our main experiments are done on PaLM (Chowdhery et al., 2022), which is not an openly accessible model yet. To increase reproducibility, we have included all used prompts in Appendix C, additional experiments using GPT-3 (Brown et al., 2020) in Appendix A.1, and associated GPT-3 \\model prompting code at https://anonymous.4open.science/r/ReAct-2268/."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Our main experiments are done on PaLM (Chowdhery et al., 2022), which is not an openly accessible model yet. To increase reproducibility, we have included all used prompts in Appendix C, additional experiments using GPT-3 (Brown et al., 2020) in Appendix A.1, and associated GPT-3 \\model prompting code at https://anonymous.4open.science/r/ReAct-2268/."
+            }
+          ]
+        },
+        {
+          "title": "Ethics Statement",
+          "level": 4,
+          "paragraphs": [
+            "prompts large language models to generate more human interpretable, diagnosable, and controllable task-solving trajectories than previous methods.\nHowever, hooking up a large language model with an action space to interact with external environments (e.g. the web, physical environments) has potential dangers, e.g.  looking up inappropriate or private information, or taking harmful actions in an environment.\nOur experiments minimize such risks by limiting the interactions to specific websites (Wikipedia or WebShop) that are free of private information, without any dangerous actions in the action space design\n(i.e. models cannot really buy products on WebShop the research benchmark, or edit Wikipedia).\nWe believe researchers should be aware of such risks before designing more extensive experiments in the future."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "prompts large language models to generate more human interpretable, diagnosable, and controllable task-solving trajectories than previous methods.\nHowever, hooking up a large language model with an action space to interact with external environments (e.g. the web, physical environments) has potential dangers, e.g.  looking up inappropriate or private information, or taking harmful actions in an environment.\nOur experiments minimize such risks by limiting the interactions to specific websites (Wikipedia or WebShop) that are free of private information, without any dangerous actions in the action space design\n(i.e. models cannot really buy products on WebShop the research benchmark, or edit Wikipedia).\nWe believe researchers should be aware of such risks before designing more extensive experiments in the future."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We have proposed \\model – a simple yet effective method for synergizing reasoning and acting in large language models. Through a diverse set of experiments on multi-hop question-answering, fact checking, and interactive decision-making tasks, we show that \\model leads to superior performance with interpretable decision traces. Despite the simplicity of our method, complex tasks with large action spaces require more demonstrations to learn well, which unfortunately can easily go beyond the input length limit of in-context learning. We explore the fine-tuning approach on HotpotQA with initial promising results, but learning from more high-quality human annotations will be the desiderata to further improve the performance. Scaling up \\model with multi-task training and combining it with complementary paradigms like reinforcement learning could result in stronger agents that further unlock the potential of LLMs for more applications."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "(1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT, Reason Only), (c) Act-only, and (d) \\model (Reason+Act), solving a HotpotQA (Yang et al., 2018) question. (2) Comparison of (a) Act-only and (b) \\model prompting to solve an AlfWorld (Shridhar et al., 2020b) game. In both domains, we omit in-context examples in the prompt, and only show task solving trajectories generated by the model (Act, Thought) and the environment (Obs).",
+      "label": "S1.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "PaLM-540B prompting results with respect to number of CoT-SC samples used.",
+      "label": "S3.T1.4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Scaling results for prompting and finetuning on HotPotQA with \\model (ours) and baselines.",
+      "label": "S3.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "Another example HotpotQA question, where the original label is outdated. Only \\model is able to obtain the up-to-date answer thanks to real-world web interaction plus reasoning.",
+      "label": "A1.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2210.03629/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "A human-in-the-loop behavior correction example with \\model in AlfWorld. (a) \\model trajectory fails due to a hallucinating thought (Act 17). (b) By a human simply editing two thoughts (Act 17, 23), the \\model trajectory produces desirable reasoning traces and actions and succeeds.",
+      "label": "A1.F5"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 1: (1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT, Reason Only), (c) Act-only, and (d) \\model (Reason+Act), solving a HotpotQA (Yang et al., 2018) question. (2) Comparison of (a) Act-only and (b) \\model prompting to solve an AlfWorld (Shridhar et al., 2020b) game. In both domains, we omit in-context examples in the prompt, and only show task solving trajectories generated by the model (Act, Thought) and the environment (Obs).",
+      "headers": [],
+      "rows": [
+        [
+          "Prompt Method444HotpotQA EM is 27.1, 28.9, 33.8 for Standard, CoT, CoT-SC in Wang et al. (2022b).",
+          "HotpotQA",
+          "Fever"
+        ],
+        [
+          "(EM)",
+          "(Acc)"
+        ],
+        [
+          "Standard",
+          "28.7",
+          "57.1"
+        ],
+        [
+          "CoT (Wei et al., 2022)",
+          "29.4",
+          "56.3"
+        ],
+        [
+          "CoT-SC (Wang et al., 2022a)",
+          "33.4",
+          "60.4"
+        ],
+        [
+          "Act",
+          "25.7",
+          "58.9"
+        ],
+        [
+          "\\model",
+          "27.4",
+          "60.9"
+        ],
+        [
+          "CoT-SC →→\\to \\model",
+          "34.2",
+          "64.6"
+        ],
+        [
+          "\\model→→\\to CoT-SC",
+          "35.1",
+          "62.0"
+        ],
+        [
+          "Supervised SoTA555(Zhu et al., 2021; Lewis et al., 2020)",
+          "67.5",
+          "89.5"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Figure 2: PaLM-540B prompting results with respect to number of CoT-SC samples used.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Type",
+          "Definition",
+          "\\model",
+          "CoT"
+        ],
+        [
+          "Success",
+          "True positive",
+          "Correct reasoning trace and facts",
+          "94%",
+          "86%"
+        ],
+        [
+          "False positive",
+          "Hallucinated reasoning trace or facts",
+          "6%",
+          "14%"
+        ],
+        [
+          "Failure",
+          "Reasoning error",
+          "Wrong reasoning trace (including failing to recover from repetitive steps)",
+          "47%",
+          "16%"
+        ],
+        [
+          "Search result error",
+          "Search return empty or does not contain useful information",
+          "23%",
+          "-"
+        ],
+        [
+          "Hallucination",
+          "Hallucinated reasoning trace or facts",
+          "0%",
+          "56%"
+        ],
+        [
+          "Label ambiguity",
+          "Right prediction but did not match the label precisely",
+          "29%",
+          "28%"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Figure 3: Scaling results for prompting and finetuning on HotPotQA with \\model (ours) and baselines.",
+      "headers": [],
+      "rows": [
+        [
+          "Method",
+          "Pick",
+          "Clean",
+          "Heat",
+          "Cool",
+          "Look",
+          "Pick 2",
+          "All"
+        ],
+        [
+          "Act (best of 6)",
+          "88",
+          "42",
+          "74",
+          "67",
+          "72",
+          "41",
+          "45"
+        ],
+        [
+          "\\model (avg)",
+          "65",
+          "39",
+          "83",
+          "76",
+          "55",
+          "24",
+          "57"
+        ],
+        [
+          "\\model (best of 6)",
+          "92",
+          "58",
+          "96",
+          "86",
+          "78",
+          "41",
+          "71"
+        ],
+        [
+          "ReAct-IM (avg)",
+          "55",
+          "59",
+          "60",
+          "55",
+          "23",
+          "24",
+          "48"
+        ],
+        [
+          "ReAct-IM (best of 6)",
+          "62",
+          "68",
+          "87",
+          "57",
+          "39",
+          "33",
+          "53"
+        ],
+        [
+          "BUTLERg (best of 8)",
+          "33",
+          "26",
+          "70",
+          "76",
+          "17",
+          "12",
+          "22"
+        ],
+        [
+          "BUTLER (best of 8)",
+          "46",
+          "39",
+          "74",
+          "100",
+          "22",
+          "24",
+          "37"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "AlfWorld task-specific success rates (%). BUTLER and BUTLERg results are from Table 4 of Shridhar et al. (2020b). All methods use greedy decoding, except that BUTLER uses beam search.",
+      "headers": [],
+      "rows": [
+        [
+          "Method",
+          "Score",
+          "SR"
+        ],
+        [
+          "Act",
+          "62.3",
+          "30.1"
+        ],
+        [
+          "\\model",
+          "66.6",
+          "40.0"
+        ],
+        [
+          "IL",
+          "59.9",
+          "29.1"
+        ],
+        [
+          "IL+RL",
+          "62.4",
+          "28.7"
+        ],
+        [
+          "Human",
+          "82.1",
+          "59.6"
+        ],
+        [
+          "Expert"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Score and success rate (SR) on Webshop. IL/IL+RL taken from Yao et al. (2022).",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "PaLM-540B",
+          "GPT-3"
+        ],
+        [
+          "HotpotQA (exact match)",
+          "29.4",
+          "30.8"
+        ],
+        [
+          "ALFWorld (success rate %)",
+          "70.9",
+          "78.4"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Prompts used for the Webshop experiments in Section 4. We use the prompt on the left for Act, and use the prompt on the right (add reasoning) for \\model.",
+      "headers": [],
+      "rows": [
+        [
+          "Instruction: i would like a 3 ounce bottle of bright citrus deodorant for sensitive skin, and price lower than 50.00 dollars"
+        ],
+        [
+          "Act",
+          "\\model"
+        ],
+        [
+          "Action: search[3 ounce bright citrus deodorant sensitive skin] Observation: [ Back to Search ] Page 1 (Total results: 50) [Next] [B078GWRC1J] Bright Citrus Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce $10.99 [B078GTKVXY] Ginger Fresh Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce $10.99 [B08KBVJ4XN] Barrel and Oak - Aluminum-Free Deodorant, Deodorant for Men , Essential Oil-Based Scent, 24-Hour Odor Protection, Cedar & Patchouli Blend, Gentle on Sensitive Skin (Mountain Sage, 2.7 oz, 2-Pack) $15.95 Action: click[B078GWRC1J] Observation: [Back to Search] [Prev] scent [assorted scents][bright citrus][calming lavender][ginger [fresh] simply non-scents] size [travel set (4-pack)][3 ounce (pack of 1)][3-ounce (2 -pack)] Bright Citrus Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce Price: $10.99 Rating: N.A. [Description] [Features] [Reviews] [Buy Now] Action: click[bright citrus] Observation: You have clicked bright citrus. Action: click[3 ounce (pack of 1)] Observation: You have clicked 3 ounce (pack of 1). Action: click[Buy Now]",
+          "Action: search[3 ounce bright citrus deodorant sensitive skin Observation: [ Back to Search ] Page 1 (Total results: 50) [Next] [B078GWRC1J] Bright Citrus Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce $10.99 [B078GTKVXY] Ginger Fresh Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce $10.99 [B08KBVJ4XN] Barrel and Oak - Aluminum-Free Deodorant, Deodorant for Men , Essential Oil-Based Scent, 24-Hour Odor Protection, Cedar & Patchouli Blend, Gentle on Sensitive Skin (Mountain Sage, 2.7 oz, 2-Pack) $15.95 Action: think[B078GWRC1J and B078GTKVXY are bright citrus deodorant less then 50 dollars. I can check B078GWRC1J first. Observation: OK. Action: click[B078GWRC1J] Observation: [Back to Search] [Prev] scent [assorted scents][bright citrus][calming lavender][ginger [fresh] simply non-scents] size [travel set (4-pack)][3 ounce (pack of 1)][3-ounce (2 -pack)] Bright Citrus Deodorant by Earth Mama | Natural and Safe for Sensitive Skin, Pregnancy and Breastfeeding, Contains Organic Calendula 3-Ounce Price: $10.99 Rating: N.A. [Description] [Features] [Reviews] [Buy Now] Action: think[For 3 ounce bottle of bright citrus deodorant for sensitive skin, the item has options ’bright citrus’ and ’3 ounce (pack of 1)’ and seems good to buy.] Observation: OK. Action: click[bright citrus] Observation: You have clicked bright citrus. Action: click[3 ounce (pack of 1)] Observation: You have clicked 3 ounce (pack of 1). Action: click[Buy Now]"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "An Act prompt on the ALFWorld clean task. No thoughts are provided.",
+      "headers": [],
+      "rows": [
+        [
+          "You are in the middle of a room. Looking quickly around you, you see a cabinet 13, a cabinet 12, a cabinet 11, a cabinet 10, a cabinet 9, a cabinet 8, a cabinet 7, a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 1, a diningtable 1, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1. Your task is to: put a clean lettuce in diningtable."
+        ],
+        [
+          ">> go to fridge 1"
+        ],
+        [
+          "The fridge 1 is closed."
+        ],
+        [
+          ">> open fridge 1"
+        ],
+        [
+          "You open the fridge 1. The fridge 1 is open. In it, you see a cup 3, a egg 2, a potato 3, and a potato 2."
+        ],
+        [
+          ">> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a lettuce 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          ">> take lettuce 1 from diningtable 1"
+        ],
+        [
+          "You pick up the lettuce 1 from the diningtable 1."
+        ],
+        [
+          ">> go to sinkbasin 1"
+        ],
+        [
+          "On the sinkbasin 1, you see a apple 2, a ladle 2, a spoon 1, and a tomato 3."
+        ],
+        [
+          ">> clean lettuce 1 with sinkbasin 1"
+        ],
+        [
+          "You clean the lettuce 1 using the sinkbasin 1."
+        ],
+        [
+          ">> think: Now I clean a lettuce (1). Next, I need to put it in/on diningtable 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          ">> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          ">> put lettuce 1 in/on diningtable 1"
+        ],
+        [
+          "You put the lettuce 1 in/on the diningtable 1."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "An \\model prompt on the ALFWorld clean task.",
+      "headers": [],
+      "rows": [
+        [
+          "You are in the middle of a room. Looking quickly around you, you see a cabinet 13, a cabinet 12, a cabinet 11, a cabinet 10, a cabinet 9, a cabinet 8, a cabinet 7, a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 1, a diningtable 1, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1. Your task is to: put a clean lettuce in diningtable."
+        ],
+        [
+          "> think: To solve the task, I need to find and take a lettuce, then clean it with sinkbasin, then put it in diningtable."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> think: First I need to find a lettuce. A lettuce is more likely to appear in fridge (1), diningtable (1), sinkbasin (1), stoveburner (1-3), cabinet (1-13). I can check one by one, starting with fridge 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to fridge 1"
+        ],
+        [
+          "The fridge 1 is closed."
+        ],
+        [
+          "> open fridge 1"
+        ],
+        [
+          "You open the fridge 1. The fridge 1 is open. In it, you see a cup 3, a egg 2, a potato 3, and a potato 2."
+        ],
+        [
+          "> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a lettuce 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          "> think: Now I find a lettuce (1). Next, I need to take it."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> take lettuce 1 from diningtable 1"
+        ],
+        [
+          "You pick up the lettuce 1 from the diningtable 1."
+        ],
+        [
+          "> think: Now I take a lettuce (1). Next, I need to go to sinkbasin (1) and clean it."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to sinkbasin 1"
+        ],
+        [
+          "On the sinkbasin 1, you see a apple 2, a ladle 2, a spoon 1, and a tomato 3."
+        ],
+        [
+          "> clean lettuce 1 with sinkbasin 1"
+        ],
+        [
+          "You clean the lettuce 1 using the sinkbasin 1."
+        ],
+        [
+          "> think: Now I clean a lettuce (1). Next, I need to put it in/on diningtable 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          "> put lettuce 1 in/on diningtable 1"
+        ],
+        [
+          "You put the lettuce 1 in/on the diningtable 1."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "An ReAct-IM prompt on the ALFWorld clean task.",
+      "headers": [],
+      "rows": [
+        [
+          "You are in the middle of a room. Looking quickly around you, you see a cabinet 13, a cabinet 12, a cabinet 11, a cabinet 10, a cabinet 9, a cabinet 8, a cabinet 7, a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 1, a diningtable 1, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1. Your task is to: put a clean lettuce in diningtable."
+        ],
+        [
+          "> think: To solve the task, I need to find and take a lettuce, then clean it with sinkbasin, then put it in diningtable."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> think: First I need to find a lettuce."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to fridge 1"
+        ],
+        [
+          "The fridge 1 is closed."
+        ],
+        [
+          "> think: First I need to find a lettuce."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> open fridge 1"
+        ],
+        [
+          "You open the fridge 1. The fridge 1 is open. In it, you see a cup 3, a egg 2, a potato 3, and a potato 2."
+        ],
+        [
+          "> think: First I need to find a lettuce."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a lettuce 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          "> think: First I need to find a lettuce."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> take lettuce 1 from diningtable 1"
+        ],
+        [
+          "You pick up the lettuce 1 from the diningtable 1."
+        ],
+        [
+          "> think: I need to clean this lettuce (1) using sinkbasin 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to sinkbasin 1"
+        ],
+        [
+          "On the sinkbasin 1, you see a apple 2, a ladle 2, a spoon 1, and a tomato 3."
+        ],
+        [
+          "> think: I need to clean this lettuce (1) using sinkbasin 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> clean lettuce 1 with sinkbasin 1"
+        ],
+        [
+          "You clean the lettuce 1 using the sinkbasin 1."
+        ],
+        [
+          "> think: I need to put this cleaned lettuce (1) in/on diningtable 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> go to diningtable 1"
+        ],
+        [
+          "On the diningtable 1, you see a apple 1, a bread 1, a butterknife 2, a cup 2, a fork 2, a knife 2, a knife 1, a ladle 1, a mug 2, a mug 1, a pan 2, a peppershaker 1, a spatula 3, a tomato 2, and a tomato 1."
+        ],
+        [
+          "> think: I need to put this cleaned lettuce (1) in/on diningtable 1."
+        ],
+        [
+          "OK."
+        ],
+        [
+          "> put lettuce 1 in/on diningtable 1"
+        ],
+        [
+          "You put the lettuce 1 in/on the diningtable 1."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Example trajectories for Webshop predicted by Act and \\model. Compared to Act, \\model uses reasoning to find products that satisfy all target attributes.",
+      "headers": [],
+      "rows": [
+        [
+          "Instruction: get me a sixteen pack of apple cinnamon freeze dried banana chips, and price lower than 50.00 dollars"
+        ],
+        [
+          "Act",
+          "\\model"
+        ],
+        [
+          "Action: search[sixteen pack apple cinnamon freeze dried banana chips] Observation: [ Back to Search ] Page 1 (Total results: 50) [Next] [B0061IVFZE] Brothers-ALL-Natural Fruit Crisps, Strawberry Banana, 0.42 - Ounce (Pack of 100) $85.0 [B096H2P6G2] Moon Fruit Freeze Dried Fruit Snacks. Fruit Snacks for Kids - (Variety Pack) $18.99 [B092JLLYK6] Nature’s Turn Freeze-Dried Fruit Snacks - Banana Crisps - Perfect For School Lunches or an On-The-Go Snack - No Sugar Added, Non GMO, Gluten Free, Nothing Artificial (0.53oz) 6-Pack $12.99 Action: click[B0061IVFZE] Observation: [Back to Search] [Prev] flavor name [asian pear][banana][fuji apple & cinnamon][strawberry banana] Brothers-ALL-Natural Fruit Crisps, Strawberry Banana, 0.42 Ounce (Pack of 100) Price: $85.0 Rating: N.A. [Description] [Features] [Reviews] [Buy Now] Action: click[Buy Now]",
+          "Action: search[sixteen pack apple cinnamon freeze dried banana chips] Observation: [ Back to Search ] Page 1 (Total results: 50) [Next] [B0061IVFZE] Brothers-ALL-Natural Fruit Crisps, Strawberry Banana, 0.42 - Ounce (Pack of 100) $85.0 [B096H2P6G2] Moon Fruit Freeze Dried Fruit Snacks. Fruit Snacks for Kids - (Variety Pack) $18.99 [B092JLLYK6] Nature’s Turn Freeze-Dried Fruit Snacks - Banana Crisps - Perfect For School Lunches or an On-The-Go Snack - No Sugar Added, Non GMO, Gluten Free, Nothing Artificial (0.53oz) 6-Pack $12.99 Action: think[B0061IVFZE is strawberry banana, not apple cinnamon. B096H2P6G2 is fruit snacks, not freeze dried banana chips. B092JLLYK6 is banana crisps, not apple cinnamon. I can check B092JLLYK6 first. Observation: OK. Action: click[B092JLLYK6] Observation: [Back to Search] [Prev] flavor name [apple][apple cinnamon][banana][cantaloupe][peach][pear] [strawberry][strawberry banana][sampler variety pack][mega variety pack][orchard variety pack] size [0.53 ounce (pack of 6)][0.53 ounce (pack of 8)][0.53 ounce (pack of 16)] Nature’s Turn Freeze-Dried Fruit Snacks - Banana Crisps - Perfect For School Lunches or an On-The-Go Snack - No Sugar Added, Non GMO, Gluten Free, Nothing Artificial (0.53oz) 6-Pack Price: $12.99 Rating: N.A. [Description] [Features] [Reviews] [Buy Now] Action: think[For sixteen pack of apple cinnamon freeze dried banana chips, the item has options ’apple cinnamon’ and ’0.53 ounce (pack of 16)’ and seems good to buy.] Observation: OK. Action: click[apple cinnamon] Observation: You have clicked apple cinnamon. Action: click[0.53 ounce (pack of 16)] Observation: You have clicked 0.53 ounce (pack of 16). Action: click[Buy Now]"
+        ],
+        [
+          "Score: 0.125",
+          "Score: 1.0"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [],
+  "references": [
+    {
+      "raw_text": "Abramson et al. (2020) Josh Abramson, Arun Ahuja, Iain Barr, Arthur Brussee, Federico Carnevale, Mary Cassin, Rachita Chhaparia, Stephen Clark, Bogdan Damoc, Andrew Dudzik, Petko Georgiev, Aurelia Guy, Tim Harley, Felix Hill, Alden Hung, Zachary Kenton, Jessica Landon, Timothy Lillicrap, Kory Mathewson, Soňa Mokrá, Alistair Muldal, Adam Santoro, Nikolay Savinov, Vikrant Varma, Greg Wayne, Duncan Williams, Nathaniel Wong, Chen Yan, and Rui Zhu. Imitating interactive intelligence, 2020. URL https://arxiv.org/abs/2012.05672.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": "2012.05672",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2012.05672",
+      "citation_key": "Abramson et al. (2020)"
+    },
+    {
+      "raw_text": "Ahn et al. (2022) Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebotar, Omar Cortes, Byron David, Chelsea Finn, Chuyuan Fu, Keerthana Gopalakrishnan, Karol Hausman, Alex Herzog, Daniel Ho, Jasmine Hsu, Julian Ibarz, Brian Ichter, Alex Irpan, Eric Jang, Rosario Jauregui Ruano, Kyle Jeffrey, Sally Jesmonth, Nikhil J Joshi, Ryan Julian, Dmitry Kalashnikov, Yuheng Kuang, Kuang-Huei Lee, Sergey Levine, Yao Lu, Linda Luu, Carolina Parada, Peter Pastor, Jornell Quiambao, Kanishka Rao, Jarek Rettinghouse, Diego Reyes, Pierre Sermanet, Nicolas Sievers, Clayton Tan, Alexander Toshev, Vincent Vanhoucke, Fei Xia, Ted Xiao, Peng Xu, Sichun Xu, Mengyuan Yan, and Andy Zeng. Do as i can, not as i say: Grounding language in robotic affordances, 2022. URL https://arxiv.org/abs/2204.01691.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2204.01691",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2204.01691",
+      "citation_key": "Ahn et al. (2022)"
+    },
+    {
+      "raw_text": "Alderson-Day & Fernyhough (2015) Ben Alderson-Day and Charles Fernyhough. Inner speech: development, cognitive functions, phenomenology, and neurobiology. Psychological bulletin, 141(5):931, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Alderson-Day & Fernyhough (2015)"
+    },
+    {
+      "raw_text": "Baddeley (1992) Alan Baddeley. Working memory. Science, 255(5044):556–559, 1992.",
+      "title": null,
+      "authors": [],
+      "year": "1992",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Baddeley (1992)"
+    },
+    {
+      "raw_text": "Brown et al. (2020) Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. Advances in neural information processing systems, 33:1877–1901, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Brown et al. (2020)"
+    },
+    {
+      "raw_text": "Chowdhery et al. (2022) Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, et al. Palm: Scaling language modeling with pathways. arXiv preprint arXiv:2204.02311, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2204.02311",
+      "doi": null,
+      "url": null,
+      "citation_key": "Chowdhery et al. (2022)"
+    },
+    {
+      "raw_text": "Creswell & Shanahan (2022) Antonia Creswell and Murray Shanahan. Faithful reasoning using large language models, 2022. URL https://arxiv.org/abs/2208.14271.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2208.14271",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2208.14271",
+      "citation_key": "Creswell & Shanahan (2022)"
+    },
+    {
+      "raw_text": "Creswell et al. (2022) Antonia Creswell, Murray Shanahan, and Irina Higgins. Selection-inference: Exploiting large language models for interpretable logical reasoning, 2022. URL https://arxiv.org/abs/2205.09712.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.09712",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2205.09712",
+      "citation_key": "Creswell et al. (2022)"
+    },
+    {
+      "raw_text": "Fan et al. (2019) Angela Fan, Yacine Jernite, Ethan Perez, David Grangier, Jason Weston, and Michael Auli. ELI5: Long form question answering. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, pp. 3558–3567, Florence, Italy, July 2019. Association for Computational Linguistics. doi: 10.18653/v1/P19-1346. URL https://aclanthology.org/P19-1346.",
+      "title": null,
+      "authors": [],
+      "year": "2019",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.18653/v1/P19-1346",
+      "url": "https://aclanthology.org/P19-1346",
+      "citation_key": "Fan et al. (2019)"
+    },
+    {
+      "raw_text": "Fernyhough (2010) Charles Fernyhough. Vygotsky, luria, and the social brain. Self and social regulation: Social interaction and the development of social understanding and executive functions, pp. 56–79, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Fernyhough (2010)"
+    },
+    {
+      "raw_text": "Glaese et al. (2022) Amelia Glaese, Nat McAleese, Maja Trebacz, John Aslanides, Vlad Firoiu, Timo Ewalds, Maribeth Rauh, Laura Weidinger, Martin Chadwick, Phoebe Thacker, Lucy Campbell-Gillingham, Jonathan Uesato, Po-Sen Huang, Ramona Comanescu, Fan Yang, Abigail See, Sumanth Dathathri, Rory Greig, Charlie Chen, Doug Fritz, Jaume Sanchez Elias, Richard Green, Soňa Mokrá, Nicholas Fernando, Boxi Wu, Rachel Foley, Susannah Young, Iason Gabriel, William Isaac, John Mellor, Demis Hassabis, Koray Kavukcuoglu, Lisa Anne Hendricks, and Geoffrey Irving. Improving alignment of dialogue agents via targeted human judgements, 2022. URL https://storage.googleapis.com/deepmind-media/DeepMind.com/Authors-Notes/sparrow/sparrow-final.pdf.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://storage.googleapis.com/deepmind-media/DeepMind.com/Authors-Notes/sparrow/sparrow-final.pdf",
+      "citation_key": "Glaese et al. (2022)"
+    },
+    {
+      "raw_text": "Hosseini-Asl et al. (2020) Ehsan Hosseini-Asl, Bryan McCann, Chien-Sheng Wu, Semih Yavuz, and Richard Socher. A simple language model for task-oriented dialogue. Advances in Neural Information Processing Systems, 33:20179–20191, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hosseini-Asl et al. (2020)"
+    },
+    {
+      "raw_text": "Huang et al. (2022a) Wenlong Huang, Pieter Abbeel, Deepak Pathak, and Igor Mordatch. Language models as zero-shot planners: Extracting actionable knowledge for embodied agents. arXiv preprint arXiv:2201.07207, 2022a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2201.07207",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2022a)"
+    },
+    {
+      "raw_text": "Huang et al. (2022b) Wenlong Huang, Fei Xia, Ted Xiao, Harris Chan, Jacky Liang, Pete Florence, Andy Zeng, Jonathan Tompson, Igor Mordatch, Yevgen Chebotar, et al. Inner monologue: Embodied reasoning through planning with language models. arXiv preprint arXiv:2207.05608, 2022b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2207.05608",
+      "doi": null,
+      "url": null,
+      "citation_key": "Huang et al. (2022b)"
+    },
+    {
+      "raw_text": "Karamcheti et al. (2021) Siddharth Karamcheti, Megha Srivastava, Percy Liang, and Dorsa Sadigh. Lila: Language-informed latent actions. In CoRL, pp. 1379–1390, 2021. URL https://proceedings.mlr.press/v164/karamcheti22a.html.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://proceedings.mlr.press/v164/karamcheti22a.html",
+      "citation_key": "Karamcheti et al. (2021)"
+    },
+    {
+      "raw_text": "Kojima et al. (2022) Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language models are zero-shot reasoners. arXiv preprint arXiv:2205.11916, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.11916",
+      "doi": null,
+      "url": null,
+      "citation_key": "Kojima et al. (2022)"
+    },
+    {
+      "raw_text": "Lazaridou et al. (2022) Angeliki Lazaridou, Elena Gribovskaya, Wojciech Stokowiec, and Nikolai Grigorev. Internet-augmented language models through few-shot prompting for open-domain question answering. arXiv preprint arXiv:2203.05115, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2203.05115",
+      "doi": null,
+      "url": null,
+      "citation_key": "Lazaridou et al. (2022)"
+    },
+    {
+      "raw_text": "Lewis et al. (2020) Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. Advances in Neural Information Processing Systems, 33:9459–9474, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Lewis et al. (2020)"
+    },
+    {
+      "raw_text": "Li et al. (2022) Shuang Li, Xavier Puig, Chris Paxton, Yilun Du, Clinton Wang, Linxi Fan, Tao Chen, De-An Huang, Ekin Akyürek, Anima Anandkumar, Jacob Andreas, Igor Mordatch, Antonio Torralba, and Yuke Zhu. Pre-trained language models for interactive decision-making, 2022. URL https://arxiv.org/abs/2202.01771.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2202.01771",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2202.01771",
+      "citation_key": "Li et al. (2022)"
+    },
+    {
+      "raw_text": "Luria (1965) Aleksandr Romanovich Luria. Ls vygotsky and the problem of localization of functions. Neuropsychologia, 3(4):387–392, 1965.",
+      "title": null,
+      "authors": [],
+      "year": "1965",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Luria (1965)"
+    },
+    {
+      "raw_text": "Madaan & Yazdanbakhsh (2022) Aman Madaan and Amir Yazdanbakhsh. Text and patterns: For effective chain of thought, it takes two to tango, 2022. URL https://arxiv.org/abs/2209.07686.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2209.07686",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2209.07686",
+      "citation_key": "Madaan & Yazdanbakhsh (2022)"
+    },
+    {
+      "raw_text": "Micheli & Fleuret (2021) Vincent Micheli and François Fleuret. Language models are few-shot butlers. arXiv preprint arXiv:2104.07972, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2104.07972",
+      "doi": null,
+      "url": null,
+      "citation_key": "Micheli & Fleuret (2021)"
+    },
+    {
+      "raw_text": "Nakano et al. (2021) Reiichiro Nakano, Jacob Hilton, Suchir Balaji, Jeff Wu, Long Ouyang, Christina Kim, Christopher Hesse, Shantanu Jain, Vineet Kosaraju, William Saunders, Xu Jiang, Karl Cobbe, Tyna Eloundou, Gretchen Krueger, Kevin Button, Matthew Knight, Benjamin Chess, and John Schulman. Webgpt: Browser-assisted question-answering with human feedback, 2021. URL https://arxiv.org/abs/2112.09332.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2112.09332",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2112.09332",
+      "citation_key": "Nakano et al. (2021)"
+    },
+    {
+      "raw_text": "Nye et al. (2021) Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, Charles Sutton, and Augustus Odena. Show your work: Scratchpads for intermediate computation with language models, 2021. URL https://arxiv.org/abs/2112.00114.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2112.00114",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2112.00114",
+      "citation_key": "Nye et al. (2021)"
+    },
+    {
+      "raw_text": "Reed et al. (2022) Scott Reed, Konrad Zolna, Emilio Parisotto, Sergio Gomez Colmenarejo, Alexander Novikov, Gabriel Barth-Maron, Mai Gimenez, Yury Sulsky, Jackie Kay, Jost Tobias Springenberg, Tom Eccles, Jake Bruce, Ali Razavi, Ashley Edwards, Nicolas Heess, Yutian Chen, Raia Hadsell, Oriol Vinyals, Mahyar Bordbar, and Nando de Freitas. A generalist agent, 2022. URL https://arxiv.org/abs/2205.06175.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.06175",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2205.06175",
+      "citation_key": "Reed et al. (2022)"
+    },
+    {
+      "raw_text": "Shridhar et al. (2020a) Mohit Shridhar, Jesse Thomason, Daniel Gordon, Yonatan Bisk, Winson Han, Roozbeh Mottaghi, Luke Zettlemoyer, and Dieter Fox. Alfred: A benchmark for interpreting grounded instructions for everyday tasks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 10740–10749, 2020a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Shridhar et al. (2020a)"
+    },
+    {
+      "raw_text": "Shridhar et al. (2020b) Mohit Shridhar, Xingdi Yuan, Marc-Alexandre Côté, Yonatan Bisk, Adam Trischler, and Matthew Hausknecht. Alfworld: Aligning text and embodied environments for interactive learning. arXiv preprint arXiv:2010.03768, 2020b.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": "2010.03768",
+      "doi": null,
+      "url": null,
+      "citation_key": "Shridhar et al. (2020b)"
+    },
+    {
+      "raw_text": "Shuster et al. (2022a) Kurt Shuster, Mojtaba Komeili, Leonard Adolphs, Stephen Roller, Arthur Szlam, and Jason Weston. Language models that seek for knowledge: Modular search & generation for dialogue and prompt completion. arXiv preprint arXiv:2203.13224, 2022a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2203.13224",
+      "doi": null,
+      "url": null,
+      "citation_key": "Shuster et al. (2022a)"
+    },
+    {
+      "raw_text": "Shuster et al. (2022b) Kurt Shuster, Jing Xu, Mojtaba Komeili, Da Ju, Eric Michael Smith, Stephen Roller, Megan Ung, Moya Chen, Kushal Arora, Joshua Lane, Morteza Behrooz, William Ngan, Spencer Poff, Naman Goyal, Arthur Szlam, Y-Lan Boureau, Melanie Kambadur, and Jason Weston. Blenderbot 3: a deployed conversational agent that continually learns to responsibly engage, 2022b. URL https://arxiv.org/abs/2208.03188.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2208.03188",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2208.03188",
+      "citation_key": "Shuster et al. (2022b)"
+    },
+    {
+      "raw_text": "Thorne et al. (2018) James Thorne, Andreas Vlachos, Christos Christodoulopoulos, and Arpit Mittal. Fever: a large-scale dataset for fact extraction and verification. arXiv preprint arXiv:1803.05355, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": "1803.05355",
+      "doi": null,
+      "url": null,
+      "citation_key": "Thorne et al. (2018)"
+    },
+    {
+      "raw_text": "Vygotsky (1987) Lev S Vygotsky. Thinking and speech. The collected works of LS Vygotsky, 1:39–285, 1987.",
+      "title": null,
+      "authors": [],
+      "year": "1987",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Vygotsky (1987)"
+    },
+    {
+      "raw_text": "Wang et al. (2022a) Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language models, 2022a. URL https://arxiv.org/abs/2203.11171.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2203.11171",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2203.11171",
+      "citation_key": "Wang et al. (2022a)"
+    },
+    {
+      "raw_text": "Wang et al. (2022b) Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, and Denny Zhou. Rationale-augmented ensembles in language models. arXiv preprint arXiv:2207.00747, 2022b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2207.00747",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. (2022b)"
+    },
+    {
+      "raw_text": "Wei et al. (2022) Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Ed Chi, Quoc Le, and Denny Zhou. Chain of thought prompting elicits reasoning in large language models. arXiv preprint arXiv:2201.11903, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2201.11903",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wei et al. (2022)"
+    },
+    {
+      "raw_text": "Yang et al. (2018) Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W Cohen, Ruslan Salakhutdinov, and Christopher D Manning. Hotpotqa: A dataset for diverse, explainable multi-hop question answering. arXiv preprint arXiv:1809.09600, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": "1809.09600",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. (2018)"
+    },
+    {
+      "raw_text": "Yao et al. (2020) Shunyu Yao, Rohan Rao, Matthew Hausknecht, and Karthik Narasimhan. Keep CALM and explore: Language models for action generation in text-based games. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP), pp. 8736–8754, Online, November 2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.emnlp-main.704. URL https://aclanthology.org/2020.emnlp-main.704.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.18653/v1/2020.emnlp-main.704",
+      "url": "https://aclanthology.org/2020.emnlp-main.704",
+      "citation_key": "Yao et al. (2020)"
+    },
+    {
+      "raw_text": "Yao et al. (2022) Shunyu Yao, Howard Chen, John Yang, and Karthik Narasimhan. Webshop: Towards scalable real-world web interaction with grounded language agents. arXiv preprint arXiv:2207.01206, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2207.01206",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yao et al. (2022)"
+    },
+    {
+      "raw_text": "Zelikman et al. (2022) Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah D. Goodman. Star: Bootstrapping reasoning with reasoning, 2022. URL https://arxiv.org/abs/2203.14465.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2203.14465",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2203.14465",
+      "citation_key": "Zelikman et al. (2022)"
+    },
+    {
+      "raw_text": "Zhou et al. (2022) Denny Zhou, Nathanael Schärli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Olivier Bousquet, Quoc Le, and Ed Chi. Least-to-most prompting enables complex reasoning in large language models, 2022. URL https://arxiv.org/abs/2205.10625.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2205.10625",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2205.10625",
+      "citation_key": "Zhou et al. (2022)"
+    },
+    {
+      "raw_text": "Zhu et al. (2021) Yunchang Zhu, Liang Pang, Yanyan Lan, Huawei Shen, and Xueqi Cheng. Adaptive information seeking for open-domain question answering. arXiv preprint arXiv:2109.06747, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2109.06747",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhu et al. (2021)"
+    }
+  ],
+  "full_text": "## Introduction\n\nA unique feature of human intelligence is the ability to seamlessly combine task-oriented actions with verbal reasoning (or inner speech,  Alderson-Day & Fernyhough, 2015), which has been theorized to play an important role in human cognition for enabling self-regulation or strategization (Vygotsky, 1987; Luria, 1965; Fernyhough, 2010) and maintaining a working memory (Baddeley, 1992).\nConsider the example of cooking up a dish in the kitchen. Between any two specific actions, we may reason in language in order to track progress (“now that everything is cut, I should heat up the pot of water”), to handle exceptions or adjust the plan according to the situation (“I don’t have salt, so let me use soy sauce and pepper instead”), and to realize when external information is needed (“how do I prepare dough? Let me search on the Internet”).\nWe may also act (open a cookbook to read the recipe, open the fridge, check ingredients) to support the reasoning and to answer questions (“What dish can I make right now?”).\nThis tight synergy between “acting” and “reasoning” allows humans to learn new tasks quickly and perform robust decision making or reasoning, even under previously unseen circumstances or facing information uncertainties.\n\nRecent results have hinted at the possibility of combining verbal reasoning with interactive decision making in autonomous systems.\nOn one hand, properly prompted large language models (LLMs) have demonstrated emergent capabilities to carry out several steps of reasoning traces to derive answers from questions in arithmetic, commonsense, and symbolic reasoning tasks (Wei et al., 2022). However, this “chain-of-thought” reasoning is a static black box, in that the model uses its own internal representations to generate thoughts and is not grounded in the external world,\nwhich limits its ability to reason reactively or update its knowledge. This can lead to issues like fact hallucination and error propagation over the reasoning process (Figure 1 (1b)).\nOn the other hand, recent work has explored the use of pre-trained language models for planning and acting in interactive environments (Ahn et al., 2022; Nakano et al., 2021; Yao et al., 2020; Huang et al., 2022a), with a focus on predicting actions via language priors. These approaches usually convert multi-modal observations into text, use a language model to generate domain-specific actions or plans, and then use a controller to choose or execute them.\nHowever, they do not employ language models to reason abstractly about high-level goals or maintain a working memory to support acting, barring Huang et al. (2022b) who perform a limited form of verbal reasoning to reiterate spatial facts about the current state.\nBeyond such simple embodied tasks to interact with a few blocks, there have not been studies on how reasoning and acting can be combined in a synergistic manner for general task solving, and if such a combination can bring systematic benefits compared to reasoning or acting alone.\n\nIn this work, we present \\model, a general paradigm to combine reasoning and acting with language models for solving diverse language reasoning and decision making tasks (Figure 1).\n\\model prompts LLMs to generate both verbal reasoning traces and actions pertaining to a task in an interleaved manner, which allows the model to perform dynamic reasoning to create, maintain, and adjust high-level plans for acting (reason to act), while also interact with the external environments (e.g. Wikipedia) to incorporate additional information into reasoning (act to reason).\n\nWe conduct empirical evaluations of \\model and state-of-the-art baselines on four diverse benchmarks: question answering (HotPotQA, Yang et al., 2018), fact verification (Fever, Thorne et al., 2018), text-based game (ALFWorld, Shridhar et al., 2020b), and webpage navigation (WebShop, Yao et al., 2022).\nFor HotPotQA and Fever, with access to a Wikipedia API that the model can interact with, \\model outperforms vanilla action generation models while being competitive with chain-of-thought reasoning (CoT) (Wei et al., 2022). The best approach overall is a combination of \\model and CoT that allows for the use of both internal knowledge and externally obtained information during reasoning.\nOn ALFWorld and WebShop, two or even one-shot \\model prompting is able to outperform imitation or reinforcement learning methods trained with $10^{3}\\sim 10^{5}$ task instances, with an absolute improvement of 34% and 10% in success rates respectively. We also demonstrate the importance of sparse, versatile reasoning in decision making by showing consistent advantages over controlled baselines with actions only.\nBesides general applicability and performance boost, the combination of reasoning and acting also contributes to model interpretability, trustworthiness, and diagnosability across all domains, as humans can readily distinguish information from model’s internal knowledge versus external environments, as well as inspect reasoning traces to understand the decision basis of model actions.\n\nTo summarize, our key contributions are the following:\n(1) we introduce \\model, a novel prompt-based paradigm to synergize reasoning and acting in language models for general task solving;\n(2) we perform extensive experiments across diverse benchmarks to showcase the advantage of \\model in a few-shot learning setup over prior approaches that perform either reasoning or action generation in isolation;\n(3) we present systematic ablations and analysis to understand the importance of acting in reasoning tasks, and reasoning in interactive tasks;\n(4) we analyze the limitations of \\model under the prompting setup (i.e. limited support of reasoning and acting behaviors), and perform initial finetuning experiments showing the potential of \\model to improve with additional training data.\nScaling up \\model to train and operate on more tasks and combining it with complementary paradigms like reinforcement learning could further unlock the potential of large language models.\n\n## \\model: Synergizing Reasoning + Acting\n\nConsider a general setup of an agent interacting with an environment for task solving. At time step $t$, an agent receives an observation $o_{t}\\in\\mathcal{O}$ from the environment and takes an action $a_{t}\\in\\mathcal{A}$ following some policy $\\pi(a_{t}|c_{t})$, where $c_{t}=(o_{1},a_{1},\\cdots,o_{t-1},a_{t-1},o_{t})$ is the context to the agent. Learning a policy is challenging when the mapping $c_{t}\\mapsto a_{t}$ is highly implicit and requires extensive computation.\nFor example, the agent shown in Figure 1(1c) is unable to generate the correct final action (Act 4) to finish the QA task as it requires complex reasoning over the trajectory context (Question, Act 1-3, Obs 1-3).\nSimilarly, the agent shown in Figure 1(2a) fails to comprehend from the context that sinkbasin 1 does not contain peppershaker 1, thus keep producing hallucinating actions.\n\nThe idea of \\model is simple: we augment the agent’s action space to $\\mathcal{\\hat{A}}=\\mathcal{A}\\cup\\mathcal{L}$, where $\\mathcal{L}$ is the space of language. An action $\\hat{a}_{t}\\in\\mathcal{L}$ in the language space, which we will refer to as a thought or a reasoning trace, does not affect the external environment, thus leading to no observation feedback. Instead, a thought $\\hat{a}_{t}$ aims to compose useful information by reasoning over the current context $c_{t}$, and update the context $c_{t+1}=(c_{t},\\hat{a}_{t})$ to support future reasoning or acting.\nAs shown in Figure 1, there could be various types of useful thoughts, e.g. decomposing task goals and create action plans (2b, Act 1; 1d, Thought 1), injecting commonsense knowledge relevant to task solving (2b, Act 1), extracting important parts from observations (1d, Thought2, 4), track progress and transit action plans (2b, Act 8), handle exceptions and adjust action plans (1d, Thought 3), and so on.\n\nHowever, as the language space $\\mathcal{L}$ is unlimited, learning in this augmented action space is difficult and requires strong language priors. In this paper, we mainly focus on\nthe setup where a frozen large language model, PaLM-540B (Chowdhery et al., 2022)11We show some GPT-3 (Brown et al., 2020) results in Appendix A.1, which outperforms PaLM-540B., is prompted with few-shot in-context examples to generate both domain-specific actions and free-form language thoughts for task solving (Figure 1 (1d), (2b)). Each in-context example is a human trajectory of actions, thoughts, and environment observations to solve a task instance (see Appendix C).\nFor the tasks where reasoning is of primary importance (Figure 1(1)), we alternate the generation of thoughts and actions so that the task-solving trajectory consists of multiple thought-action-observation steps.\nIn contrast, for decision making tasks that potentially involve a large number of actions (Figure 1(2)), thoughts only need to appear sparsely in the most relevant positions of a trajectory, so we let the language model decide the asynchronous occurrence of thoughts and actions for itself.\n\nSince decision making and reasoning capabilities are integrated into a large language model, \\model enjoys several unique features:\nA) Intuitive and easy to design: Designing \\model prompts is straightforward as human annotators just type down their thoughts in language on top of their actions taken. No ad-hoc format choice, thought design, or example selection is used in this paper. We detail prompt design for each task in Sections 3 and 4.\nB) General and flexible: Due to the flexible thought space and thought-action occurrence format, \\model works for diverse tasks with distinct action spaces and reasoning needs, including but not limited to QA, fact verification, text game, and web navigation.\nC) Performant and robust: \\model shows strong generalization to new task instances while learning solely from one to six in-context examples, consistently outperforming baselines with only reasoning or acting across different domains. We also show in Section 3 additional benefits when finetuning is enabled, and in Section 4 how \\model performance is robust to prompt selections.\nD) Human aligned and controllable: \\model promises an interpretable sequential decision making and reasoning process where humans can easily inspect reasoning and factual correctness. Moreover, humans can also control or correct the agent behavior on the go by thought editing, as shown in Figure 5 in Section 4.\n\n## Knowledge-Intensive Reasoning Tasks\n\nWe begin with knowledge-intensive reasoning tasks like multi-hop question answering and fact verification.\nAs shown in Figure 1(1d), by interacting with a Wikipedia API, \\model is able to retrieve information to support reasoning, while also use reasoning to target what to retrieve next, demonstrating a synergy of reasoning and acting.\n\n### Setup\n\n### Methods\n\n### Results and Observations\n\n## Decision Making Tasks\n\nWe also test \\model on two language-based interactive decision-making tasks, ALFWorld and WebShop,\nboth of which feature complex environments that require agents to act over long horizons with sparse rewards, warranting the need for reasoning to act and explore effectively.\n\n## Related Work\n\n## Conclusion\n\nWe have proposed \\model – a simple yet effective method for synergizing reasoning and acting in large language models. Through a diverse set of experiments on multi-hop question-answering, fact checking, and interactive decision-making tasks, we show that \\model leads to superior performance with interpretable decision traces. Despite the simplicity of our method, complex tasks with large action spaces require more demonstrations to learn well, which unfortunately can easily go beyond the input length limit of in-context learning. We explore the fine-tuning approach on HotpotQA with initial promising results, but learning from more high-quality human annotations will be the desiderata to further improve the performance. Scaling up \\model with multi-task training and combining it with complementary paradigms like reinforcement learning could result in stronger agents that further unlock the potential of LLMs for more applications.\n\n#### Acknowledgments\n\nWe thank the support and feedback of many people from Google Brain team and Princeton NLP Group.\nThis work was supported in part by the National Science Foundation under Grant No. 2107048. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.\n\n#### Reproducibility Statement\n\nOur main experiments are done on PaLM (Chowdhery et al., 2022), which is not an openly accessible model yet. To increase reproducibility, we have included all used prompts in Appendix C, additional experiments using GPT-3 (Brown et al., 2020) in Appendix A.1, and associated GPT-3 \\model prompting code at https://anonymous.4open.science/r/ReAct-2268/.\n\n#### Ethics Statement\n\nprompts large language models to generate more human interpretable, diagnosable, and controllable task-solving trajectories than previous methods.\nHowever, hooking up a large language model with an action space to interact with external environments (e.g. the web, physical environments) has potential dangers, e.g.  looking up inappropriate or private information, or taking harmful actions in an environment.\nOur experiments minimize such risks by limiting the interactions to specific websites (Wikipedia or WebShop) that are free of private information, without any dangerous actions in the action space design\n(i.e. models cannot really buy products on WebShop the research benchmark, or edit Wikipedia).\nWe believe researchers should be aware of such risks before designing more extensive experiments in the future.\n",
+  "extracted_at": "2026-04-13T14:29:34.545770"
+}

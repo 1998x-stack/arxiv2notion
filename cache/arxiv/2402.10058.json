@@ -1,0 +1,22 @@
+{
+  "arxiv_id": "2402.10058v2",
+  "title": "Towards Safer Large Language Models through Machine Unlearning",
+  "authors": [
+    "Zheyuan Liu",
+    "Guangyao Dou",
+    "Zhaoxuan Tan",
+    "Yijun Tian",
+    "Meng Jiang"
+  ],
+  "abstract": "The rapid advancement of Large Language Models (LLMs) has demonstrated their vast potential across various domains, attributed to their extensive pretraining knowledge and exceptional generalizability. However, LLMs often encounter challenges in generating harmful content when faced with problematic prompts. To address this problem, existing work attempted to implement a gradient ascent based approach to prevent LLMs from producing harmful output. While these methods can be effective, they frequently impact the model utility in responding to normal prompts. To address this gap, we introduce Selective Knowledge negation Unlearning (SKU), a novel unlearning framework for LLMs, designed to eliminate harmful knowledge while preserving utility on normal prompts. Specifically, SKU is consisted of two stages: harmful knowledge acquisition stage and knowledge negation stage. The first stage aims to identify and acquire harmful knowledge within the model, whereas the second is dedicated to remove this knowledge. SKU selectively isolates and removes harmful knowledge in model parameters, ensuring the model's performance remains robust on normal prompts. Our experiments conducted across various LLM architectures demonstrate that SKU identifies a good balance point between removing harmful information and preserving utility.",
+  "categories": [
+    "cs.CL"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2024-02-15T16:28:34+00:00",
+  "updated": "2024-06-05T04:57:09+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Accepted by ACL 2024 Findings",
+  "pdf_url": "https://arxiv.org/pdf/2402.10058v2.pdf"
+}

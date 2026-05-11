@@ -1,0 +1,2214 @@
+{
+  "paper_id": "2603.13428v1",
+  "title": "EvoClaw: Evaluating AI Agents on Continuous Software Evolution",
+  "authors": [
+    "Gangda Deng",
+    "Zhaoling Chen",
+    "Zhongming Yu",
+    "Haoyang Fan",
+    "Yuhong Liu",
+    "Yuxin Yang",
+    "Dhruv Parikh",
+    "Rajgopal Kannan",
+    "Le Cong",
+    "Mengdi Wang",
+    "Qian Zhang",
+    "Viktor Prasanna",
+    "Xiangru Tang",
+    "Xingyao Wang"
+  ],
+  "affiliations": [
+    "USC",
+    "Equal Contribution",
+    "UCR",
+    "UCSD",
+    "Army Research Office",
+    "Stanford",
+    "Princeton",
+    "Haven",
+    "OpenHands"
+  ],
+  "abstract": "Code: github.com/Hydrapse/EvoClaw Data: huggingface.co/datasets/hyd2apse/EvoClaw-data Leaderboard: evo-claw.com With AI agents increasingly deployed as long-running systems, it becomes essential to autonomously construct and continuously evolve customized software to enable interaction within dynamic environments. Yet, existing benchmarks evaluate agents on isolated, one-off coding tasks, neglecting the temporal dependencies and technical debt inherent in real-world software evolution. To bridge this gap, we introduce DeepCommit, an agentic pipeline that reconstructs verifiable Milestone DAGs from noisy commit logs, where milestones are defined as semantically cohesive development goals. These executable sequences enable EvoClaw, a novel benchmark that requires agents to sustain system integrity and limit error accumulation, dimensions of long-term software evolution largely missing from current benchmarks. Our evaluation of 12 frontier models across 4 agent frameworks reveals a critical vulnerability: overall performance scores drop significantly from >>80% on isolated tasks to at most 38% in continuous settings, exposing agents’ profound struggle with long-term maintenance and error propagation.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Frontier LLM-powered agents (e.g., Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and OpenHands (Wang et al., 2024)) are increasingly deployed as long-running systems into complex, open-ended environments, such as OpenClaw11https://github.com/openclaw/openclaw, where static zero-shot capabilities are intrinsically insufficient. To operate effectively in these dynamic settings, agents must treat software as a skill, which involves the autonomous development and continuous refinement of customized software interfaces. As the agent iteratively adapts to successive requirements from end-users and ongoing environmental feedback, its continuous development efforts accumulate, naturally forming a complete repository evolution history.",
+        "Yet, evaluation for such long-running agent systems remains largely under-explored.\nWhile benchmarks for agents on coding tasks have advanced from isolated function completion to full-scale codebase generation (Table 1), they predominantly treat development as independent, one-off tasks. A critical dimension remains unaddressed: the temporal structure of software evolution. A true repository evolution benchmark must capture the full evolution itinerary—a continuous stream of dependent tasks where early implementation decisions constrain subsequent ones. Ignoring these dependencies allows agents to take expedient shortcuts that satisfy immediate tests but silently accumulate technical debt that invisible to current isolated evaluations (Yao, 2025).",
+        "To capture these long-term dynamics in a Repository Evolution benchmark, extracting realistic itineraries from open-source repositories is essential.\nHowever, determining the appropriate task granularity is non-trivial.\nIntuitively, one might attempt to measure evolution at the release-level.\nHowever, this granularity is too coarse: release snapshots collapse the hundreds of interdependent commits between versions into a single update, flattening the fine-grained dependency structure that drives evolutionary changes.\nIn contrast, the commit-level history is too fine-grained: many commits are trivial (e.g., typo fixes) and the linear commit sequence encodes only chronological apply order, introducing spurious dependencies between unrelated changes.",
+        "To address this, we propose modeling software evolution at the Milestone-level.\nWe define a milestone as a coherent functional unit that preserves dependency constraints.\nThis granularity strikes a crucial balance: unlike releases, it retains the fine-grained development dependencies and structural evolution of the codebase; unlike commits, it encapsulates realistic and coherent functional goals.\nFunctional dependencies among milestones naturally form a Directed Acyclic Graph (DAG), which captures genuine prerequisite constraints while allowing independent features to proceed in parallel.\nHowever, constructing milestone DAGs requires reordering and grouping commits, which disrupts the native git history.\nThis poses a severe challenge to correctness: applying reordered patches often breaks compilation and test collection, jeopardizing the benchmark’s executability and realism.",
+        "To resolve this, we introduce DeepCommit, an automated agentic pipeline that reconstructs verifiable software evolution itineraries in the form of Milestone DAGs.\nBy synergizing static analysis, LLM-agent-driven milestone construction, and runtime validation, DeepCommit ensures the synthesized milestones are executable and testable.\nPowered by Claude Opus 4.5, it achieves a high average test collection success rate of $>$85%, ensuring comprehensive verification coverage.\nDesigned as a scalable agentic framework, DeepCommit is poised to leverage future LLM advancements to harvest increasingly accurate and extensive evolution itineraries from the vast open-source ecosystem.",
+        "Building on this foundation, we present EvoClaw, a benchmark for evaluating LLM agents under continuous software evolution.\nEvoClaw comprises 98 human-verified milestones across 7\nevolution itineraries (milestone DAGs), each from a release range of a unique high-impact open-source Repository, and spanning five programming languages.\nRather than solving independent tasks, agents in EvoClaw are tasked with evolving a codebase through streams of these dependency-constrained milestones, closely mirroring real-world development scenarios.\nA single full evaluation costs approximately $500 with frontier models such as Claude Opus 4.5.\nTo achieve a high score in this setting, an agent must maintain long-term context, manage architectural consistency, and prevent error accumulation across extended development horizons.",
+        "Using EvoClaw, we conduct a comprehensive evaluation of 4 frontier agent frameworks and 10 state-of-the-art LLMs. We assess performance using a unified Score (Section 5.1), which balances Recall (completeness of new feature implementation) and Precision (robustness against regressions), along with a strict Resolve Rate for fully completed milestones. Our evaluation reveals the following key findings regarding agent capabilities in continuous software evolution:",
+        "A fundamental performance gap: Continuous vs. Independent. (Section 5.2) Frontier models exhibit a substantial degradation from independent to continuous task evaluation.\nScores drop from over $\\sim$80% on isolated tasks to at most 38.03% (Claude Opus 4.6) in continuous environments, with a mere 13.37% Resolve Rate (Gemini 3 Pro).",
+        "Recall grows linearly but Precision saturates. We identify a fundamental asymmetry in continuous software evolution (Section 5.4): while frontier agents retain the capability to implement new features (linear Recall growth), they fail to prevent regressions as the system evolves (saturated Precision). This indicates that agents struggle primarily with system-level maintenance rather than local implementation.",
+        "Accumulated errors stall downstream progress. Unresolved regressions trigger a “snowball effect” where errors accumulate faster than agents can fix them (Section 5.5). Early bugs propagate through dependency chains to contaminate downstream tasks, eventually stalling development entirely.",
+        "Proactive exploration and verification mitigate technical debt. Behavioral analysis shows that successful sustained evolution relies on proactive codebase exploration and disciplined test verification, whereas both blind trial-and-error and the absence of verification accelerate failure (Section 5.6)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [
+        {
+          "caption": "Representative software engineering benchmarks for LLMs. Unlike Codebase Generation benchmarks that evaluate agents on isolated or static snapshots, Repository Evolution introduces the temporal dimension, requiring agents to continuously build upon their own development history. EvoClaw adopts the Milestone-level granularity, a semantic cluster of commits toward a coherent development goal, avoiding the noise of individual commits and the excessive scope of full releases. Dev History denotes the agent’s own development trace accumulated from preceding tasks.",
+          "headers": [],
+          "rows": [
+            [
+              "Category",
+              "Benchmark",
+              "Language",
+              "Task Properties",
+              "Cross-task Dependency",
+              "Task Collection"
+            ],
+            [
+              "Granularity",
+              "Avg LoC",
+              "Code Context"
+            ],
+            [
+              "Function Completion",
+              "HumanEval (Chen et al., 2021)",
+              "Python",
+              "Function-level",
+              "6.8",
+              "–",
+              "–",
+              "Manual"
+            ],
+            [
+              "Issue Resolution",
+              "SWE-bench (Jimenez et al., 2024)",
+              "Python",
+              "Commit-level",
+              "32.8",
+              "Codebase",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "SWE-rebench (Badertdinov et al., 2025)",
+              "Python",
+              "Commit-level",
+              "142",
+              "Codebase",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "Multi-SWE-bench (Zan et al., 2025)",
+              "Multi",
+              "Commit-level",
+              "246",
+              "Codebase",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "SWE-bench Pro (Deng et al., 2025)",
+              "Multi",
+              "Commit-level",
+              "107",
+              "Codebase",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "Codebase Generation",
+              "SWE-Evo (Thai et al., 2025)",
+              "Python",
+              "Release-level",
+              "611",
+              "Codebase",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "Commit0 (Zhao et al., 2025)",
+              "Python",
+              "Project-level",
+              ">>3k",
+              "Codebase Skeleton",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "NL2Repo (Ding et al., 2026)",
+              "Python",
+              "Project-level",
+              ">>3k",
+              "–",
+              "–",
+              "Rule-based"
+            ],
+            [
+              "Repository Evolution",
+              "EvoClaw (Ours)",
+              "Multi",
+              "Milestone-level",
+              "570",
+              "Codebase + Dev History",
+              "Milestone DAG",
+              "Agentic"
+            ]
+          ],
+          "label": null
+        }
+      ],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Frontier LLM-powered agents (e.g., Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and OpenHands (Wang et al., 2024)) are increasingly deployed as long-running systems into complex, open-ended environments, such as OpenClaw11https://github.com/openclaw/openclaw, where static zero-shot capabilities are intrinsically insufficient. To operate effectively in these dynamic settings, agents must treat software as a skill, which involves the autonomous development and continuous refinement of customized software interfaces. As the agent iteratively adapts to successive requirements from end-users and ongoing environmental feedback, its continuous development efforts accumulate, naturally forming a complete repository evolution history."
+        },
+        {
+          "type": "para",
+          "data": "Yet, evaluation for such long-running agent systems remains largely under-explored.\nWhile benchmarks for agents on coding tasks have advanced from isolated function completion to full-scale codebase generation (Table 1), they predominantly treat development as independent, one-off tasks. A critical dimension remains unaddressed: the temporal structure of software evolution. A true repository evolution benchmark must capture the full evolution itinerary—a continuous stream of dependent tasks where early implementation decisions constrain subsequent ones. Ignoring these dependencies allows agents to take expedient shortcuts that satisfy immediate tests but silently accumulate technical debt that invisible to current isolated evaluations (Yao, 2025)."
+        },
+        {
+          "type": "table",
+          "data": {
+            "caption": "Representative software engineering benchmarks for LLMs. Unlike Codebase Generation benchmarks that evaluate agents on isolated or static snapshots, Repository Evolution introduces the temporal dimension, requiring agents to continuously build upon their own development history. EvoClaw adopts the Milestone-level granularity, a semantic cluster of commits toward a coherent development goal, avoiding the noise of individual commits and the excessive scope of full releases. Dev History denotes the agent’s own development trace accumulated from preceding tasks.",
+            "headers": [],
+            "rows": [
+              [
+                "Category",
+                "Benchmark",
+                "Language",
+                "Task Properties",
+                "Cross-task Dependency",
+                "Task Collection"
+              ],
+              [
+                "Granularity",
+                "Avg LoC",
+                "Code Context"
+              ],
+              [
+                "Function Completion",
+                "HumanEval (Chen et al., 2021)",
+                "Python",
+                "Function-level",
+                "6.8",
+                "–",
+                "–",
+                "Manual"
+              ],
+              [
+                "Issue Resolution",
+                "SWE-bench (Jimenez et al., 2024)",
+                "Python",
+                "Commit-level",
+                "32.8",
+                "Codebase",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "SWE-rebench (Badertdinov et al., 2025)",
+                "Python",
+                "Commit-level",
+                "142",
+                "Codebase",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "Multi-SWE-bench (Zan et al., 2025)",
+                "Multi",
+                "Commit-level",
+                "246",
+                "Codebase",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "SWE-bench Pro (Deng et al., 2025)",
+                "Multi",
+                "Commit-level",
+                "107",
+                "Codebase",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "Codebase Generation",
+                "SWE-Evo (Thai et al., 2025)",
+                "Python",
+                "Release-level",
+                "611",
+                "Codebase",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "Commit0 (Zhao et al., 2025)",
+                "Python",
+                "Project-level",
+                ">>3k",
+                "Codebase Skeleton",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "NL2Repo (Ding et al., 2026)",
+                "Python",
+                "Project-level",
+                ">>3k",
+                "–",
+                "–",
+                "Rule-based"
+              ],
+              [
+                "Repository Evolution",
+                "EvoClaw (Ours)",
+                "Multi",
+                "Milestone-level",
+                "570",
+                "Codebase + Dev History",
+                "Milestone DAG",
+                "Agentic"
+              ]
+            ],
+            "label": null
+          }
+        },
+        {
+          "type": "para",
+          "data": "To capture these long-term dynamics in a Repository Evolution benchmark, extracting realistic itineraries from open-source repositories is essential.\nHowever, determining the appropriate task granularity is non-trivial.\nIntuitively, one might attempt to measure evolution at the release-level.\nHowever, this granularity is too coarse: release snapshots collapse the hundreds of interdependent commits between versions into a single update, flattening the fine-grained dependency structure that drives evolutionary changes.\nIn contrast, the commit-level history is too fine-grained: many commits are trivial (e.g., typo fixes) and the linear commit sequence encodes only chronological apply order, introducing spurious dependencies between unrelated changes."
+        },
+        {
+          "type": "para",
+          "data": "To address this, we propose modeling software evolution at the Milestone-level.\nWe define a milestone as a coherent functional unit that preserves dependency constraints.\nThis granularity strikes a crucial balance: unlike releases, it retains the fine-grained development dependencies and structural evolution of the codebase; unlike commits, it encapsulates realistic and coherent functional goals.\nFunctional dependencies among milestones naturally form a Directed Acyclic Graph (DAG), which captures genuine prerequisite constraints while allowing independent features to proceed in parallel.\nHowever, constructing milestone DAGs requires reordering and grouping commits, which disrupts the native git history.\nThis poses a severe challenge to correctness: applying reordered patches often breaks compilation and test collection, jeopardizing the benchmark’s executability and realism."
+        },
+        {
+          "type": "para",
+          "data": "To resolve this, we introduce DeepCommit, an automated agentic pipeline that reconstructs verifiable software evolution itineraries in the form of Milestone DAGs.\nBy synergizing static analysis, LLM-agent-driven milestone construction, and runtime validation, DeepCommit ensures the synthesized milestones are executable and testable.\nPowered by Claude Opus 4.5, it achieves a high average test collection success rate of $>$85%, ensuring comprehensive verification coverage.\nDesigned as a scalable agentic framework, DeepCommit is poised to leverage future LLM advancements to harvest increasingly accurate and extensive evolution itineraries from the vast open-source ecosystem."
+        },
+        {
+          "type": "para",
+          "data": "Building on this foundation, we present EvoClaw, a benchmark for evaluating LLM agents under continuous software evolution.\nEvoClaw comprises 98 human-verified milestones across 7\nevolution itineraries (milestone DAGs), each from a release range of a unique high-impact open-source Repository, and spanning five programming languages.\nRather than solving independent tasks, agents in EvoClaw are tasked with evolving a codebase through streams of these dependency-constrained milestones, closely mirroring real-world development scenarios.\nA single full evaluation costs approximately $500 with frontier models such as Claude Opus 4.5.\nTo achieve a high score in this setting, an agent must maintain long-term context, manage architectural consistency, and prevent error accumulation across extended development horizons."
+        },
+        {
+          "type": "para",
+          "data": "Using EvoClaw, we conduct a comprehensive evaluation of 4 frontier agent frameworks and 10 state-of-the-art LLMs. We assess performance using a unified Score (Section 5.1), which balances Recall (completeness of new feature implementation) and Precision (robustness against regressions), along with a strict Resolve Rate for fully completed milestones. Our evaluation reveals the following key findings regarding agent capabilities in continuous software evolution:"
+        },
+        {
+          "type": "para",
+          "data": "A fundamental performance gap: Continuous vs. Independent. (Section 5.2) Frontier models exhibit a substantial degradation from independent to continuous task evaluation.\nScores drop from over $\\sim$80% on isolated tasks to at most 38.03% (Claude Opus 4.6) in continuous environments, with a mere 13.37% Resolve Rate (Gemini 3 Pro)."
+        },
+        {
+          "type": "para",
+          "data": "Recall grows linearly but Precision saturates. We identify a fundamental asymmetry in continuous software evolution (Section 5.4): while frontier agents retain the capability to implement new features (linear Recall growth), they fail to prevent regressions as the system evolves (saturated Precision). This indicates that agents struggle primarily with system-level maintenance rather than local implementation."
+        },
+        {
+          "type": "para",
+          "data": "Accumulated errors stall downstream progress. Unresolved regressions trigger a “snowball effect” where errors accumulate faster than agents can fix them (Section 5.5). Early bugs propagate through dependency chains to contaminate downstream tasks, eventually stalling development entirely."
+        },
+        {
+          "type": "para",
+          "data": "Proactive exploration and verification mitigate technical debt. Behavioral analysis shows that successful sustained evolution relies on proactive codebase exploration and disciplined test verification, whereas both blind trial-and-error and the absence of verification accelerate failure (Section 5.6)."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [
+        "LLM-Driven Coding Agents.\nWhile basic Bash tools provide a foundation for interacting with the environment, equipping LLMs with specialized scaffolding significantly enhances efficiency, reliability, and user-friendliness.\nSWE-agent (Yang et al., 2024) introduced the Agent-Computer Interface (ACI), mini-SWE-agent (Lieret et al., 2025) demonstrated that a minimal 100-line agent can remain competitive, and OpenHands (Wang et al., 2024) targets end-to-end autonomous issue resolution.\nCommercial tools span diverse integration paradigms: Devin (Labs, 2024) pioneered fully autonomous software engineering, GitHub Copilot (GitHub, 2025), Cursor (Cursor, 2024), Trae (ByteDance, 2025), and Antigravity (Google, 2025a) embed agents within IDE or cloud workflows, while Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and Gemini CLI (Google, 2025b) provide terminal-based execution.\nDespite these distinct paradigms, all major platforms have converged on providing terminal-based agentic interfaces, which is the modality we adopt for evaluation in this work.\nAs LLMs grow more capable, agent scaffolds evolve to grant greater autonomy, supporting long-horizon tasks with complex dependencies.",
+        "Software Engineering Benchmarks for LLMs.",
+        "Recent benchmarks have progressed from isolated function completion to realistic codebase generation evaluations.\nSWE-bench (Jimenez et al., 2024) introduced issue resolution in real-world codebases, followed by quality-controlled variants such as SWE-bench Verified (Chowdhury et al., 2024), SWE-bench Pro (Deng et al., 2025), and multilingual extensions in Multi-SWE-bench (Zan et al., 2025).\nBeyond issue fixing, SWE-Evo (Thai et al., 2025) and Commit-0 (Zhao et al., 2025) explore longer-horizon development workflows, NL2Repo (Ding et al., 2026) evaluates full repository generation from natural-language specifications, and automated pipelines such as SWE-rebench (Badertdinov et al., 2025) and SWE-bench Live (Zhang et al., 2025) improve realism and data hygiene.\nDespite these advances, most benchmarks model software engineering as static, independent tasks.\nThis overlooks the continuous, dependency-driven nature of real-world software evolution (Yao, 2025) and underutilizes the rich developmental structure encoded in version histories.\nConsequently, current evaluations primarily measure short-horizon task completion rather than sustained codebase evolution."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x2.png",
+          "alt": "Refer to caption",
+          "caption": "The DeepCommit pipeline architecture. Phase 1 extracts structured data from commit history through static analysis, including source filtering, commit extraction, PR/Issues, releases, commit DAG, code metrics, and symbol changes. Phase 2 employs an LLM agent to construct a Milestone DAG via four iterative stages: seed discovery, milestone consolidation, dependency inference, and milestone decomposition. Phase 3 resolves runtime dependencies through testbed construction and test collection, with DAG refinement and fallback patches as repair strategies, followed by flaky test filtering to produce an executable testbed. Quality Assurance validates outputs at textual, compilation, and test collection levels. See Appendix G for all DAG visualizations.",
+          "label": "S2.F2"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "LLM-Driven Coding Agents.\nWhile basic Bash tools provide a foundation for interacting with the environment, equipping LLMs with specialized scaffolding significantly enhances efficiency, reliability, and user-friendliness.\nSWE-agent (Yang et al., 2024) introduced the Agent-Computer Interface (ACI), mini-SWE-agent (Lieret et al., 2025) demonstrated that a minimal 100-line agent can remain competitive, and OpenHands (Wang et al., 2024) targets end-to-end autonomous issue resolution.\nCommercial tools span diverse integration paradigms: Devin (Labs, 2024) pioneered fully autonomous software engineering, GitHub Copilot (GitHub, 2025), Cursor (Cursor, 2024), Trae (ByteDance, 2025), and Antigravity (Google, 2025a) embed agents within IDE or cloud workflows, while Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and Gemini CLI (Google, 2025b) provide terminal-based execution.\nDespite these distinct paradigms, all major platforms have converged on providing terminal-based agentic interfaces, which is the modality we adopt for evaluation in this work.\nAs LLMs grow more capable, agent scaffolds evolve to grant greater autonomy, supporting long-horizon tasks with complex dependencies."
+        },
+        {
+          "type": "para",
+          "data": "Software Engineering Benchmarks for LLMs."
+        },
+        {
+          "type": "para",
+          "data": "Recent benchmarks have progressed from isolated function completion to realistic codebase generation evaluations.\nSWE-bench (Jimenez et al., 2024) introduced issue resolution in real-world codebases, followed by quality-controlled variants such as SWE-bench Verified (Chowdhury et al., 2024), SWE-bench Pro (Deng et al., 2025), and multilingual extensions in Multi-SWE-bench (Zan et al., 2025).\nBeyond issue fixing, SWE-Evo (Thai et al., 2025) and Commit-0 (Zhao et al., 2025) explore longer-horizon development workflows, NL2Repo (Ding et al., 2026) evaluates full repository generation from natural-language specifications, and automated pipelines such as SWE-rebench (Badertdinov et al., 2025) and SWE-bench Live (Zhang et al., 2025) improve realism and data hygiene.\nDespite these advances, most benchmarks model software engineering as static, independent tasks.\nThis overlooks the continuous, dependency-driven nature of real-world software evolution (Yao, 2025) and underutilizes the rich developmental structure encoded in version histories.\nConsequently, current evaluations primarily measure short-horizon task completion rather than sustained codebase evolution."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x2.png",
+            "alt": "Refer to caption",
+            "caption": "The DeepCommit pipeline architecture. Phase 1 extracts structured data from commit history through static analysis, including source filtering, commit extraction, PR/Issues, releases, commit DAG, code metrics, and symbol changes. Phase 2 employs an LLM agent to construct a Milestone DAG via four iterative stages: seed discovery, milestone consolidation, dependency inference, and milestone decomposition. Phase 3 resolves runtime dependencies through testbed construction and test collection, with DAG refinement and fallback patches as repair strategies, followed by flaky test filtering to produce an executable testbed. Quality Assurance validates outputs at textual, compilation, and test collection levels. See Appendix G for all DAG visualizations.",
+            "label": "S2.F2"
+          }
+        }
+      ]
+    },
+    {
+      "title": "DeepCommit: An Automated Pipeline for Reconstructing Software Evolution",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "From Raw Commits to Milestone DAGs",
+          "level": 3,
+          "paragraphs": [
+            "Software repositories encode rich evolutionary trajectories, yet raw commit histories remain noisy, fragmented, and inadequate as executable development sequences.\nCommits vary widely in granularity, semantic clarity, and dependency structure, while parallel branches, squash merges, and non-functional changes obscure true developmental relationships.\nRelying on documentation or release notes alone lacks sufficient resolution to reconstruct precise code evolution.\nDeepCommit addresses this challenge by transforming linear git histories into structured, verifiable Milestone DAGs, where each node represents a coherent, testable unit of development and edges encode dependency constraints across evolution phases."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Software repositories encode rich evolutionary trajectories, yet raw commit histories remain noisy, fragmented, and inadequate as executable development sequences.\nCommits vary widely in granularity, semantic clarity, and dependency structure, while parallel branches, squash merges, and non-functional changes obscure true developmental relationships.\nRelying on documentation or release notes alone lacks sufficient resolution to reconstruct precise code evolution.\nDeepCommit addresses this challenge by transforming linear git histories into structured, verifiable Milestone DAGs, where each node represents a coherent, testable unit of development and edges encode dependency constraints across evolution phases."
+            }
+          ]
+        },
+        {
+          "title": "Overall Agent-Driven Pipeline",
+          "level": 3,
+          "paragraphs": [
+            "As illustrated in Figure˜2, DeepCommit reconstructs software evolution itineraries through an end-to-end pipeline that sequentially integrates: (1) commit history preprocessing, (2) milestone DAG construction, and (3) executable environment resolution."
+          ],
+          "subsections": [
+            {
+              "title": "Commit History Preprocessing",
+              "level": 5,
+              "paragraphs": [
+                "Given a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist.",
+                "To facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "Given a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist."
+                },
+                {
+                  "type": "para",
+                  "data": "To facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling."
+                }
+              ]
+            },
+            {
+              "title": "Milestone DAG Construction",
+              "level": 5,
+              "paragraphs": [
+                "Organizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure.",
+                "Seed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction.",
+                "Milestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone.",
+                "Dependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning.",
+                "Granularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B)."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "Organizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure."
+                },
+                {
+                  "type": "para",
+                  "data": "Seed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction."
+                },
+                {
+                  "type": "para",
+                  "data": "Milestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone."
+                },
+                {
+                  "type": "para",
+                  "data": "Dependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning."
+                },
+                {
+                  "type": "para",
+                  "data": "Granularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B)."
+                }
+              ]
+            },
+            {
+              "title": "Runtime Environment Resolution",
+              "level": 5,
+              "paragraphs": [
+                "To transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations.",
+                "Milestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration.",
+                "Environment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement.",
+                "Test Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C)."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "To transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations."
+                },
+                {
+                  "type": "para",
+                  "data": "Milestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration."
+                },
+                {
+                  "type": "para",
+                  "data": "Environment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement."
+                },
+                {
+                  "type": "para",
+                  "data": "Test Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C)."
+                }
+              ]
+            }
+          ],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "As illustrated in Figure˜2, DeepCommit reconstructs software evolution itineraries through an end-to-end pipeline that sequentially integrates: (1) commit history preprocessing, (2) milestone DAG construction, and (3) executable environment resolution."
+            }
+          ]
+        },
+        {
+          "title": "Automated Quality Assurance",
+          "level": 3,
+          "paragraphs": [
+            "To ensure the reliability and reproducibility of our evaluation, we rigorously validate each milestone testbed across three core dimensions:",
+            "Milestone Graph Validity. We verify the structural integrity of the reconstructed history. This includes confirming commit completeness (100% coverage of the target range), dependency consistency (ensuring milestone dependencies respect underlying commit dependencies), and DAG correctness (validating acyclicity).",
+            "Runtime Executability. We ensure that errors stem from agent code, not infrastructure. We verify testbed compilability by ensuring successful build and test collection in both states. We also strictly monitor execution logs to ensure environment-induced errors remain negligible.",
+            "Evaluation Reliability. We assess the stability of the test suites. We achieve a high test collection rate (87.1%). We ensure test consistency by validating a negligible Pass-to-Fail rate ($\\leq$0.026%) and filtering flaky tests through multiple runs. Finally, we enforce retained milestone to have at least one F2P or N2P test signal (details in Appendix D)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x3.png",
+              "alt": "Refer to caption",
+              "caption": "Illustration of the evaluation pipelines. (a) In the Independent Task Evaluation Workflow, the environment resets after each task. (b) In the Continuous Task Evaluation Workflow, tasks are organized as a dependency graph. The agent continuously evolves the Codebase from a base snapshot. Upon completing a task (e.g., M1 & M2), the repository is snapshotted for Isolated Evaluation while the planner unlocks subsequent tasks (e.g., M3) for the agent to fetch, ensuring a continuous and stateful development loop.",
+              "label": "S3.F3"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To ensure the reliability and reproducibility of our evaluation, we rigorously validate each milestone testbed across three core dimensions:"
+            },
+            {
+              "type": "para",
+              "data": "Milestone Graph Validity. We verify the structural integrity of the reconstructed history. This includes confirming commit completeness (100% coverage of the target range), dependency consistency (ensuring milestone dependencies respect underlying commit dependencies), and DAG correctness (validating acyclicity)."
+            },
+            {
+              "type": "para",
+              "data": "Runtime Executability. We ensure that errors stem from agent code, not infrastructure. We verify testbed compilability by ensuring successful build and test collection in both states. We also strictly monitor execution logs to ensure environment-induced errors remain negligible."
+            },
+            {
+              "type": "para",
+              "data": "Evaluation Reliability. We assess the stability of the test suites. We achieve a high test collection rate (87.1%). We ensure test consistency by validating a negligible Pass-to-Fail rate ($\\leq$0.026%) and filtering flaky tests through multiple runs. Finally, we enforce retained milestone to have at least one F2P or N2P test signal (details in Appendix D)."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x3.png",
+                "alt": "Refer to caption",
+                "caption": "Illustration of the evaluation pipelines. (a) In the Independent Task Evaluation Workflow, the environment resets after each task. (b) In the Continuous Task Evaluation Workflow, tasks are organized as a dependency graph. The agent continuously evolves the Codebase from a base snapshot. Upon completing a task (e.g., M1 & M2), the repository is snapshotted for Isolated Evaluation while the planner unlocks subsequent tasks (e.g., M3) for the agent to fetch, ensuring a continuous and stateful development loop.",
+                "label": "S3.F3"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Commit History Preprocessing",
+          "level": 4,
+          "paragraphs": [
+            "Given a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist.",
+            "To facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Given a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist."
+            },
+            {
+              "type": "para",
+              "data": "To facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling."
+            }
+          ]
+        },
+        {
+          "title": "Milestone DAG Construction",
+          "level": 4,
+          "paragraphs": [
+            "Organizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure.",
+            "Seed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction.",
+            "Milestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone.",
+            "Dependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning.",
+            "Granularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B)."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Organizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure."
+            },
+            {
+              "type": "para",
+              "data": "Seed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction."
+            },
+            {
+              "type": "para",
+              "data": "Milestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone."
+            },
+            {
+              "type": "para",
+              "data": "Dependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning."
+            },
+            {
+              "type": "para",
+              "data": "Granularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B)."
+            }
+          ]
+        },
+        {
+          "title": "Runtime Environment Resolution",
+          "level": 4,
+          "paragraphs": [
+            "To transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations.",
+            "Milestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration.",
+            "Environment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement.",
+            "Test Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C)."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations."
+            },
+            {
+              "type": "para",
+              "data": "Milestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration."
+            },
+            {
+              "type": "para",
+              "data": "Environment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement."
+            },
+            {
+              "type": "para",
+              "data": "Test Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C)."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "EvoClaw: Benchmarking Continuous Software Evolution",
+      "level": 2,
+      "paragraphs": [
+        "EvoClaw introduces a novel evaluation paradigm designed to assess an agent’s ability to evolve and maintain a software codebase over an extended lifecycle.\nAs shown in Figure˜3, unlike traditional benchmarks that focus on resolving independent issues,\nEvoClaw simulates a realistic, continuous development process where requirements arrive as a stream, and tasks have strict sequential dependencies."
+      ],
+      "subsections": [
+        {
+          "title": "The Continuous Task Evaluation Framework",
+          "level": 3,
+          "paragraphs": [
+            "The framework orchestrates a continuous development pipeline: an external planner dynamically unlocks tasks based on a dependency graph, the agent implements them in a persistent codebase, and the framework asynchronously evaluates snapshots upon submission. This design explicitly decouples roadmap planning from implementation, allowing us to assess the agent’s ability to maintain and evolve software within a structured workflow.\nThe framework comprises three core components:",
+            "Dependency-Driven Task Stream. Requirements are not presented in a static batch but are unlocked dynamically. The system maintains a DAG-based task scheduler where a new milestone $M_{i}$ becomes available to the agent if and only if all its prerequisite milestones $\\{M_{j}\\mid M_{i}\\mathrel{depends}\\,\\mathrel{on}M_{j}\\}$ have been completed. This simulates real-world constraints in which foundational features must be established before dependent features are implemented.",
+            "Continuous Evolution Environment. The agent operates within a persistent, stateful environment where modifications from each task persist into the next. This compels the agent to maintain the long-term health of the codebase, as early technical debt or latent bugs can accumulate and impede future progress.",
+            "Snapshot-Based Isolated Evaluation. To reconcile the need for a continuous development flow with rigorous verification, we employ a “develop-in-place, evaluate-in-isolation” strategy. Upon task completion, the agent’s implementation state is snapshotted and transferred to an isolated evaluation container to run the test suite. This ensures that the scoring process is reproducible and unaffected by the agent’s ongoing development, while the agent’s working environment remains uninterrupted."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The framework orchestrates a continuous development pipeline: an external planner dynamically unlocks tasks based on a dependency graph, the agent implements them in a persistent codebase, and the framework asynchronously evaluates snapshots upon submission. This design explicitly decouples roadmap planning from implementation, allowing us to assess the agent’s ability to maintain and evolve software within a structured workflow.\nThe framework comprises three core components:"
+            },
+            {
+              "type": "para",
+              "data": "Dependency-Driven Task Stream. Requirements are not presented in a static batch but are unlocked dynamically. The system maintains a DAG-based task scheduler where a new milestone $M_{i}$ becomes available to the agent if and only if all its prerequisite milestones $\\{M_{j}\\mid M_{i}\\mathrel{depends}\\,\\mathrel{on}M_{j}\\}$ have been completed. This simulates real-world constraints in which foundational features must be established before dependent features are implemented."
+            },
+            {
+              "type": "para",
+              "data": "Continuous Evolution Environment. The agent operates within a persistent, stateful environment where modifications from each task persist into the next. This compels the agent to maintain the long-term health of the codebase, as early technical debt or latent bugs can accumulate and impede future progress."
+            },
+            {
+              "type": "para",
+              "data": "Snapshot-Based Isolated Evaluation. To reconcile the need for a continuous development flow with rigorous verification, we employ a “develop-in-place, evaluate-in-isolation” strategy. Upon task completion, the agent’s implementation state is snapshotted and transferred to an isolated evaluation container to run the test suite. This ensures that the scoring process is reproducible and unaffected by the agent’s ongoing development, while the agent’s working environment remains uninterrupted."
+            }
+          ]
+        },
+        {
+          "title": "Benchmark Construction",
+          "level": 3,
+          "paragraphs": [
+            "We construct a high-quality dataset through a rigorous pipeline that transforms open-source repositories into verified evolutionary suites.",
+            "Repository and Range Selection. We identify projects with high community impact and diverse programming languages. We specifically select release ranges that exhibit rich dependency structures, ensuring the benchmark captures complex, non-linear development scenarios rather than trivial sequences.",
+            "Itinerary Extraction via DeepCommit.\nLeveraging the DeepCommit pipeline (Section 3), we mine the evolutionary history of selected projects.\nTo guarantee the benchmark’s quality and evaluation efficiency, we apply strict post-processing filters to the generated milestones.\nWe retain only milestones that: (1) represent core functional changes (filtering out pure documentation updates); (2) possess executable F2P tests to serve as definitive success criteria; and (3) fall within a manageable context window to maintain task solvability.\nThis step ensures that every task in the benchmark is grounded in a verified, executable state transition.",
+            "Reverse-Engineering Software Requirement Specifications (SRS).\nRelying solely on original GitHub issues or PR descriptions is often insufficient, as they can be underspecified, outdated, or disconnected from the final code implementation.\nTo bridge this gap, we employ an agent-driven reverse-engineering approach to synthesize high-fidelity Software Requirement Specifications (SRS).\nWe first dispatch an LLM agent to analyze the ground-truth patches to draft precise functional requirements.\nThis draft then undergoes a refinement phase to align acceptance criteria strictly with the verified Fail-to-Pass tests.\nFinally, environment-specific instructions (e.g., dependency updates) are appended by analyzing build configuration changes, ensuring a complete execution context.",
+            "Human-in-the-Loop Verification.\nAutomated generation can yield logical inconsistencies and misalignment with edge cases. To mitigate this, expert annotators conduct a final review focused on task solvability.\nAnnotators verify that the SRS provides all necessary information to solve the problem without leaking implementation details and that the acceptance criteria are unambiguous.\nSimultaneously, we validate the stability of the test suites to rule out flaky tests.\nThis hybrid verification ensures that EvoClaw provides a fair assessment, distinguishing genuine agent errors from artifacts of ambiguous specifications."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x4.png",
+              "alt": "Refer to caption",
+              "caption": "(a) Distribution of milestones across the 7 repositories in EvoClaw. Each bar represents the number of verified milestones extracted from the corresponding open-source project.",
+              "label": "S4.F4"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We construct a high-quality dataset through a rigorous pipeline that transforms open-source repositories into verified evolutionary suites."
+            },
+            {
+              "type": "para",
+              "data": "Repository and Range Selection. We identify projects with high community impact and diverse programming languages. We specifically select release ranges that exhibit rich dependency structures, ensuring the benchmark captures complex, non-linear development scenarios rather than trivial sequences."
+            },
+            {
+              "type": "para",
+              "data": "Itinerary Extraction via DeepCommit.\nLeveraging the DeepCommit pipeline (Section 3), we mine the evolutionary history of selected projects.\nTo guarantee the benchmark’s quality and evaluation efficiency, we apply strict post-processing filters to the generated milestones.\nWe retain only milestones that: (1) represent core functional changes (filtering out pure documentation updates); (2) possess executable F2P tests to serve as definitive success criteria; and (3) fall within a manageable context window to maintain task solvability.\nThis step ensures that every task in the benchmark is grounded in a verified, executable state transition."
+            },
+            {
+              "type": "para",
+              "data": "Reverse-Engineering Software Requirement Specifications (SRS).\nRelying solely on original GitHub issues or PR descriptions is often insufficient, as they can be underspecified, outdated, or disconnected from the final code implementation.\nTo bridge this gap, we employ an agent-driven reverse-engineering approach to synthesize high-fidelity Software Requirement Specifications (SRS).\nWe first dispatch an LLM agent to analyze the ground-truth patches to draft precise functional requirements.\nThis draft then undergoes a refinement phase to align acceptance criteria strictly with the verified Fail-to-Pass tests.\nFinally, environment-specific instructions (e.g., dependency updates) are appended by analyzing build configuration changes, ensuring a complete execution context."
+            },
+            {
+              "type": "para",
+              "data": "Human-in-the-Loop Verification.\nAutomated generation can yield logical inconsistencies and misalignment with edge cases. To mitigate this, expert annotators conduct a final review focused on task solvability.\nAnnotators verify that the SRS provides all necessary information to solve the problem without leaking implementation details and that the acceptance criteria are unambiguous.\nSimultaneously, we validate the stability of the test suites to rule out flaky tests.\nThis hybrid verification ensures that EvoClaw provides a fair assessment, distinguishing genuine agent errors from artifacts of ambiguous specifications."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x4.png",
+                "alt": "Refer to caption",
+                "caption": "(a) Distribution of milestones across the 7 repositories in EvoClaw. Each bar represents the number of verified milestones extracted from the corresponding open-source project.",
+                "label": "S4.F4"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Benchmark Statistics",
+          "level": 3,
+          "paragraphs": [
+            "EvoClaw comprises 98 verified milestones across 7 diverse open-source repositories, spanning five programming languages (Go, Rust, Java, TypeScript, Python) with a total of 124 inter-milestone dependencies. As shown in Figure˜4(a), the milestones are distributed across repositories with varying complexity, ranging from 9 to 23 milestones per repository.\nThe dataset captures diverse real-world development patterns, including major architectural changes (e.g., multi-library support), feature-rich iterations (e.g., cloud-native enhancements), stability-focused releases (e.g., compatibility fixes), and large-scale refactoring (e.g., type system overhauls). This ensures EvoClaw evaluates agents across the full spectrum of software engineering tasks.",
+            "Figure˜4(b) illustrates the distribution of task complexity. The dataset exhibits substantial diversity in both specification length (SRS mean: 1,348 words) and implementation scope (gold patch LOC ranging from $<100$ to $>1,500$). On average, each milestone modifies 27.4 files and involves 17.1 Fail-to-Pass tests for verification alongside 6,218 Pass-to-Pass tests for regression prevention. Detailed per-repository statistics are provided in Appendix F, and the full Milestone DAG visualizations for all repositories are shown in Appendix G."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "EvoClaw comprises 98 verified milestones across 7 diverse open-source repositories, spanning five programming languages (Go, Rust, Java, TypeScript, Python) with a total of 124 inter-milestone dependencies. As shown in Figure˜4(a), the milestones are distributed across repositories with varying complexity, ranging from 9 to 23 milestones per repository.\nThe dataset captures diverse real-world development patterns, including major architectural changes (e.g., multi-library support), feature-rich iterations (e.g., cloud-native enhancements), stability-focused releases (e.g., compatibility fixes), and large-scale refactoring (e.g., type system overhauls). This ensures EvoClaw evaluates agents across the full spectrum of software engineering tasks."
+            },
+            {
+              "type": "para",
+              "data": "Figure˜4(b) illustrates the distribution of task complexity. The dataset exhibits substantial diversity in both specification length (SRS mean: 1,348 words) and implementation scope (gold patch LOC ranging from $<100$ to $>1,500$). On average, each milestone modifies 27.4 files and involves 17.1 Fail-to-Pass tests for verification alongside 6,218 Pass-to-Pass tests for regression prevention. Detailed per-repository statistics are provided in Appendix F, and the full Milestone DAG visualizations for all repositories are shown in Appendix G."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "EvoClaw introduces a novel evaluation paradigm designed to assess an agent’s ability to evolve and maintain a software codebase over an extended lifecycle.\nAs shown in Figure˜3, unlike traditional benchmarks that focus on resolving independent issues,\nEvoClaw simulates a realistic, continuous development process where requirements arrive as a stream, and tasks have strict sequential dependencies."
+        }
+      ]
+    },
+    {
+      "title": "Results and Analysis",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Experimental Setup",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Overall Performance",
+          "level": 3,
+          "paragraphs": [
+            "Table 2 presents results across 15 agent-model configurations.\nClaude Opus 4.6 achieves the highest Score (38.03% in Openhands and 36.29% in Claude Code), followed by Claude Sonnet 4.6 (29.58%) and GPT 5.3-Codex (28.88%).\nAcross all models, the gap between Score ($\\sim$38% at best) and Resolve Rate ($\\sim$13%) is substantial: agents achieve partial progress on most milestones but rarely complete them fully.\nMoreover, the resolved milestones are predominantly early ones with few upstream dependencies, confirming that accumulated upstream errors increasingly hinder downstream task completion.\nUnless otherwise noted, subsequent analyses focus on configurations where each model is paired with its vendor-provided agent framework.",
+            "Comparing across model families, clear generational improvements emerge: Claude 4.6 models significantly outperform their 4.5 predecessors, and GPT 5.3-Codex substantially improves over both GPT 5.2-Codex and GPT 5.2. However, comparing GPT 5.2 and GPT 5.2-Codex reveals that Codex-specific optimization may be counterproductive for long-horizon development, where sustained codebase maintenance demands broader analytical capabilities beyond isolated task solving.\nThe three Gemini models achieve comparable scores, with Gemini 3 Flash matching Gemini 3 Pro at one-ninth the cost. Gemini 3 Pro uses the fewest turns, possibly indicating insufficient exploration.\nFigure 6 visualizes the cost-score trade-off. Higher cost does not uniformly translate into higher performance: Gemini 3 Pro and Sonnet 4.6 both exceed $100 per evolution range yet score below Opus 4.6 ($88). On the Pareto frontier, Gemini 3 Flash ($12, 24.2%) and GPT 5.3-Codex ($25, 28.9%) offer the best cost-effectiveness, achieving competitive scores at a fraction of the cost of top-performing models.\nOpenHands trials exhibit notably longer execution times (e.g., 18.49 h for GPT 5.3-Codex) because its runner permits up to 3,000 iterations per milestone with automatic session resumption, allowing the agent to retry extensively when stuck. This additional compute does not consistently improve scores: Claude Code with Opus 4.6 achieves a comparable score in under 4 hours.",
+            "Additionally, Figure 5 compares per-repository performance under both evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable, indicating that the difficulty stems from long-horizon error accumulation rather than inherent task complexity.\nThis effect varies significantly by repository. scikit-learn exhibits the largest degradation: Claude Sonnet 4.6 achieves 93.2% independently but only 21.1% under continuous evaluation.",
+            "Overall, these results highlight that EvoClaw poses a significant challenge to current frontier models, and reliable long-horizon continuous development remains an open problem."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x6.png",
+              "alt": "Refer to caption",
+              "caption": "Per-repository score comparison under two evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable.",
+              "label": "S5.F5"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x7.png",
+              "alt": "Refer to caption",
+              "caption": "Overall Score vs. cost trade-off under continuous task evaluation across all repositories.",
+              "label": "S5.F6"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x8.png",
+              "alt": "Refer to caption",
+              "caption": "Task complexity effects on Score (top) and Resolve Rate (bottom). Milestones are binned by code size, specification length, execution order, and DAG layer. Dashed lines show per-bin averages across all models.",
+              "label": "S5.F7"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x6.png",
+                "alt": "Refer to caption",
+                "caption": "Per-repository score comparison under two evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable.",
+                "label": "S5.F5"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Table 2 presents results across 15 agent-model configurations.\nClaude Opus 4.6 achieves the highest Score (38.03% in Openhands and 36.29% in Claude Code), followed by Claude Sonnet 4.6 (29.58%) and GPT 5.3-Codex (28.88%).\nAcross all models, the gap between Score ($\\sim$38% at best) and Resolve Rate ($\\sim$13%) is substantial: agents achieve partial progress on most milestones but rarely complete them fully.\nMoreover, the resolved milestones are predominantly early ones with few upstream dependencies, confirming that accumulated upstream errors increasingly hinder downstream task completion.\nUnless otherwise noted, subsequent analyses focus on configurations where each model is paired with its vendor-provided agent framework."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x7.png",
+                "alt": "Refer to caption",
+                "caption": "Overall Score vs. cost trade-off under continuous task evaluation across all repositories.",
+                "label": "S5.F6"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Comparing across model families, clear generational improvements emerge: Claude 4.6 models significantly outperform their 4.5 predecessors, and GPT 5.3-Codex substantially improves over both GPT 5.2-Codex and GPT 5.2. However, comparing GPT 5.2 and GPT 5.2-Codex reveals that Codex-specific optimization may be counterproductive for long-horizon development, where sustained codebase maintenance demands broader analytical capabilities beyond isolated task solving.\nThe three Gemini models achieve comparable scores, with Gemini 3 Flash matching Gemini 3 Pro at one-ninth the cost. Gemini 3 Pro uses the fewest turns, possibly indicating insufficient exploration.\nFigure 6 visualizes the cost-score trade-off. Higher cost does not uniformly translate into higher performance: Gemini 3 Pro and Sonnet 4.6 both exceed $100 per evolution range yet score below Opus 4.6 ($88). On the Pareto frontier, Gemini 3 Flash ($12, 24.2%) and GPT 5.3-Codex ($25, 28.9%) offer the best cost-effectiveness, achieving competitive scores at a fraction of the cost of top-performing models.\nOpenHands trials exhibit notably longer execution times (e.g., 18.49 h for GPT 5.3-Codex) because its runner permits up to 3,000 iterations per milestone with automatic session resumption, allowing the agent to retry extensively when stuck. This additional compute does not consistently improve scores: Claude Code with Opus 4.6 achieves a comparable score in under 4 hours."
+            },
+            {
+              "type": "para",
+              "data": "Additionally, Figure 5 compares per-repository performance under both evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable, indicating that the difficulty stems from long-horizon error accumulation rather than inherent task complexity.\nThis effect varies significantly by repository. scikit-learn exhibits the largest degradation: Claude Sonnet 4.6 achieves 93.2% independently but only 21.1% under continuous evaluation."
+            },
+            {
+              "type": "para",
+              "data": "Overall, these results highlight that EvoClaw poses a significant challenge to current frontier models, and reliable long-horizon continuous development remains an open problem."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x8.png",
+                "alt": "Refer to caption",
+                "caption": "Task complexity effects on Score (top) and Resolve Rate (bottom). Milestones are binned by code size, specification length, execution order, and DAG layer. Dashed lines show per-bin averages across all models.",
+                "label": "S5.F7"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Task Complexity and Topological Effects",
+          "level": 3,
+          "paragraphs": [
+            "Figure 7 examines how milestone characteristics correlate with agent performance.\nGold patch LOC, a traditional measure of task complexity, shows a clear monotonic relationship. Larger patches require more code changes and yield lower scores across all models.\nSRS (Software Requirements Specification) word count, however, exhibits a non-monotonic pattern, with a clear sweet spot for specifications of moderate length (around 500 to 1500 words). When specifications are concise, agents must autonomously locate relevant context from the repository, increasing exploration burden. When specifications are verbose, the sheer volume of requirements increases implementation workload. Milestones with moderate-length SRSs achieve the highest accuracy, suggesting that task difficulty depends not only on implementation effort but also on the cost of information acquisition.",
+            "Beyond these static factors, the continuous evaluation setting introduces structural complexity unique to EvoClaw. Both the milestone execution order and the DAG topological layer show statistically significant negative correlations with the score. Later milestones and deeper topological layers consistently yield lower performance. This reflects the compounding effect of upstream errors, as agents must build upon their own (potentially flawed) prior work. These topological factors are absent in independent evaluation and represent the distinctive challenge of long-horizon software evolution.\nThe Resolve Rate (bottom row of Figure 7) makes this effect even starker: it drops drastically beyond the earliest milestones and the shallowest DAG layers, indicating that current agents can only fully resolve milestones that appear early in the sequence or have no upstream dependencies. Once prior errors accumulate, agents may still achieve partial progress (reflected in Score) but rarely produce a completely correct solution."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x9.png",
+              "alt": "Refer to caption",
+              "caption": "Evolution dynamics across models. (Left) Multi-window extrapolation of saturation curves fitted with y=a​(1−e−b​x)y=a(1-e^{-bx}), showing projected ceilings beyond the observed window. Legend annotations report init=a​b\\mathrm{init}=ab (marginal efficiency at the onset of the sequence) and retain=e−b\\mathrm{retain}=e^{-b} (fraction of efficiency preserved after each observation window). (Center) Continuous vs. Independent comparison for GPT 5.3-Codex (better retain) and Gemini 3.1 Pro (better init). (Right) Continuous vs. Independent comparison for the Claude model family.",
+              "label": "S5.F8"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x10.png",
+              "alt": "Refer to caption",
+              "caption": "Per-model cumulative Recall (solid) and Precision (dotted) over evolution progress. Stronger models achieve near-linear Recall growth, yet Precision saturates across all evaluated configurations.",
+              "label": "S5.F9"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Figure 7 examines how milestone characteristics correlate with agent performance.\nGold patch LOC, a traditional measure of task complexity, shows a clear monotonic relationship. Larger patches require more code changes and yield lower scores across all models.\nSRS (Software Requirements Specification) word count, however, exhibits a non-monotonic pattern, with a clear sweet spot for specifications of moderate length (around 500 to 1500 words). When specifications are concise, agents must autonomously locate relevant context from the repository, increasing exploration burden. When specifications are verbose, the sheer volume of requirements increases implementation workload. Milestones with moderate-length SRSs achieve the highest accuracy, suggesting that task difficulty depends not only on implementation effort but also on the cost of information acquisition."
+            },
+            {
+              "type": "para",
+              "data": "Beyond these static factors, the continuous evaluation setting introduces structural complexity unique to EvoClaw. Both the milestone execution order and the DAG topological layer show statistically significant negative correlations with the score. Later milestones and deeper topological layers consistently yield lower performance. This reflects the compounding effect of upstream errors, as agents must build upon their own (potentially flawed) prior work. These topological factors are absent in independent evaluation and represent the distinctive challenge of long-horizon software evolution.\nThe Resolve Rate (bottom row of Figure 7) makes this effect even starker: it drops drastically beyond the earliest milestones and the shallowest DAG layers, indicating that current agents can only fully resolve milestones that appear early in the sequence or have no upstream dependencies. Once prior errors accumulate, agents may still achieve partial progress (reflected in Score) but rarely produce a completely correct solution."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x9.png",
+                "alt": "Refer to caption",
+                "caption": "Evolution dynamics across models. (Left) Multi-window extrapolation of saturation curves fitted with y=a​(1−e−b​x)y=a(1-e^{-bx}), showing projected ceilings beyond the observed window. Legend annotations report init=a​b\\mathrm{init}=ab (marginal efficiency at the onset of the sequence) and retain=e−b\\mathrm{retain}=e^{-b} (fraction of efficiency preserved after each observation window). (Center) Continuous vs. Independent comparison for GPT 5.3-Codex (better retain) and Gemini 3.1 Pro (better init). (Right) Continuous vs. Independent comparison for the Claude model family.",
+                "label": "S5.F8"
+              }
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x10.png",
+                "alt": "Refer to caption",
+                "caption": "Per-model cumulative Recall (solid) and Precision (dotted) over evolution progress. Stronger models achieve near-linear Recall growth, yet Precision saturates across all evaluated configurations.",
+                "label": "S5.F9"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Evolution Dynamics: Recall Scales while Precision Saturates",
+          "level": 3,
+          "paragraphs": [
+            "The declining performance at later milestones raises a natural question: does agent capability degrade over time, or does accumulated technical debt overwhelm otherwise competent agents?",
+            "To answer this, we model cumulative score trajectories using a saturation function $y=a(1-e^{-bx})$, where a small $b$ yields near-linear growth while a large $b$ produces rapid saturation toward the ceiling $a$. As shown in Figure 8 (left), all models under continuous evaluation exhibit clear performance ceilings, and multi-window extrapolation (fitting the saturation model to progressively larger subsets of milestones and projecting forward) confirms that these ceilings persist beyond the observed window. Comparing continuous and independent evaluation (center, right), independent scores grow near-linearly while continuous scores saturate, with the gap widening monotonically as evolution progresses.",
+            "We decompose the cumulative score into Recall (successful feature implementation) and Precision (preservation of existing functionality) to isolate the underlying mechanism. Figure 9 reveals a fundamental asymmetry: Recall continues to grow near-linearly across all models (especially frontier models), indicating that agents retain the ability to solve newly assigned tasks. Precision, however, saturates rapidly across all evaluated configurations. This means the performance ceiling is not caused by agents forgetting how to code, but by their inability to prevent regressions from accumulating. Stronger models achieve higher Precision plateaus, yet none avoid saturation entirely. This Recall-Precision divergence provides a mechanistic explanation for the snowball effect: as unresolved regressions compound, each new milestone operates on an increasingly degraded codebase, eventually overwhelming the agent’s capacity for productive development."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x11.png",
+              "alt": "Refer to caption",
+              "caption": "Propagation type analysis for Opus 4.6. Left: Selected error chain patterns across repositories, where each column is an error chain and each row a milestone. Right: Distribution of propagation event types across milestone progress bins (averaged over all repositories), showing how inherited failures (P1) and infrastructure effects (PX) increasingly dominate in later stages.",
+              "label": "S5.F10"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The declining performance at later milestones raises a natural question: does agent capability degrade over time, or does accumulated technical debt overwhelm otherwise competent agents?"
+            },
+            {
+              "type": "para",
+              "data": "To answer this, we model cumulative score trajectories using a saturation function $y=a(1-e^{-bx})$, where a small $b$ yields near-linear growth while a large $b$ produces rapid saturation toward the ceiling $a$. As shown in Figure 8 (left), all models under continuous evaluation exhibit clear performance ceilings, and multi-window extrapolation (fitting the saturation model to progressively larger subsets of milestones and projecting forward) confirms that these ceilings persist beyond the observed window. Comparing continuous and independent evaluation (center, right), independent scores grow near-linearly while continuous scores saturate, with the gap widening monotonically as evolution progresses."
+            },
+            {
+              "type": "para",
+              "data": "We decompose the cumulative score into Recall (successful feature implementation) and Precision (preservation of existing functionality) to isolate the underlying mechanism. Figure 9 reveals a fundamental asymmetry: Recall continues to grow near-linearly across all models (especially frontier models), indicating that agents retain the ability to solve newly assigned tasks. Precision, however, saturates rapidly across all evaluated configurations. This means the performance ceiling is not caused by agents forgetting how to code, but by their inability to prevent regressions from accumulating. Stronger models achieve higher Precision plateaus, yet none avoid saturation entirely. This Recall-Precision divergence provides a mechanistic explanation for the snowball effect: as unresolved regressions compound, each new milestone operates on an increasingly degraded codebase, eventually overwhelming the agent’s capacity for productive development."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x11.png",
+                "alt": "Refer to caption",
+                "caption": "Propagation type analysis for Opus 4.6. Left: Selected error chain patterns across repositories, where each column is an error chain and each row a milestone. Right: Distribution of propagation event types across milestone progress bins (averaged over all repositories), showing how inherited failures (P1) and infrastructure effects (PX) increasingly dominate in later stages.",
+                "label": "S5.F10"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Failure Analysis: Error Generation and Propagation",
+          "level": 3,
+          "paragraphs": [
+            "Understanding why agents fail in continuous evaluation is inherently difficult. A single early mistake can trigger cascading test failures across dozens of downstream milestones, making it challenging to disentangle root causes from their propagated consequences.\nTo enable systematic analysis, we introduce the concept of error chains: for each test that transitions from passing to failing during the evolution, we trace its status across all subsequent milestones until it is either healed or the trial ends. This yields a per-test timeline that captures the full lifecycle of an error.\nWe focus this analysis on the strongest configuration, Claude Opus 4.6, to characterize failure mechanisms at the frontier of current agent capabilities.",
+            "We decompose error chains along two orthogonal dimensions. The first, Propagation Type, captures how a fault affects downstream milestones. This is determined statistically from evaluation results: we track each test’s status across the milestone timeline and classify events as P0 Root Cause (the originating failure), P0 Induced (cross-chain contamination from unrelated changes), P1 Inherited (propagated through dependency), PX Missing (skipped execution), or PH Healed (successfully recovered).\nFigure 10 (right) shows that propagation events (P1, PX) increasingly dominate in later stages, confirming the compounding degradation observed in Section 5.3. The left panel visualizes representative error chain patterns across repositories, illustrating how a single root cause event can cascade through the entire remaining evolution.",
+            "The second dimension, Root Cause Type, captures why the initial fault originates. Since root cause attribution requires understanding the agent’s intent, we employ Claude Sonnet 4.6 as a reviewer agent that compares the task agent’s code changes against the ground-truth patch, the SRS specification, and evaluation artifacts. The reviewer classifies each error chain’s root cause into three categories: Logic Error (correct target, buggy implementation), Omission (missing a required component), or Extraneous (unnecessary modifications that break existing functionality).\nFigure 11 presents the joint distribution of Root Cause Type $\\times$ Propagation Type. Logic Error is the dominant root cause ($\\sim$57% of all error chain events), with its chains exhibiting both the highest inherited propagation (P1, 12%) and the highest proportion of missing test execution (PX Missing, 17%), indicating that buggy implementations frequently prevent downstream tests from running at all."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x12.png",
+              "alt": "Refer to caption",
+              "caption": "Root Cause Type ×\\times Propagation Type heatmap. Each cell shows the macro-averaged event proportion across all repositories.",
+              "label": "S5.F11"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Understanding why agents fail in continuous evaluation is inherently difficult. A single early mistake can trigger cascading test failures across dozens of downstream milestones, making it challenging to disentangle root causes from their propagated consequences.\nTo enable systematic analysis, we introduce the concept of error chains: for each test that transitions from passing to failing during the evolution, we trace its status across all subsequent milestones until it is either healed or the trial ends. This yields a per-test timeline that captures the full lifecycle of an error.\nWe focus this analysis on the strongest configuration, Claude Opus 4.6, to characterize failure mechanisms at the frontier of current agent capabilities."
+            },
+            {
+              "type": "para",
+              "data": "We decompose error chains along two orthogonal dimensions. The first, Propagation Type, captures how a fault affects downstream milestones. This is determined statistically from evaluation results: we track each test’s status across the milestone timeline and classify events as P0 Root Cause (the originating failure), P0 Induced (cross-chain contamination from unrelated changes), P1 Inherited (propagated through dependency), PX Missing (skipped execution), or PH Healed (successfully recovered).\nFigure 10 (right) shows that propagation events (P1, PX) increasingly dominate in later stages, confirming the compounding degradation observed in Section 5.3. The left panel visualizes representative error chain patterns across repositories, illustrating how a single root cause event can cascade through the entire remaining evolution."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x12.png",
+                "alt": "Refer to caption",
+                "caption": "Root Cause Type ×\\times Propagation Type heatmap. Each cell shows the macro-averaged event proportion across all repositories.",
+                "label": "S5.F11"
+              }
+            },
+            {
+              "type": "para",
+              "data": "The second dimension, Root Cause Type, captures why the initial fault originates. Since root cause attribution requires understanding the agent’s intent, we employ Claude Sonnet 4.6 as a reviewer agent that compares the task agent’s code changes against the ground-truth patch, the SRS specification, and evaluation artifacts. The reviewer classifies each error chain’s root cause into three categories: Logic Error (correct target, buggy implementation), Omission (missing a required component), or Extraneous (unnecessary modifications that break existing functionality).\nFigure 11 presents the joint distribution of Root Cause Type $\\times$ Propagation Type. Logic Error is the dominant root cause ($\\sim$57% of all error chain events), with its chains exhibiting both the highest inherited propagation (P1, 12%) and the highest proportion of missing test execution (PX Missing, 17%), indicating that buggy implementations frequently prevent downstream tests from running at all."
+            }
+          ]
+        },
+        {
+          "title": "Agent Behavior: The Struggle Against Accumulating Complexity",
+          "level": 3,
+          "paragraphs": [
+            "Beyond aggregate scores, we examine how agents allocate effort and manage state when facing accumulating technical debt during long-horizon iterations. By instrumenting tool calls, context usage, and interaction turns, we reveal distinct behavioral patterns.",
+            "Effort Fluctuation and Extremes. As shown in Figure 12, all evaluated agents exhibit a shared trend in their effort allocation (measured by the continuous-to-independent turns ratio). In the initial phase (progress $\\sim$0.1), continuous effort is slightly higher than independent effort, as agents must conduct large-scale exploration to build a mental model of the unfamiliar repository. During the middle phase (progress 0.1–0.5), the ratio drops below $1\\times$ (with the median falling to $\\sim$0.83$\\times$): agents successfully reuse their established context, bypassing the redundant exploration required in independent evaluation. However, in the late stage (progress 0.6–0.9), effort rises significantly as accumulating errors demand extensive debugging. Finally, near completion (progress $\\sim$1.0), agent behavior diverges sharply. Some agents resort to frantic thrashing, while others prematurely give up. Notably, GPT 5.3-Codex demonstrates the most stable effort profile, maintaining consistent variance throughout the project lifecycle.",
+            "Context Stability and Exploration Patterns. To sustain this fluctuating effort, agents must effectively manage their context. Figure 13 illustrates this using Claude Code with Opus 4.6 as a representative example. The context window shows stable, controllable wave patterns, demonstrating that modern agent frameworks paired with frontier models can effectively support long-horizon programming without catastrophic context overflow. The framework employs two compression strategies: partial compression (evicting specific tool results) and heavy compaction (summarizing extensive histories). Crucially, agent exploration behavior (reading and searching) tightly couples with this state management. Exploration surges at the beginning of each new milestone and immediately following major context compaction events, as the agent works to rebuild its mental model.",
+            "The Impact of Exploration. This exploration behavior directly dictates downstream success. Figure 14 demonstrates that within their respective agent frameworks, models from the same family exhibit a consistent pattern: higher exploration counts correlate with better performance. For instance, Claude Opus 4.6 and Claude Sonnet 4.6 hold a distinct advantage because they aggressively dispatch subagents to analyze the codebase, executing over 7,000 exploration commands. Conversely, models like Gemini 3 Pro allocate too little effort to reading, indicating that many current models still lack proactive exploration for long-horizon tasks.",
+            "Verification vs. Blind Thrashing. Alongside exploration, we analyze verification behavior (test execution). Figure 15 shows that average verification effort generally follows an inverted-U shape, increasing as the codebase grows more complex before declining near the end. However, this masks two problematic extremes: Gemini 3.1 Pro verifies excessively, while GPT 5.2-Codex rarely verifies at all, and both achieve lower scores. Figure 16 further isolates this dynamic by mapping the score landscape against edit thrashing and verification frequency. A clear sweet spot emerges for moderate, disciplined verification. In contrast, the worst outcomes concentrate in the high-thrash and low-verify quadrant—a blind thrashing trap where agents repeatedly modify the same files without executing tests to guide them, effectively accelerating the snowball effect."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x13.png",
+              "alt": "Refer to caption",
+              "caption": "Continuous-to-Independent turns ratio across normalized execution progress (10 bins). Values above 1×1\\times indicate the agent expends more effort under continuous evaluation than on the same milestone independently. The ratio remains near or below 1×1\\times for most of the sequence but rises sharply in the final bin. This reflects increased rework and error-recovery effort as accumulated technical debt compounds.",
+              "label": "S5.F12"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x14.png",
+              "alt": "Refer to caption",
+              "caption": "Exploration ratio and context wave for Claude Code (powered by Opus 4.6) on element-web. Top plot shows milestone progression (M1 to M18). Middle plot shows per-minute exploration ratio (read/search vs. write/execute). Bottom plot shows total context token usage over active time, with compaction and eviction events marked.",
+              "label": "S5.F13"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x15.png",
+              "alt": "Refer to caption",
+              "caption": "Exploration tool-call count aggregated across all repositories, grouped by agent framework and sorted by count within each cluster. Diamond markers show average F1 score. Higher-performing agents consistently devote greater effort to exploration (e.g., reading and searching).",
+              "label": "S5.F14"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x16.png",
+              "alt": "Refer to caption",
+              "caption": "Average verification tool-call count per milestone progress bin (10 bins), for the six strongest agent configurations. Verification effort generally increases with progress. It peaks around 70% to 80% completion before declining in the final bin.",
+              "label": "S5.F15"
+            },
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x17.png",
+              "alt": "Refer to caption",
+              "caption": "Score landscape in the edit-thrashing (repeat edit ratio) vs. verification (test execution frequency) space, aggregated across all repositories. A sweet spot of moderate thrashing and moderate verification yields the highest scores. The blind thrashing quadrant (high thrash, low verify) produces the worst outcomes.",
+              "label": "S5.F16"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Beyond aggregate scores, we examine how agents allocate effort and manage state when facing accumulating technical debt during long-horizon iterations. By instrumenting tool calls, context usage, and interaction turns, we reveal distinct behavioral patterns."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x13.png",
+                "alt": "Refer to caption",
+                "caption": "Continuous-to-Independent turns ratio across normalized execution progress (10 bins). Values above 1×1\\times indicate the agent expends more effort under continuous evaluation than on the same milestone independently. The ratio remains near or below 1×1\\times for most of the sequence but rises sharply in the final bin. This reflects increased rework and error-recovery effort as accumulated technical debt compounds.",
+                "label": "S5.F12"
+              }
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x14.png",
+                "alt": "Refer to caption",
+                "caption": "Exploration ratio and context wave for Claude Code (powered by Opus 4.6) on element-web. Top plot shows milestone progression (M1 to M18). Middle plot shows per-minute exploration ratio (read/search vs. write/execute). Bottom plot shows total context token usage over active time, with compaction and eviction events marked.",
+                "label": "S5.F13"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Effort Fluctuation and Extremes. As shown in Figure 12, all evaluated agents exhibit a shared trend in their effort allocation (measured by the continuous-to-independent turns ratio). In the initial phase (progress $\\sim$0.1), continuous effort is slightly higher than independent effort, as agents must conduct large-scale exploration to build a mental model of the unfamiliar repository. During the middle phase (progress 0.1–0.5), the ratio drops below $1\\times$ (with the median falling to $\\sim$0.83$\\times$): agents successfully reuse their established context, bypassing the redundant exploration required in independent evaluation. However, in the late stage (progress 0.6–0.9), effort rises significantly as accumulating errors demand extensive debugging. Finally, near completion (progress $\\sim$1.0), agent behavior diverges sharply. Some agents resort to frantic thrashing, while others prematurely give up. Notably, GPT 5.3-Codex demonstrates the most stable effort profile, maintaining consistent variance throughout the project lifecycle."
+            },
+            {
+              "type": "para",
+              "data": "Context Stability and Exploration Patterns. To sustain this fluctuating effort, agents must effectively manage their context. Figure 13 illustrates this using Claude Code with Opus 4.6 as a representative example. The context window shows stable, controllable wave patterns, demonstrating that modern agent frameworks paired with frontier models can effectively support long-horizon programming without catastrophic context overflow. The framework employs two compression strategies: partial compression (evicting specific tool results) and heavy compaction (summarizing extensive histories). Crucially, agent exploration behavior (reading and searching) tightly couples with this state management. Exploration surges at the beginning of each new milestone and immediately following major context compaction events, as the agent works to rebuild its mental model."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x15.png",
+                "alt": "Refer to caption",
+                "caption": "Exploration tool-call count aggregated across all repositories, grouped by agent framework and sorted by count within each cluster. Diamond markers show average F1 score. Higher-performing agents consistently devote greater effort to exploration (e.g., reading and searching).",
+                "label": "S5.F14"
+              }
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x16.png",
+                "alt": "Refer to caption",
+                "caption": "Average verification tool-call count per milestone progress bin (10 bins), for the six strongest agent configurations. Verification effort generally increases with progress. It peaks around 70% to 80% completion before declining in the final bin.",
+                "label": "S5.F15"
+              }
+            },
+            {
+              "type": "para",
+              "data": "The Impact of Exploration. This exploration behavior directly dictates downstream success. Figure 14 demonstrates that within their respective agent frameworks, models from the same family exhibit a consistent pattern: higher exploration counts correlate with better performance. For instance, Claude Opus 4.6 and Claude Sonnet 4.6 hold a distinct advantage because they aggressively dispatch subagents to analyze the codebase, executing over 7,000 exploration commands. Conversely, models like Gemini 3 Pro allocate too little effort to reading, indicating that many current models still lack proactive exploration for long-horizon tasks."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x17.png",
+                "alt": "Refer to caption",
+                "caption": "Score landscape in the edit-thrashing (repeat edit ratio) vs. verification (test execution frequency) space, aggregated across all repositories. A sweet spot of moderate thrashing and moderate verification yields the highest scores. The blind thrashing quadrant (high thrash, low verify) produces the worst outcomes.",
+                "label": "S5.F16"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Verification vs. Blind Thrashing. Alongside exploration, we analyze verification behavior (test execution). Figure 15 shows that average verification effort generally follows an inverted-U shape, increasing as the codebase grows more complex before declining near the end. However, this masks two problematic extremes: Gemini 3.1 Pro verifies excessively, while GPT 5.2-Codex rarely verifies at all, and both achieve lower scores. Figure 16 further isolates this dynamic by mapping the score landscape against edit thrashing and verification frequency. A clear sweet spot emerges for moderate, disciplined verification. In contrast, the worst outcomes concentrate in the high-thrash and low-verify quadrant—a blind thrashing trap where agents repeatedly modify the same files without executing tests to guide them, effectively accelerating the snowball effect."
+            }
+          ]
+        },
+        {
+          "title": "DeepCommit vs Human-Annotated Milestone DAG",
+          "level": 3,
+          "paragraphs": [
+            "We conducted a case study (Appendix J) that compares the human-annotated and DeepCommit milestone DAGs for the scikit-learn v1.5.2–v1.6.0 release interval. The Human DAG organizes milestones by semantic release intent, whereas DeepCommit derives groups from dependency topology in the commit graph. As a result, DeepCommit covers a smaller but tightly connected subset of commits, recovers human-like boundaries when technical structure is clear (e.g., documentation), but tends to fragment cross-module, intent-defined milestones into topological phases. Overall, this case study shows that the Human DAG captures semantically coherent and process-aware milestone structure, whereas DeepCommit more strongly reflects dependency topology and phase-wise code organization."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We conducted a case study (Appendix J) that compares the human-annotated and DeepCommit milestone DAGs for the scikit-learn v1.5.2–v1.6.0 release interval. The Human DAG organizes milestones by semantic release intent, whereas DeepCommit derives groups from dependency topology in the commit graph. As a result, DeepCommit covers a smaller but tightly connected subset of commits, recovers human-like boundaries when technical structure is clear (e.g., documentation), but tends to fragment cross-module, intent-defined milestones into topological phases. Overall, this case study shows that the Human DAG captures semantically coherent and process-aware milestone structure, whereas DeepCommit more strongly reflects dependency topology and phase-wise code organization."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "We introduced DeepCommit, a pipeline that distills verifiable software evolution into coherent Milestone DAGs from noisy, fine-grained git histories, and EvoClaw, a benchmark for evaluating LLM agents under continuous, dependency-driven development. Our results reveal a fundamental gap between independent task-solving and continuous evolution: frontier models achieve over 80% on isolated milestones but drop below 38% in continuous settings. This degradation stems from a critical inability to maintain code integrity: while agents can implement new features, they fail to prevent regressions, causing a snowball effect of accumulating technical debt. Even the strongest agents resolve only $\\sim$13% of milestones in full evolutionary sequences, establishing sustained, maintainable repository evolution as a central open challenge for autonomous software agents."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We introduced DeepCommit, a pipeline that distills verifiable software evolution into coherent Milestone DAGs from noisy, fine-grained git histories, and EvoClaw, a benchmark for evaluating LLM agents under continuous, dependency-driven development. Our results reveal a fundamental gap between independent task-solving and continuous evolution: frontier models achieve over 80% on isolated milestones but drop below 38% in continuous settings. This degradation stems from a critical inability to maintain code integrity: while agents can implement new features, they fail to prevent regressions, causing a snowball effect of accumulating technical debt. Even the strongest agents resolve only $\\sim$13% of milestones in full evolutionary sequences, establishing sustained, maintainable repository evolution as a central open challenge for autonomous software agents."
+        }
+      ]
+    },
+    {
+      "title": "Impact Statement",
+      "level": 2,
+      "paragraphs": [
+        "This paper presents a benchmark for evaluating LLM agents in continuous software evolution, a prerequisite for deploying autonomous agents in real-world production environments. Beyond code generation, we emphasize the ability to sustainably evolve systems over time, which is essential for long-running agent runtimes to iteratively customize software for diverse user needs. This capability unlocks a new productivity paradigm: agents serving as adaptive interfaces that bridge human intent and complex digital systems. Although highly capable coding agents may impact the software development workforce, we expect them to lower the barrier to entry for software creation, empowering a broader range of users to leverage the power of code for problem-solving"
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "This paper presents a benchmark for evaluating LLM agents in continuous software evolution, a prerequisite for deploying autonomous agents in real-world production environments. Beyond code generation, we emphasize the ability to sustainably evolve systems over time, which is essential for long-running agent runtimes to iteratively customize software for diverse user needs. This capability unlocks a new productivity paradigm: agents serving as adaptive interfaces that bridge human intent and complex digital systems. Although highly capable coding agents may impact the software development workforce, we expect them to lower the barrier to entry for software creation, empowering a broader range of users to leverage the power of code for problem-solving"
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Milestone-level task granularity optimally balances functional coherence and evolutionary awareness for benchmarking continuous software evolution.",
+      "label": "S0.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "The DeepCommit pipeline architecture. Phase 1 extracts structured data from commit history through static analysis, including source filtering, commit extraction, PR/Issues, releases, commit DAG, code metrics, and symbol changes. Phase 2 employs an LLM agent to construct a Milestone DAG via four iterative stages: seed discovery, milestone consolidation, dependency inference, and milestone decomposition. Phase 3 resolves runtime dependencies through testbed construction and test collection, with DAG refinement and fallback patches as repair strategies, followed by flaky test filtering to produce an executable testbed. Quality Assurance validates outputs at textual, compilation, and test collection levels. See Appendix G for all DAG visualizations.",
+      "label": "S2.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Illustration of the evaluation pipelines. (a) In the Independent Task Evaluation Workflow, the environment resets after each task. (b) In the Continuous Task Evaluation Workflow, tasks are organized as a dependency graph. The agent continuously evolves the Codebase from a base snapshot. Upon completing a task (e.g., M1 & M2), the repository is snapshotted for Isolated Evaluation while the planner unlocks subsequent tasks (e.g., M3) for the agent to fetch, ensuring a continuous and stateful development loop.",
+      "label": "S3.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Distribution of milestones across the 7 repositories in EvoClaw. Each bar represents the number of verified milestones extracted from the corresponding open-source project.",
+      "label": "S4.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "(a) Distribution of milestones across the 7 repositories in EvoClaw. Each bar represents the number of verified milestones extracted from the corresponding open-source project.",
+      "label": "S4.F4.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x5.png",
+      "alt": "Refer to caption",
+      "caption": "(b) Distribution of SRS word counts (left) and gold patch LOC (right), stratified by estimated human effort.",
+      "label": "S4.F4.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "Per-repository score comparison under two evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable.",
+      "label": "S5.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Overall Score vs. cost trade-off under continuous task evaluation across all repositories.",
+      "label": "S5.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "Task complexity effects on Score (top) and Resolve Rate (bottom). Milestones are binned by code size, specification length, execution order, and DAG layer. Dashed lines show per-bin averages across all models.",
+      "label": "S5.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "Evolution dynamics across models. (Left) Multi-window extrapolation of saturation curves fitted with y=a​(1−e−b​x)y=a(1-e^{-bx}), showing projected ceilings beyond the observed window. Legend annotations report init=a​b\\mathrm{init}=ab (marginal efficiency at the onset of the sequence) and retain=e−b\\mathrm{retain}=e^{-b} (fraction of efficiency preserved after each observation window). (Center) Continuous vs. Independent comparison for GPT 5.3-Codex (better retain) and Gemini 3.1 Pro (better init). (Right) Continuous vs. Independent comparison for the Claude model family.",
+      "label": "S5.F8"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x10.png",
+      "alt": "Refer to caption",
+      "caption": "Per-model cumulative Recall (solid) and Precision (dotted) over evolution progress. Stronger models achieve near-linear Recall growth, yet Precision saturates across all evaluated configurations.",
+      "label": "S5.F9"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x11.png",
+      "alt": "Refer to caption",
+      "caption": "Propagation type analysis for Opus 4.6. Left: Selected error chain patterns across repositories, where each column is an error chain and each row a milestone. Right: Distribution of propagation event types across milestone progress bins (averaged over all repositories), showing how inherited failures (P1) and infrastructure effects (PX) increasingly dominate in later stages.",
+      "label": "S5.F10"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x12.png",
+      "alt": "Refer to caption",
+      "caption": "Root Cause Type ×\\times Propagation Type heatmap. Each cell shows the macro-averaged event proportion across all repositories.",
+      "label": "S5.F11"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x13.png",
+      "alt": "Refer to caption",
+      "caption": "Continuous-to-Independent turns ratio across normalized execution progress (10 bins). Values above 1×1\\times indicate the agent expends more effort under continuous evaluation than on the same milestone independently. The ratio remains near or below 1×1\\times for most of the sequence but rises sharply in the final bin. This reflects increased rework and error-recovery effort as accumulated technical debt compounds.",
+      "label": "S5.F12"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x14.png",
+      "alt": "Refer to caption",
+      "caption": "Exploration ratio and context wave for Claude Code (powered by Opus 4.6) on element-web. Top plot shows milestone progression (M1 to M18). Middle plot shows per-minute exploration ratio (read/search vs. write/execute). Bottom plot shows total context token usage over active time, with compaction and eviction events marked.",
+      "label": "S5.F13"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x15.png",
+      "alt": "Refer to caption",
+      "caption": "Exploration tool-call count aggregated across all repositories, grouped by agent framework and sorted by count within each cluster. Diamond markers show average F1 score. Higher-performing agents consistently devote greater effort to exploration (e.g., reading and searching).",
+      "label": "S5.F14"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x16.png",
+      "alt": "Refer to caption",
+      "caption": "Average verification tool-call count per milestone progress bin (10 bins), for the six strongest agent configurations. Verification effort generally increases with progress. It peaks around 70% to 80% completion before declining in the final bin.",
+      "label": "S5.F15"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x17.png",
+      "alt": "Refer to caption",
+      "caption": "Score landscape in the edit-thrashing (repeat edit ratio) vs. verification (test execution frequency) space, aggregated across all repositories. A sweet spot of moderate thrashing and moderate verification yields the highest scores. The blind thrashing quadrant (high thrash, low verify) produces the worst outcomes.",
+      "label": "S5.F16"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x18.png",
+      "alt": "Refer to caption",
+      "caption": "(a) element-web, v1.11.95 →\\to v1.11.97 (18 milestones)",
+      "label": "A7.F17"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x19.png",
+      "alt": "Refer to caption",
+      "caption": "(a) element-web, v1.11.95 →\\to v1.11.97 (18 milestones)",
+      "label": "A7.F17.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x20.png",
+      "alt": "Refer to caption",
+      "caption": "(b) ripgrep, 14.1.1 →\\to 15.0.0 (13 milestones)",
+      "label": "A7.F17.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x21.png",
+      "alt": "Refer to caption",
+      "caption": "(a) dubbo, 3.3.3 →\\to 3.3.6 (13 milestones)",
+      "label": "A7.F18"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x22.png",
+      "alt": "Refer to caption",
+      "caption": "(a) dubbo, 3.3.3 →\\to 3.3.6 (13 milestones)",
+      "label": "A7.F18.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x23.png",
+      "alt": "Refer to caption",
+      "caption": "(b) navidrome, v0.57.0 →\\to v0.58.0 (9 milestones)",
+      "label": "A7.F18.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x24.png",
+      "alt": "Refer to caption",
+      "caption": "(c) scikit-learn, 1.5.2 →\\to 1.6.0 (12 milestones)",
+      "label": "A7.F18.sf3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x25.png",
+      "alt": "Refer to caption",
+      "caption": "(a) nushell, 0.106.0 →\\to 0.108.0 (13 milestones)",
+      "label": "A7.F19"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x26.png",
+      "alt": "Refer to caption",
+      "caption": "(a) nushell, 0.106.0 →\\to 0.108.0 (13 milestones)",
+      "label": "A7.F19.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x27.png",
+      "alt": "Refer to caption",
+      "caption": "(a) go-zero, v1.6.0 →\\to v1.9.3 (23 milestones)",
+      "label": "A7.F20"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x28.png",
+      "alt": "Refer to caption",
+      "caption": "(a) go-zero, v1.6.0 →\\to v1.9.3 (23 milestones)",
+      "label": "A7.F20.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x29.png",
+      "alt": "Refer to caption",
+      "caption": "Responsibility boundary misplacement in apache/dubbo (M004). The ground truth checks stream parameters in resolveValue(), preserving the resolver chain contract. The agent checks in accept(), ejecting the parameter from the terminal resolver and causing 3 P2P regressions.",
+      "label": "A8.F21"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x30.png",
+      "alt": "Refer to caption",
+      "caption": "Shotgun fix in nushell. The gold patch uses a whitelist strategy: compile_break() returns NotInALoop as required by the SRS, and only the known catch-block false positive is exempted in parse_internal_call. The agent uses a blacklist strategy: it suppresses all NotInALoop errors across every block expression and deletes the is_in_loop() API. Tests pass only because push_break() has an internal fallback.",
+      "label": "A8.F22"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x31.png",
+      "alt": "Refer to caption",
+      "caption": "API signature degradation in nushell’s type checker. The agent’s group-by-input algorithm forces OutputMismatch.expected from a structured Type enum to an opaque String, losing pattern-match capability. The agent also omits workaround cleanup and utility deduplication (2 vs. 7 files modified).",
+      "label": "A8.F23"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x32.png",
+      "alt": "Refer to caption",
+      "caption": "Continuous vs Independent evaluation on element-web. The shaded area highlights how error accumulation in continuous mode causes a cost-effective model (Gemini 3 Flash, Independent) to outperform frontier models in continuous mode.",
+      "label": "A9.F24"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x33.png",
+      "alt": "Refer to caption",
+      "caption": "Human-annotated and DeepCommit milestone decompositions for scikit-learn v1.5.2–v1.6.0. Top: Milestones grouped by human analyzers (M1–M6). Bottom: milestone grouped by DeepCommit (G1–G6). Each block summarizes representative commits, commit count, LoC, and time span.",
+      "label": "A10.F25"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x34.png",
+      "alt": "Refer to caption",
+      "caption": "Structural comparison of Human and DeepCommit milestone DAGs. The Human DAG contains 14 milestones and 19 dependencies; The DeepCommit DAG contains 12 milestones and 14 dependencies. Edges denote functional or process-level dependencies with strong/weak strength.",
+      "label": "A10.F26"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.13428/assets/x35.png",
+      "alt": "Refer to caption",
+      "caption": "Contingency matrix of commit assignments (Human ×\\times DeepCommit) for the 201 shared commits. The dominant Human M6.1 ↔\\leftrightarrow DeepCommit M6.1 block (71 commits) reflects high agreement on documentation, while the dispersed pattern across DeepCommit M1.1–M2.3 reveals how phase-based partitioning fragments intent-based Human milestones.",
+      "label": "A10.F27"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Representative software engineering benchmarks for LLMs. Unlike Codebase Generation benchmarks that evaluate agents on isolated or static snapshots, Repository Evolution introduces the temporal dimension, requiring agents to continuously build upon their own development history. EvoClaw adopts the Milestone-level granularity, a semantic cluster of commits toward a coherent development goal, avoiding the noise of individual commits and the excessive scope of full releases. Dev History denotes the agent’s own development trace accumulated from preceding tasks.",
+      "headers": [],
+      "rows": [
+        [
+          "Category",
+          "Benchmark",
+          "Language",
+          "Task Properties",
+          "Cross-task Dependency",
+          "Task Collection"
+        ],
+        [
+          "Granularity",
+          "Avg LoC",
+          "Code Context"
+        ],
+        [
+          "Function Completion",
+          "HumanEval (Chen et al., 2021)",
+          "Python",
+          "Function-level",
+          "6.8",
+          "–",
+          "–",
+          "Manual"
+        ],
+        [
+          "Issue Resolution",
+          "SWE-bench (Jimenez et al., 2024)",
+          "Python",
+          "Commit-level",
+          "32.8",
+          "Codebase",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "SWE-rebench (Badertdinov et al., 2025)",
+          "Python",
+          "Commit-level",
+          "142",
+          "Codebase",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "Multi-SWE-bench (Zan et al., 2025)",
+          "Multi",
+          "Commit-level",
+          "246",
+          "Codebase",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "SWE-bench Pro (Deng et al., 2025)",
+          "Multi",
+          "Commit-level",
+          "107",
+          "Codebase",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "Codebase Generation",
+          "SWE-Evo (Thai et al., 2025)",
+          "Python",
+          "Release-level",
+          "611",
+          "Codebase",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "Commit0 (Zhao et al., 2025)",
+          "Python",
+          "Project-level",
+          ">>3k",
+          "Codebase Skeleton",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "NL2Repo (Ding et al., 2026)",
+          "Python",
+          "Project-level",
+          ">>3k",
+          "–",
+          "–",
+          "Rule-based"
+        ],
+        [
+          "Repository Evolution",
+          "EvoClaw (Ours)",
+          "Multi",
+          "Milestone-level",
+          "570",
+          "Codebase + Dev History",
+          "Milestone DAG",
+          "Agentic"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Figure 4: Dataset statistics and characteristics of EvoClaw.",
+      "headers": [],
+      "rows": [
+        [
+          "Agent",
+          "Model",
+          "Score⋆ (%)↑\\uparrow",
+          "Precision (%)↑\\uparrow",
+          "Recall (%)↑\\uparrow",
+          "Resolve (%)↑\\uparrow",
+          "Cost ($)",
+          "Out Tok. (K)",
+          "Time (h)",
+          "Turns"
+        ],
+        [
+          "claude-code",
+          "Claude Sonnet 4.5",
+          "15.16",
+          "18.88",
+          "28.50",
+          "5.49",
+          "26.60",
+          "243",
+          "1.65",
+          "770"
+        ],
+        [
+          "Claude Opus 4.5",
+          "25.85",
+          "28.04",
+          "40.80",
+          "6.28",
+          "68.55",
+          "309",
+          "2.12",
+          "999"
+        ],
+        [
+          "Claude Sonnet 4.6",
+          "29.58",
+          "29.62",
+          "47.63",
+          "5.88",
+          "111.53",
+          "852",
+          "4.20",
+          "1538"
+        ],
+        [
+          "Claude Opus 4.6",
+          "36.29",
+          "37.84",
+          "56.32",
+          "11.57",
+          "87.56",
+          "578",
+          "3.97",
+          "1891"
+        ],
+        [
+          "codex",
+          "GPT 5.2 Codex",
+          "13.46",
+          "12.65",
+          "26.65",
+          "4.78",
+          "37.74",
+          "701",
+          "3.63",
+          "1259"
+        ],
+        [
+          "GPT 5.2",
+          "23.30",
+          "20.89",
+          "45.76",
+          "8.18",
+          "56.59",
+          "814",
+          "5.44",
+          "1717"
+        ],
+        [
+          "GPT 5.3 Codex",
+          "28.88",
+          "27.81",
+          "49.70",
+          "9.58",
+          "24.88",
+          "392",
+          "8.35",
+          "1109"
+        ],
+        [
+          "gemini-cli",
+          "Gemini 3 Pro",
+          "24.25",
+          "25.46",
+          "32.70",
+          "13.37",
+          "108.12",
+          "294",
+          "3.56",
+          "676"
+        ],
+        [
+          "Gemini 3.1 Pro",
+          "23.32",
+          "21.59",
+          "37.22",
+          "10.95",
+          "59.31",
+          "207",
+          "4.65",
+          "1208"
+        ],
+        [
+          "Gemini 3 Flash",
+          "24.22",
+          "24.31",
+          "42.12",
+          "8.37",
+          "11.75",
+          "255",
+          "4.40",
+          "1512"
+        ],
+        [
+          "openhands",
+          "MiniMax M2.5",
+          "17.60",
+          "22.48",
+          "34.60",
+          "1.30",
+          "3.57",
+          "598",
+          "10.79",
+          "1846"
+        ],
+        [
+          "Kimi K2.5",
+          "20.20",
+          "26.29",
+          "31.37",
+          "8.49",
+          "4.32",
+          "279",
+          "4.84",
+          "800"
+        ],
+        [
+          "Gemini 3 Flash",
+          "22.32",
+          "25.20",
+          "37.13",
+          "6.59",
+          "16.90",
+          "1516",
+          "7.09",
+          "2632"
+        ],
+        [
+          "GPT 5.3 Codex",
+          "26.47",
+          "25.01",
+          "37.32",
+          "12.50",
+          "30.13†",
+          "553†",
+          "18.49",
+          "1047†"
+        ],
+        [
+          "Claude Opus 4.6",
+          "38.03",
+          "37.33",
+          "55.21",
+          "8.46",
+          "75.73†",
+          "524†",
+          "6.53",
+          "1970†"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Detailed per-repository statistics for EvoClaw. HumanDT and HumanWT are average human-estimated development time and SRS writing time, respectively.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Codebase",
+          "Release Range",
+          "Milestone DAG"
+        ],
+        [
+          "Org/Repo",
+          "#Files",
+          "#LoC",
+          "Start",
+          "End",
+          "Δ\\DeltaLoC",
+          "#M",
+          "#Deps",
+          "LoC CV"
+        ],
+        [
+          "zeromicro/go-zero",
+          "1,021",
+          "110K",
+          "v1.6.0",
+          "v1.9.3",
+          "6,403",
+          "23",
+          "25",
+          "1.29"
+        ],
+        [
+          "apache/dubbo",
+          "4,279",
+          "350K",
+          "3.3.3",
+          "3.3.6",
+          "4,154",
+          "12",
+          "9",
+          "0.76"
+        ],
+        [
+          "BurntSushi/ripgrep",
+          "159",
+          "48K",
+          "14.1.1",
+          "15.0.0",
+          "1,474",
+          "11",
+          "12",
+          "0.83"
+        ],
+        [
+          "nushell/nushell",
+          "1,727",
+          "264K",
+          "0.106.0",
+          "0.108.0",
+          "15,520",
+          "13",
+          "28",
+          "1.10"
+        ],
+        [
+          "element-hq/element-web",
+          "2,430",
+          "476K",
+          "v1.11.95",
+          "v1.11.97",
+          "7,657",
+          "18",
+          "12",
+          "0.87"
+        ],
+        [
+          "navidrome/navidrome",
+          "1,110",
+          "144K",
+          "v0.57.0",
+          "v0.58.0",
+          "5,900",
+          "9",
+          "9",
+          "1.02"
+        ],
+        [
+          "scikit-learn/scikit-learn",
+          "1,314",
+          "280K",
+          "1.5.2",
+          "1.6.0",
+          "7,372",
+          "12",
+          "29",
+          "0.84"
+        ],
+        [
+          "Total/Average",
+          "12,040",
+          "1.67M",
+          "—",
+          "—",
+          "48,480",
+          "98",
+          "124",
+          "0.96"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Detailed per-repository statistics for EvoClaw. HumanDT and HumanWT are average human-estimated development time and SRS writing time, respectively.",
+      "headers": [],
+      "rows": [
+        [
+          "",
+          "Fix Patches",
+          "SRS",
+          "Unit Tests"
+        ],
+        [
+          "Org/Repo",
+          "Avg.LoC",
+          "Avg.#F",
+          "HumanDT",
+          "Avg.Tok",
+          "HumanWT",
+          "F2P",
+          "P2P"
+        ],
+        [
+          "zeromicro/go-zero",
+          "278",
+          "10.2",
+          "4h-1d",
+          "1,330",
+          "4h+",
+          "2.2",
+          "1,812"
+        ],
+        [
+          "apache/dubbo",
+          "346",
+          "10.8",
+          "1-3d",
+          "1,138",
+          "1-2h",
+          "1.1",
+          "6,924"
+        ],
+        [
+          "BurntSushi/ripgrep",
+          "134",
+          "5.5",
+          "1-3d",
+          "879",
+          "30m-1h",
+          "1.3",
+          "1,057"
+        ],
+        [
+          "nushell/nushell",
+          "1,268",
+          "63.3",
+          "1-3d",
+          "1,528",
+          "1-2h",
+          "7.6",
+          "4,736"
+        ],
+        [
+          "element-hq/element-web",
+          "445",
+          "27.2",
+          "1-3d",
+          "1,546",
+          "2-4h",
+          "7.1",
+          "5,235"
+        ],
+        [
+          "navidrome/navidrome",
+          "656",
+          "13.2",
+          "1-3d",
+          "1,954",
+          "30m-1h",
+          "3.0",
+          "1,452"
+        ],
+        [
+          "scikit-learn/scikit-learn",
+          "1,167",
+          "58.6",
+          "1-3d",
+          "1,580",
+          "30m-1h",
+          "97.2",
+          "22,308"
+        ],
+        [
+          "Total/Average",
+          "570",
+          "27.4",
+          "1-3d",
+          "1,348",
+          "2-4h",
+          "17.1",
+          "6,218"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Structural overview of the DeepCommit Milestone DAG and the Human-annotated Milestone DAG",
+      "headers": [],
+      "rows": [
+        [
+          "Dimension",
+          "Human DAG",
+          "DeepCommit DAG"
+        ],
+        [
+          "Leaf milestones",
+          "14",
+          "12"
+        ],
+        [
+          "Groups",
+          "6",
+          "6"
+        ],
+        [
+          "Covered commits",
+          "373",
+          "201"
+        ],
+        [
+          "DAG edges",
+          "20",
+          "14"
+        ],
+        [
+          "Edge types",
+          "FUNC (15) + NFR (5)",
+          "FUNC (13) + NFR (1)"
+        ],
+        [
+          "Strong edges",
+          "2",
+          "8"
+        ],
+        [
+          "Weak edges",
+          "18",
+          "6"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\text{Recall}_{m}=\\frac{N_{\\text{fixed},m}}{N_{\\text{requried},m}}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\text{Recall}_{m}=\\frac{N_{\\text{fixed},m}}{N_{\\text{requried},m}}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\text{Precision}_{m}=\\frac{N_{\\text{fixed},m}+\\epsilon}{N_{\\text{fixed},m}+N_{\\text{broken},m}+\\epsilon}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\text{Precision}_{m}=\\frac{N_{\\text{fixed},m}+\\epsilon}{N_{\\text{fixed},m}+N_{\\text{broken},m}+\\epsilon}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\text{Score}_{m}=\\frac{2\\cdot\\text{Precision}_{m}\\cdot\\text{Recall}_{m}}{\\text{Precision}_{m}+\\text{Recall}_{m}}",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\text{Score}_{m}=\\frac{2\\cdot\\text{Precision}_{m}\\cdot\\text{Recall}_{m}}{\\text{Precision}_{m}+\\text{Recall}_{m}}",
+      "label": "(3)",
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Anthropic [2025] Anthropic. Claude code: Best practices for agentic coding. https://www.anthropic.com/engineering/claude-code-best-practices, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.anthropic.com/engineering/claude-code-best-practices",
+      "citation_key": "Anthropic [2025]"
+    },
+    {
+      "raw_text": "Badertdinov et al. [2025] I. Badertdinov, A. Golubev, M. Nekrashevich, A. Shevtsov, S. Karasik, A. Andriushchenko, M. Trofimova, D. Litvintseva, and B. Yangel. Swe-rebench: An automated pipeline for task collection and decontaminated evaluation of software engineering agents. arXiv preprint arXiv:2505.20411, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2505.20411",
+      "doi": null,
+      "url": null,
+      "citation_key": "Badertdinov et al. [2025]"
+    },
+    {
+      "raw_text": "ByteDance [2025] ByteDance. Trae: The real AI engineer. https://www.trae.ai/, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.trae.ai/",
+      "citation_key": "ByteDance [2025]"
+    },
+    {
+      "raw_text": "Chen et al. [2021] M. Chen, J. Tworek, H. Jun, Q. Yuan, H. P. d. O. Pinto, J. Kaplan, H. Edwards, Y. Burda, N. Joseph, G. Brockman, et al. Evaluating large language models trained on code. arXiv preprint arXiv:2107.03374, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2107.03374",
+      "doi": null,
+      "url": null,
+      "citation_key": "Chen et al. [2021]"
+    },
+    {
+      "raw_text": "Chowdhury et al. [2024] N. Chowdhury, J. Aung, C. J. Shern, O. Jaffe, D. Sherburn, G. Starace, E. Mays, R. Dias, M. Aljubeh, M. Glaese, et al. Introducing SWE-bench verified. https://openai.com/index/introducing-swe-bench-verified/, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/introducing-swe-bench-verified/",
+      "citation_key": "Chowdhury et al. [2024]"
+    },
+    {
+      "raw_text": "Cursor [2024] Cursor. Cursor: The AI-first code editor. https://cursor.sh, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://cursor.sh",
+      "citation_key": "Cursor [2024]"
+    },
+    {
+      "raw_text": "Deng et al. [2025] X. Deng, J. Da, E. Pan, Y. Y. He, C. Ide, K. Garg, N. Lauffer, A. Park, N. Pasari, C. Rane, K. Sampath, M. Krishnan, S. Kundurthy, S. Hendryx, Z. Wang, V. Bharadwaj, J. Holm, R. Aluri, C. B. C. Zhang, N. Jacobson, B. Liu, and B. Kenstler. Swe-bench pro: Can ai agents solve long-horizon software engineering tasks?, 2025. URL https://arxiv.org/abs/2509.16941.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2509.16941",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2509.16941",
+      "citation_key": "Deng et al. [2025]"
+    },
+    {
+      "raw_text": "Ding et al. [2026] J. Ding, S. Long, C. Pu, H. Zhou, H. Gao, X. Gao, C. He, Y. Hou, F. Hu, Z. Li, W. Shi, Z. Wang, D. Zan, C. Zhang, X. Zhang, Q. Chen, X. Cheng, B. Deng, Q. Gu, K. Hua, J. Lin, P. Liu, M. Li, X. Pan, Z. Peng, Y. Qin, Y. Shan, Z. Tan, W. Xie, Z. Wang, Y. Yuan, J. Zhang, E. Zhao, Y. Zhao, H. Zhu, L. Zhu, C. Zou, M. Ding, J. Jiao, J. Liu, M. Liu, Q. Liu, C. Tao, J. Yang, T. Yang, Z. Zhang, X. Chen, W. Huang, and G. Zhang. Nl2repo-bench: Towards long-horizon repository generation evaluation of coding agents, 2026. URL https://arxiv.org/abs/2512.12730.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2512.12730",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2512.12730",
+      "citation_key": "Ding et al. [2026]"
+    },
+    {
+      "raw_text": "GitHub [2025] GitHub. Github copilot: Meet the new coding agent. https://github.blog/news-insights/product-news/github-copilot-meet-the-new-coding-agent/, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.blog/news-insights/product-news/github-copilot-meet-the-new-coding-agent/",
+      "citation_key": "GitHub [2025]"
+    },
+    {
+      "raw_text": "Google [2025a] Google. Antigravity: An agentic development platform. https://antigravity.google/, 2025a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://antigravity.google/",
+      "citation_key": "Google [2025a]"
+    },
+    {
+      "raw_text": "Google [2025b] Google. Gemini CLI: An open-source AI agent for the terminal. https://github.com/google-gemini/gemini-cli, 2025b.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/google-gemini/gemini-cli",
+      "citation_key": "Google [2025b]"
+    },
+    {
+      "raw_text": "Jimenez et al. [2024] C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press, and K. Narasimhan. SWE-bench: Can language models resolve real-world GitHub issues? In International Conference on Learning Representations (ICLR), 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Jimenez et al. [2024]"
+    },
+    {
+      "raw_text": "Labs [2024] C. Labs. Introducing Devin, the first AI software engineer. https://www.cognition-labs.com/blog, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.cognition-labs.com/blog",
+      "citation_key": "Labs [2024]"
+    },
+    {
+      "raw_text": "Lieret et al. [2025] K. Lieret, C. E. Jimenez, J. Yang, and O. Press. mini-SWE-agent: A minimal ai software engineering agent. https://github.com/SWE-agent/mini-swe-agent, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/SWE-agent/mini-swe-agent",
+      "citation_key": "Lieret et al. [2025]"
+    },
+    {
+      "raw_text": "OpenAI [2025] OpenAI. Introducing Codex: A cloud software engineering agent. https://openai.com/index/introducing-codex/, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/introducing-codex/",
+      "citation_key": "OpenAI [2025]"
+    },
+    {
+      "raw_text": "Thai et al. [2025] M. V. T. Thai, T. Le, D. N. Manh, H. P. Nhat, and N. D. Q. Bui. Swe-evo: Benchmarking coding agents in long-horizon software evolution scenarios. arXiv preprint arXiv:2512.18470, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.18470",
+      "doi": null,
+      "url": null,
+      "citation_key": "Thai et al. [2025]"
+    },
+    {
+      "raw_text": "Wang et al. [2024] X. Wang, B. Li, Y. Song, F. F. Xu, X. Tang, M. Zhuge, J. Pan, Y. Song, B. Li, J. Singh, et al. Openhands: An open platform for ai software developers as generalist agents. arXiv preprint arXiv:2407.16741, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2407.16741",
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. [2024]"
+    },
+    {
+      "raw_text": "Yang et al. [2024] J. Yang, C. E. Jimenez, A. Wettig, K. Liber, S. Yao, K. Pei, O. Press, and K. Narasimhan. SWE-agent: Agent-computer interfaces enable automated software engineering. arXiv preprint arXiv:2405.15793, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2405.15793",
+      "doi": null,
+      "url": null,
+      "citation_key": "Yang et al. [2024]"
+    },
+    {
+      "raw_text": "Yao [2025] S. Yao. The second half. https://ysymyth.github.io/The-Second-Half/, 2025. Accessed: 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://ysymyth.github.io/The-Second-Half/",
+      "citation_key": "Yao [2025]"
+    },
+    {
+      "raw_text": "Zan et al. [2025] D. Zan, Z. Huang, W. Liu, H. Chen, L. Zhang, S. Xin, L. Chen, Q. Liu, X. Zhong, A. Li, et al. Multi-swe-bench: A multilingual benchmark for issue resolving. arXiv preprint arXiv:2504.02605, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2504.02605",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zan et al. [2025]"
+    },
+    {
+      "raw_text": "Zhang et al. [2025] L. Zhang, S. He, C. Zhang, Y. Kang, B. Li, C. Xie, J. Wang, M. Wang, Y. Huang, S. Fu, et al. Swe-bench goes live! arXiv preprint arXiv:2505.23419, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2505.23419",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhang et al. [2025]"
+    },
+    {
+      "raw_text": "Zhao et al. [2025] W. Zhao, N. Jiang, C. Lee, J. T. Chiu, C. Cardie, M. Gallé, and A. M. Rush. Commit0: Library generation from scratch. In International Conference on Learning Representations (ICLR), 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhao et al. [2025]"
+    }
+  ],
+  "full_text": "## Introduction\n\nFrontier LLM-powered agents (e.g., Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and OpenHands (Wang et al., 2024)) are increasingly deployed as long-running systems into complex, open-ended environments, such as OpenClaw11https://github.com/openclaw/openclaw, where static zero-shot capabilities are intrinsically insufficient. To operate effectively in these dynamic settings, agents must treat software as a skill, which involves the autonomous development and continuous refinement of customized software interfaces. As the agent iteratively adapts to successive requirements from end-users and ongoing environmental feedback, its continuous development efforts accumulate, naturally forming a complete repository evolution history.\n\nYet, evaluation for such long-running agent systems remains largely under-explored.\nWhile benchmarks for agents on coding tasks have advanced from isolated function completion to full-scale codebase generation (Table 1), they predominantly treat development as independent, one-off tasks. A critical dimension remains unaddressed: the temporal structure of software evolution. A true repository evolution benchmark must capture the full evolution itinerary—a continuous stream of dependent tasks where early implementation decisions constrain subsequent ones. Ignoring these dependencies allows agents to take expedient shortcuts that satisfy immediate tests but silently accumulate technical debt that invisible to current isolated evaluations (Yao, 2025).\n\nTo capture these long-term dynamics in a Repository Evolution benchmark, extracting realistic itineraries from open-source repositories is essential.\nHowever, determining the appropriate task granularity is non-trivial.\nIntuitively, one might attempt to measure evolution at the release-level.\nHowever, this granularity is too coarse: release snapshots collapse the hundreds of interdependent commits between versions into a single update, flattening the fine-grained dependency structure that drives evolutionary changes.\nIn contrast, the commit-level history is too fine-grained: many commits are trivial (e.g., typo fixes) and the linear commit sequence encodes only chronological apply order, introducing spurious dependencies between unrelated changes.\n\nTo address this, we propose modeling software evolution at the Milestone-level.\nWe define a milestone as a coherent functional unit that preserves dependency constraints.\nThis granularity strikes a crucial balance: unlike releases, it retains the fine-grained development dependencies and structural evolution of the codebase; unlike commits, it encapsulates realistic and coherent functional goals.\nFunctional dependencies among milestones naturally form a Directed Acyclic Graph (DAG), which captures genuine prerequisite constraints while allowing independent features to proceed in parallel.\nHowever, constructing milestone DAGs requires reordering and grouping commits, which disrupts the native git history.\nThis poses a severe challenge to correctness: applying reordered patches often breaks compilation and test collection, jeopardizing the benchmark’s executability and realism.\n\nTo resolve this, we introduce DeepCommit, an automated agentic pipeline that reconstructs verifiable software evolution itineraries in the form of Milestone DAGs.\nBy synergizing static analysis, LLM-agent-driven milestone construction, and runtime validation, DeepCommit ensures the synthesized milestones are executable and testable.\nPowered by Claude Opus 4.5, it achieves a high average test collection success rate of $>$85%, ensuring comprehensive verification coverage.\nDesigned as a scalable agentic framework, DeepCommit is poised to leverage future LLM advancements to harvest increasingly accurate and extensive evolution itineraries from the vast open-source ecosystem.\n\nBuilding on this foundation, we present EvoClaw, a benchmark for evaluating LLM agents under continuous software evolution.\nEvoClaw comprises 98 human-verified milestones across 7\nevolution itineraries (milestone DAGs), each from a release range of a unique high-impact open-source Repository, and spanning five programming languages.\nRather than solving independent tasks, agents in EvoClaw are tasked with evolving a codebase through streams of these dependency-constrained milestones, closely mirroring real-world development scenarios.\nA single full evaluation costs approximately $500 with frontier models such as Claude Opus 4.5.\nTo achieve a high score in this setting, an agent must maintain long-term context, manage architectural consistency, and prevent error accumulation across extended development horizons.\n\nUsing EvoClaw, we conduct a comprehensive evaluation of 4 frontier agent frameworks and 10 state-of-the-art LLMs. We assess performance using a unified Score (Section 5.1), which balances Recall (completeness of new feature implementation) and Precision (robustness against regressions), along with a strict Resolve Rate for fully completed milestones. Our evaluation reveals the following key findings regarding agent capabilities in continuous software evolution:\n\nA fundamental performance gap: Continuous vs. Independent. (Section 5.2) Frontier models exhibit a substantial degradation from independent to continuous task evaluation.\nScores drop from over $\\sim$80% on isolated tasks to at most 38.03% (Claude Opus 4.6) in continuous environments, with a mere 13.37% Resolve Rate (Gemini 3 Pro).\n\nRecall grows linearly but Precision saturates. We identify a fundamental asymmetry in continuous software evolution (Section 5.4): while frontier agents retain the capability to implement new features (linear Recall growth), they fail to prevent regressions as the system evolves (saturated Precision). This indicates that agents struggle primarily with system-level maintenance rather than local implementation.\n\nAccumulated errors stall downstream progress. Unresolved regressions trigger a “snowball effect” where errors accumulate faster than agents can fix them (Section 5.5). Early bugs propagate through dependency chains to contaminate downstream tasks, eventually stalling development entirely.\n\nProactive exploration and verification mitigate technical debt. Behavioral analysis shows that successful sustained evolution relies on proactive codebase exploration and disciplined test verification, whereas both blind trial-and-error and the absence of verification accelerate failure (Section 5.6).\n\n## Related Work\n\nLLM-Driven Coding Agents.\nWhile basic Bash tools provide a foundation for interacting with the environment, equipping LLMs with specialized scaffolding significantly enhances efficiency, reliability, and user-friendliness.\nSWE-agent (Yang et al., 2024) introduced the Agent-Computer Interface (ACI), mini-SWE-agent (Lieret et al., 2025) demonstrated that a minimal 100-line agent can remain competitive, and OpenHands (Wang et al., 2024) targets end-to-end autonomous issue resolution.\nCommercial tools span diverse integration paradigms: Devin (Labs, 2024) pioneered fully autonomous software engineering, GitHub Copilot (GitHub, 2025), Cursor (Cursor, 2024), Trae (ByteDance, 2025), and Antigravity (Google, 2025a) embed agents within IDE or cloud workflows, while Claude Code (Anthropic, 2025), Codex (OpenAI, 2025), and Gemini CLI (Google, 2025b) provide terminal-based execution.\nDespite these distinct paradigms, all major platforms have converged on providing terminal-based agentic interfaces, which is the modality we adopt for evaluation in this work.\nAs LLMs grow more capable, agent scaffolds evolve to grant greater autonomy, supporting long-horizon tasks with complex dependencies.\n\nSoftware Engineering Benchmarks for LLMs.\n\nRecent benchmarks have progressed from isolated function completion to realistic codebase generation evaluations.\nSWE-bench (Jimenez et al., 2024) introduced issue resolution in real-world codebases, followed by quality-controlled variants such as SWE-bench Verified (Chowdhury et al., 2024), SWE-bench Pro (Deng et al., 2025), and multilingual extensions in Multi-SWE-bench (Zan et al., 2025).\nBeyond issue fixing, SWE-Evo (Thai et al., 2025) and Commit-0 (Zhao et al., 2025) explore longer-horizon development workflows, NL2Repo (Ding et al., 2026) evaluates full repository generation from natural-language specifications, and automated pipelines such as SWE-rebench (Badertdinov et al., 2025) and SWE-bench Live (Zhang et al., 2025) improve realism and data hygiene.\nDespite these advances, most benchmarks model software engineering as static, independent tasks.\nThis overlooks the continuous, dependency-driven nature of real-world software evolution (Yao, 2025) and underutilizes the rich developmental structure encoded in version histories.\nConsequently, current evaluations primarily measure short-horizon task completion rather than sustained codebase evolution.\n\n## DeepCommit: An Automated Pipeline for Reconstructing Software Evolution\n\n### From Raw Commits to Milestone DAGs\n\nSoftware repositories encode rich evolutionary trajectories, yet raw commit histories remain noisy, fragmented, and inadequate as executable development sequences.\nCommits vary widely in granularity, semantic clarity, and dependency structure, while parallel branches, squash merges, and non-functional changes obscure true developmental relationships.\nRelying on documentation or release notes alone lacks sufficient resolution to reconstruct precise code evolution.\nDeepCommit addresses this challenge by transforming linear git histories into structured, verifiable Milestone DAGs, where each node represents a coherent, testable unit of development and edges encode dependency constraints across evolution phases.\n\n### Overall Agent-Driven Pipeline\n\nAs illustrated in Figure˜2, DeepCommit reconstructs software evolution itineraries through an end-to-end pipeline that sequentially integrates: (1) commit history preprocessing, (2) milestone DAG construction, and (3) executable environment resolution.\n\n##### Commit History Preprocessing\n\nGiven a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist.\n\nTo facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling.\n\n##### Milestone DAG Construction\n\nOrganizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure.\n\nSeed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction.\n\nMilestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone.\n\nDependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning.\n\nGranularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B).\n\n##### Runtime Environment Resolution\n\nTo transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations.\n\nMilestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration.\n\nEnvironment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement.\n\nTest Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C).\n\n### Automated Quality Assurance\n\nTo ensure the reliability and reproducibility of our evaluation, we rigorously validate each milestone testbed across three core dimensions:\n\nMilestone Graph Validity. We verify the structural integrity of the reconstructed history. This includes confirming commit completeness (100% coverage of the target range), dependency consistency (ensuring milestone dependencies respect underlying commit dependencies), and DAG correctness (validating acyclicity).\n\nRuntime Executability. We ensure that errors stem from agent code, not infrastructure. We verify testbed compilability by ensuring successful build and test collection in both states. We also strictly monitor execution logs to ensure environment-induced errors remain negligible.\n\nEvaluation Reliability. We assess the stability of the test suites. We achieve a high test collection rate (87.1%). We ensure test consistency by validating a negligible Pass-to-Fail rate ($\\leq$0.026%) and filtering flaky tests through multiple runs. Finally, we enforce retained milestone to have at least one F2P or N2P test signal (details in Appendix D).\n\n#### Commit History Preprocessing\n\nGiven a development window defined by version tags, we collect all main-branch commits together with associated Pull Requests (PRs), Issues, Releases, and discussion metadata, providing both structural and semantic context for downstream reconstruction (details in Appendix A).\nWe filter out commits that only touch non-source files (e.g., docs, CI configs) using a per-repo source-directory whitelist.\n\nTo facilitate milestone discovery and dependency inference, we extract multi-dimensional structural signals through static analysis.\nSpecifically, we construct: (1) a commit-level DAG using git blame to trace line-level textual dependencies; (2) symbol-level modifications identifying key changes in classes and functions; and (3) file-level co-change statistics to reflect evolutionary coupling.\n\n#### Milestone DAG Construction\n\nOrganizing hundreds of discrete commits into semantically coherent milestones requires integrating structural dependencies with code-level reasoning. We employ a four-stage LLM-agent-driven process to progressively construct the Milestone DAG, where each stage is orchestrated with automated data preparation, agent-accessible validation tools for self-checking, and post-process quality gates that trigger re-execution upon failure.\n\nSeed Discovery.\nAn LLM agent identifies foundational milestone anchors by jointly evaluating DAG topology (e.g., high out-degree and descendant count), commit semantics, and evolutionary patterns. Commits that initiate distinct development themes, rather than mere incremental follow-ups, are selected as seeds for subsequent milestone construction.\n\nMilestone Consolidation.\nFor each seed, parallel sub-agents aggregate semantically and structurally related commits.\nA coordinating agent then resolves overlaps, enforces complete coverage, and guarantees an acyclic partition in which each commit belongs to exactly one milestone.\n\nDependency Inference.\nCandidate inter-milestone edges are proposed based on commit-level dependencies, file co-change patterns, and symbol-level dependencies, and subsequently validated through agent-based semantic reasoning.\n\nGranularity Refinement.\nOversized milestones are decomposed into semantically independent sub-milestones, while underspecified ones are merged into adjacent milestones.\nDependencies are synchronously updated to preserve a valid DAG structure (details in Appendix B).\n\n#### Runtime Environment Resolution\n\nTo transform the Milestone DAG into an executable evaluation environment, we use a multi-agent workflow\nthat generates reproducible Docker images and stable test behaviors for each milestone by automatically resolving runtime dependencies and test framework configurations.\n\nMilestone Optimization and Testbed Preparation.\nA MilestoneAgent reconstructs repository states by sequentially cherry-picking milestone commits in topological order.\nWhen build failures arise from misattributed commits or missing dependencies, the Main Agent triggers iterative DAG refinement and testbed regeneration.\n\nEnvironment Configuration.\nAn EnvAgent configures runtime environments by leveraging repository CI/CD workflows and automatically generating Dockerfiles for each milestone.\nBuild issues at this stage are resolved by adjusting the Dockerfile (e.g., installing missing dependencies, pinning compatible versions); persistent errors signal upstream DAG inconsistencies requiring further refinement.\n\nTest Collection.\nFor each milestone, we define a START state (post-prerequisite completion) and an END state (post-implementation).\nTests are executed before and after applying gold patches, repeatedly filtering flaky behaviors.\nStable transitions are categorized as Fail-to-Pass (F2P) to validate newly introduced functionality and Pass-to-Pass (P2P) to enforce regression preservation (Appendix C).\n\n## EvoClaw: Benchmarking Continuous Software Evolution\n\nEvoClaw introduces a novel evaluation paradigm designed to assess an agent’s ability to evolve and maintain a software codebase over an extended lifecycle.\nAs shown in Figure˜3, unlike traditional benchmarks that focus on resolving independent issues,\nEvoClaw simulates a realistic, continuous development process where requirements arrive as a stream, and tasks have strict sequential dependencies.\n\n### The Continuous Task Evaluation Framework\n\nThe framework orchestrates a continuous development pipeline: an external planner dynamically unlocks tasks based on a dependency graph, the agent implements them in a persistent codebase, and the framework asynchronously evaluates snapshots upon submission. This design explicitly decouples roadmap planning from implementation, allowing us to assess the agent’s ability to maintain and evolve software within a structured workflow.\nThe framework comprises three core components:\n\nDependency-Driven Task Stream. Requirements are not presented in a static batch but are unlocked dynamically. The system maintains a DAG-based task scheduler where a new milestone $M_{i}$ becomes available to the agent if and only if all its prerequisite milestones $\\{M_{j}\\mid M_{i}\\mathrel{depends}\\,\\mathrel{on}M_{j}\\}$ have been completed. This simulates real-world constraints in which foundational features must be established before dependent features are implemented.\n\nContinuous Evolution Environment. The agent operates within a persistent, stateful environment where modifications from each task persist into the next. This compels the agent to maintain the long-term health of the codebase, as early technical debt or latent bugs can accumulate and impede future progress.\n\nSnapshot-Based Isolated Evaluation. To reconcile the need for a continuous development flow with rigorous verification, we employ a “develop-in-place, evaluate-in-isolation” strategy. Upon task completion, the agent’s implementation state is snapshotted and transferred to an isolated evaluation container to run the test suite. This ensures that the scoring process is reproducible and unaffected by the agent’s ongoing development, while the agent’s working environment remains uninterrupted.\n\n### Benchmark Construction\n\nWe construct a high-quality dataset through a rigorous pipeline that transforms open-source repositories into verified evolutionary suites.\n\nRepository and Range Selection. We identify projects with high community impact and diverse programming languages. We specifically select release ranges that exhibit rich dependency structures, ensuring the benchmark captures complex, non-linear development scenarios rather than trivial sequences.\n\nItinerary Extraction via DeepCommit.\nLeveraging the DeepCommit pipeline (Section 3), we mine the evolutionary history of selected projects.\nTo guarantee the benchmark’s quality and evaluation efficiency, we apply strict post-processing filters to the generated milestones.\nWe retain only milestones that: (1) represent core functional changes (filtering out pure documentation updates); (2) possess executable F2P tests to serve as definitive success criteria; and (3) fall within a manageable context window to maintain task solvability.\nThis step ensures that every task in the benchmark is grounded in a verified, executable state transition.\n\nReverse-Engineering Software Requirement Specifications (SRS).\nRelying solely on original GitHub issues or PR descriptions is often insufficient, as they can be underspecified, outdated, or disconnected from the final code implementation.\nTo bridge this gap, we employ an agent-driven reverse-engineering approach to synthesize high-fidelity Software Requirement Specifications (SRS).\nWe first dispatch an LLM agent to analyze the ground-truth patches to draft precise functional requirements.\nThis draft then undergoes a refinement phase to align acceptance criteria strictly with the verified Fail-to-Pass tests.\nFinally, environment-specific instructions (e.g., dependency updates) are appended by analyzing build configuration changes, ensuring a complete execution context.\n\nHuman-in-the-Loop Verification.\nAutomated generation can yield logical inconsistencies and misalignment with edge cases. To mitigate this, expert annotators conduct a final review focused on task solvability.\nAnnotators verify that the SRS provides all necessary information to solve the problem without leaking implementation details and that the acceptance criteria are unambiguous.\nSimultaneously, we validate the stability of the test suites to rule out flaky tests.\nThis hybrid verification ensures that EvoClaw provides a fair assessment, distinguishing genuine agent errors from artifacts of ambiguous specifications.\n\n### Benchmark Statistics\n\nEvoClaw comprises 98 verified milestones across 7 diverse open-source repositories, spanning five programming languages (Go, Rust, Java, TypeScript, Python) with a total of 124 inter-milestone dependencies. As shown in Figure˜4(a), the milestones are distributed across repositories with varying complexity, ranging from 9 to 23 milestones per repository.\nThe dataset captures diverse real-world development patterns, including major architectural changes (e.g., multi-library support), feature-rich iterations (e.g., cloud-native enhancements), stability-focused releases (e.g., compatibility fixes), and large-scale refactoring (e.g., type system overhauls). This ensures EvoClaw evaluates agents across the full spectrum of software engineering tasks.\n\nFigure˜4(b) illustrates the distribution of task complexity. The dataset exhibits substantial diversity in both specification length (SRS mean: 1,348 words) and implementation scope (gold patch LOC ranging from $<100$ to $>1,500$). On average, each milestone modifies 27.4 files and involves 17.1 Fail-to-Pass tests for verification alongside 6,218 Pass-to-Pass tests for regression prevention. Detailed per-repository statistics are provided in Appendix F, and the full Milestone DAG visualizations for all repositories are shown in Appendix G.\n\n## Results and Analysis\n\n### Experimental Setup\n\n### Overall Performance\n\nTable 2 presents results across 15 agent-model configurations.\nClaude Opus 4.6 achieves the highest Score (38.03% in Openhands and 36.29% in Claude Code), followed by Claude Sonnet 4.6 (29.58%) and GPT 5.3-Codex (28.88%).\nAcross all models, the gap between Score ($\\sim$38% at best) and Resolve Rate ($\\sim$13%) is substantial: agents achieve partial progress on most milestones but rarely complete them fully.\nMoreover, the resolved milestones are predominantly early ones with few upstream dependencies, confirming that accumulated upstream errors increasingly hinder downstream task completion.\nUnless otherwise noted, subsequent analyses focus on configurations where each model is paired with its vendor-provided agent framework.\n\nComparing across model families, clear generational improvements emerge: Claude 4.6 models significantly outperform their 4.5 predecessors, and GPT 5.3-Codex substantially improves over both GPT 5.2-Codex and GPT 5.2. However, comparing GPT 5.2 and GPT 5.2-Codex reveals that Codex-specific optimization may be counterproductive for long-horizon development, where sustained codebase maintenance demands broader analytical capabilities beyond isolated task solving.\nThe three Gemini models achieve comparable scores, with Gemini 3 Flash matching Gemini 3 Pro at one-ninth the cost. Gemini 3 Pro uses the fewest turns, possibly indicating insufficient exploration.\nFigure 6 visualizes the cost-score trade-off. Higher cost does not uniformly translate into higher performance: Gemini 3 Pro and Sonnet 4.6 both exceed $100 per evolution range yet score below Opus 4.6 ($88). On the Pareto frontier, Gemini 3 Flash ($12, 24.2%) and GPT 5.3-Codex ($25, 28.9%) offer the best cost-effectiveness, achieving competitive scores at a fraction of the cost of top-performing models.\nOpenHands trials exhibit notably longer execution times (e.g., 18.49 h for GPT 5.3-Codex) because its runner permits up to 3,000 iterations per milestone with automatic session resumption, allowing the agent to retry extensively when stuck. This additional compute does not consistently improve scores: Claude Code with Opus 4.6 achieves a comparable score in under 4 hours.\n\nAdditionally, Figure 5 compares per-repository performance under both evaluation modes. High independent-task performance across all repositories confirms that milestones are individually solvable, indicating that the difficulty stems from long-horizon error accumulation rather than inherent task complexity.\nThis effect varies significantly by repository. scikit-learn exhibits the largest degradation: Claude Sonnet 4.6 achieves 93.2% independently but only 21.1% under continuous evaluation.\n\nOverall, these results highlight that EvoClaw poses a significant challenge to current frontier models, and reliable long-horizon continuous development remains an open problem.\n\n### Task Complexity and Topological Effects\n\nFigure 7 examines how milestone characteristics correlate with agent performance.\nGold patch LOC, a traditional measure of task complexity, shows a clear monotonic relationship. Larger patches require more code changes and yield lower scores across all models.\nSRS (Software Requirements Specification) word count, however, exhibits a non-monotonic pattern, with a clear sweet spot for specifications of moderate length (around 500 to 1500 words). When specifications are concise, agents must autonomously locate relevant context from the repository, increasing exploration burden. When specifications are verbose, the sheer volume of requirements increases implementation workload. Milestones with moderate-length SRSs achieve the highest accuracy, suggesting that task difficulty depends not only on implementation effort but also on the cost of information acquisition.\n\nBeyond these static factors, the continuous evaluation setting introduces structural complexity unique to EvoClaw. Both the milestone execution order and the DAG topological layer show statistically significant negative correlations with the score. Later milestones and deeper topological layers consistently yield lower performance. This reflects the compounding effect of upstream errors, as agents must build upon their own (potentially flawed) prior work. These topological factors are absent in independent evaluation and represent the distinctive challenge of long-horizon software evolution.\nThe Resolve Rate (bottom row of Figure 7) makes this effect even starker: it drops drastically beyond the earliest milestones and the shallowest DAG layers, indicating that current agents can only fully resolve milestones that appear early in the sequence or have no upstream dependencies. Once prior errors accumulate, agents may still achieve partial progress (reflected in Score) but rarely produce a completely correct solution.\n\n### Evolution Dynamics: Recall Scales while Precision Saturates\n\nThe declining performance at later milestones raises a natural question: does agent capability degrade over time, or does accumulated technical debt overwhelm otherwise competent agents?\n\nTo answer this, we model cumulative score trajectories using a saturation function $y=a(1-e^{-bx})$, where a small $b$ yields near-linear growth while a large $b$ produces rapid saturation toward the ceiling $a$. As shown in Figure 8 (left), all models under continuous evaluation exhibit clear performance ceilings, and multi-window extrapolation (fitting the saturation model to progressively larger subsets of milestones and projecting forward) confirms that these ceilings persist beyond the observed window. Comparing continuous and independent evaluation (center, right), independent scores grow near-linearly while continuous scores saturate, with the gap widening monotonically as evolution progresses.\n\nWe decompose the cumulative score into Recall (successful feature implementation) and Precision (preservation of existing functionality) to isolate the underlying mechanism. Figure 9 reveals a fundamental asymmetry: Recall continues to grow near-linearly across all models (especially frontier models), indicating that agents retain the ability to solve newly assigned tasks. Precision, however, saturates rapidly across all evaluated configurations. This means the performance ceiling is not caused by agents forgetting how to code, but by their inability to prevent regressions from accumulating. Stronger models achieve higher Precision plateaus, yet none avoid saturation entirely. This Recall-Precision divergence provides a mechanistic explanation for the snowball effect: as unresolved regressions compound, each new milestone operates on an increasingly degraded codebase, eventually overwhelming the agent’s capacity for productive development.\n\n### Failure Analysis: Error Generation and Propagation\n\nUnderstanding why agents fail in continuous evaluation is inherently difficult. A single early mistake can trigger cascading test failures across dozens of downstream milestones, making it challenging to disentangle root causes from their propagated consequences.\nTo enable systematic analysis, we introduce the concept of error chains: for each test that transitions from passing to failing during the evolution, we trace its status across all subsequent milestones until it is either healed or the trial ends. This yields a per-test timeline that captures the full lifecycle of an error.\nWe focus this analysis on the strongest configuration, Claude Opus 4.6, to characterize failure mechanisms at the frontier of current agent capabilities.\n\nWe decompose error chains along two orthogonal dimensions. The first, Propagation Type, captures how a fault affects downstream milestones. This is determined statistically from evaluation results: we track each test’s status across the milestone timeline and classify events as P0 Root Cause (the originating failure), P0 Induced (cross-chain contamination from unrelated changes), P1 Inherited (propagated through dependency), PX Missing (skipped execution), or PH Healed (successfully recovered).\nFigure 10 (right) shows that propagation events (P1, PX) increasingly dominate in later stages, confirming the compounding degradation observed in Section 5.3. The left panel visualizes representative error chain patterns across repositories, illustrating how a single root cause event can cascade through the entire remaining evolution.\n\nThe second dimension, Root Cause Type, captures why the initial fault originates. Since root cause attribution requires understanding the agent’s intent, we employ Claude Sonnet 4.6 as a reviewer agent that compares the task agent’s code changes against the ground-truth patch, the SRS specification, and evaluation artifacts. The reviewer classifies each error chain’s root cause into three categories: Logic Error (correct target, buggy implementation), Omission (missing a required component), or Extraneous (unnecessary modifications that break existing functionality).\nFigure 11 presents the joint distribution of Root Cause Type $\\times$ Propagation Type. Logic Error is the dominant root cause ($\\sim$57% of all error chain events), with its chains exhibiting both the highest inherited propagation (P1, 12%) and the highest proportion of missing test execution (PX Missing, 17%), indicating that buggy implementations frequently prevent downstream tests from running at all.\n\n### Agent Behavior: The Struggle Against Accumulating Complexity\n\nBeyond aggregate scores, we examine how agents allocate effort and manage state when facing accumulating technical debt during long-horizon iterations. By instrumenting tool calls, context usage, and interaction turns, we reveal distinct behavioral patterns.\n\nEffort Fluctuation and Extremes. As shown in Figure 12, all evaluated agents exhibit a shared trend in their effort allocation (measured by the continuous-to-independent turns ratio). In the initial phase (progress $\\sim$0.1), continuous effort is slightly higher than independent effort, as agents must conduct large-scale exploration to build a mental model of the unfamiliar repository. During the middle phase (progress 0.1–0.5), the ratio drops below $1\\times$ (with the median falling to $\\sim$0.83$\\times$): agents successfully reuse their established context, bypassing the redundant exploration required in independent evaluation. However, in the late stage (progress 0.6–0.9), effort rises significantly as accumulating errors demand extensive debugging. Finally, near completion (progress $\\sim$1.0), agent behavior diverges sharply. Some agents resort to frantic thrashing, while others prematurely give up. Notably, GPT 5.3-Codex demonstrates the most stable effort profile, maintaining consistent variance throughout the project lifecycle.\n\nContext Stability and Exploration Patterns. To sustain this fluctuating effort, agents must effectively manage their context. Figure 13 illustrates this using Claude Code with Opus 4.6 as a representative example. The context window shows stable, controllable wave patterns, demonstrating that modern agent frameworks paired with frontier models can effectively support long-horizon programming without catastrophic context overflow. The framework employs two compression strategies: partial compression (evicting specific tool results) and heavy compaction (summarizing extensive histories). Crucially, agent exploration behavior (reading and searching) tightly couples with this state management. Exploration surges at the beginning of each new milestone and immediately following major context compaction events, as the agent works to rebuild its mental model.\n\nThe Impact of Exploration. This exploration behavior directly dictates downstream success. Figure 14 demonstrates that within their respective agent frameworks, models from the same family exhibit a consistent pattern: higher exploration counts correlate with better performance. For instance, Claude Opus 4.6 and Claude Sonnet 4.6 hold a distinct advantage because they aggressively dispatch subagents to analyze the codebase, executing over 7,000 exploration commands. Conversely, models like Gemini 3 Pro allocate too little effort to reading, indicating that many current models still lack proactive exploration for long-horizon tasks.\n\nVerification vs. Blind Thrashing. Alongside exploration, we analyze verification behavior (test execution). Figure 15 shows that average verification effort generally follows an inverted-U shape, increasing as the codebase grows more complex before declining near the end. However, this masks two problematic extremes: Gemini 3.1 Pro verifies excessively, while GPT 5.2-Codex rarely verifies at all, and both achieve lower scores. Figure 16 further isolates this dynamic by mapping the score landscape against edit thrashing and verification frequency. A clear sweet spot emerges for moderate, disciplined verification. In contrast, the worst outcomes concentrate in the high-thrash and low-verify quadrant—a blind thrashing trap where agents repeatedly modify the same files without executing tests to guide them, effectively accelerating the snowball effect.\n\n### DeepCommit vs Human-Annotated Milestone DAG\n\nWe conducted a case study (Appendix J) that compares the human-annotated and DeepCommit milestone DAGs for the scikit-learn v1.5.2–v1.6.0 release interval. The Human DAG organizes milestones by semantic release intent, whereas DeepCommit derives groups from dependency topology in the commit graph. As a result, DeepCommit covers a smaller but tightly connected subset of commits, recovers human-like boundaries when technical structure is clear (e.g., documentation), but tends to fragment cross-module, intent-defined milestones into topological phases. Overall, this case study shows that the Human DAG captures semantically coherent and process-aware milestone structure, whereas DeepCommit more strongly reflects dependency topology and phase-wise code organization.\n\n## Conclusion\n\nWe introduced DeepCommit, a pipeline that distills verifiable software evolution into coherent Milestone DAGs from noisy, fine-grained git histories, and EvoClaw, a benchmark for evaluating LLM agents under continuous, dependency-driven development. Our results reveal a fundamental gap between independent task-solving and continuous evolution: frontier models achieve over 80% on isolated milestones but drop below 38% in continuous settings. This degradation stems from a critical inability to maintain code integrity: while agents can implement new features, they fail to prevent regressions, causing a snowball effect of accumulating technical debt. Even the strongest agents resolve only $\\sim$13% of milestones in full evolutionary sequences, establishing sustained, maintainable repository evolution as a central open challenge for autonomous software agents.\n\n## Impact Statement\n\nThis paper presents a benchmark for evaluating LLM agents in continuous software evolution, a prerequisite for deploying autonomous agents in real-world production environments. Beyond code generation, we emphasize the ability to sustainably evolve systems over time, which is essential for long-running agent runtimes to iteratively customize software for diverse user needs. This capability unlocks a new productivity paradigm: agents serving as adaptive interfaces that bridge human intent and complex digital systems. Although highly capable coding agents may impact the software development workforce, we expect them to lower the barrier to entry for software creation, empowering a broader range of users to leverage the power of code for problem-solving\n",
+  "extracted_at": "2026-04-13T17:38:37.604700"
+}

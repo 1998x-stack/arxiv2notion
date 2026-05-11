@@ -1,0 +1,27 @@
+{
+  "arxiv_id": "2402.01822v2",
+  "title": "Building Guardrails for Large Language Models",
+  "authors": [
+    "Yi Dong",
+    "Ronghui Mu",
+    "Gaojie Jin",
+    "Yi Qi",
+    "Jinwei Hu",
+    "Xingyu Zhao",
+    "Jie Meng",
+    "Wenjie Ruan",
+    "Xiaowei Huang"
+  ],
+  "abstract": "As Large Language Models (LLMs) become more integrated into our daily lives, it is crucial to identify and mitigate their risks, especially when the risks can have profound impacts on human users and societies. Guardrails, which filter the inputs or outputs of LLMs, have emerged as a core safeguarding technology. This position paper takes a deep look at current open-source solutions (Llama Guard, Nvidia NeMo, Guardrails AI), and discusses the challenges and the road towards building more complete solutions. Drawing on robust evidence from previous research, we advocate for a systematic approach to construct guardrails for LLMs, based on comprehensive consideration of diverse contexts across various LLMs applications. We propose employing socio-technical methods through collaboration with a multi-disciplinary team to pinpoint precise technical requirements, exploring advanced neural-symbolic implementations to embrace the complexity of the requirements, and developing verification and testing to ensure the utmost quality of the final product.",
+  "categories": [
+    "cs.CL",
+    "cs.AI"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2024-02-02T16:35:00+00:00",
+  "updated": "2024-05-29T12:57:01+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Proceedings of the 41st International Conference on Machine Learning, Vienna, Austria. PMLR 235, 2024",
+  "pdf_url": "https://arxiv.org/pdf/2402.01822v2.pdf"
+}

@@ -1,0 +1,26 @@
+{
+  "arxiv_id": "2511.10720v1",
+  "title": "PISanitizer: Preventing Prompt Injection to Long-Context LLMs via Prompt Sanitization",
+  "authors": [
+    "Runpeng Geng",
+    "Yanting Wang",
+    "Chenlong Yin",
+    "Minhao Cheng",
+    "Ying Chen",
+    "Jinyuan Jia"
+  ],
+  "abstract": "Long context LLMs are vulnerable to prompt injection, where an attacker can inject an instruction in a long context to induce an LLM to generate an attacker-desired output. Existing prompt injection defenses are designed for short contexts. When extended to long-context scenarios, they have limited effectiveness. The reason is that an injected instruction constitutes only a very small portion of a long context, making the defense very challenging. In this work, we propose PISanitizer, which first pinpoints and sanitizes potential injected tokens (if any) in a context before letting a backend LLM generate a response, thereby eliminating the influence of the injected instruction. To sanitize injected tokens, PISanitizer builds on two observations: (1) prompt injection attacks essentially craft an instruction that compels an LLM to follow it, and (2) LLMs intrinsically leverage the attention mechanism to focus on crucial input tokens for output generation. Guided by these two observations, we first intentionally let an LLM follow arbitrary instructions in a context and then sanitize tokens receiving high attention that drive the instruction-following behavior of the LLM. By design, PISanitizer presents a dilemma for an attacker: the more effectively an injected instruction compels an LLM to follow it, the more likely it is to be sanitized by PISanitizer. Our extensive evaluation shows that PISanitizer can successfully prevent prompt injection, maintain utility, outperform existing defenses, is efficient, and is robust to optimization-based and strong adaptive attacks. The code is available at https://github.com/sleeepeer/PISanitizer.",
+  "categories": [
+    "cs.CR",
+    "cs.AI",
+    "cs.CL",
+    "cs.LG"
+  ],
+  "primary_category": "cs.CR",
+  "published": "2025-11-13T18:56:20+00:00",
+  "updated": "2025-11-13T18:56:20+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "The code is available at https://github.com/sleeepeer/PISanitizer",
+  "pdf_url": "https://arxiv.org/pdf/2511.10720v1.pdf"
+}

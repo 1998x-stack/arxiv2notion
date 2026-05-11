@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "1510.01378v1",
+  "title": "Batch Normalized Recurrent Neural Networks",
+  "authors": [
+    "César Laurent",
+    "Gabriel Pereyra",
+    "Philémon Brakel",
+    "Ying Zhang",
+    "Yoshua Bengio"
+  ],
+  "abstract": "Recurrent Neural Networks (RNNs) are powerful models for sequential data that have the potential to learn long-term dependencies. However, they are computationally expensive to train and difficult to parallelize. Recent work has shown that normalizing intermediate representations of neural networks can significantly improve convergence rates in feedforward neural networks . In particular, batch normalization, which uses mini-batch statistics to standardize features, was shown to significantly reduce training time. In this paper, we show that applying batch normalization to the hidden-to-hidden transitions of our RNNs doesn't help the training procedure. We also show that when applied to the input-to-hidden transitions, batch normalization can lead to a faster convergence of the training criterion but doesn't seem to improve the generalization performance on both our language modelling and speech recognition tasks. All in all, applying batch normalization to RNNs turns out to be more challenging than applying it to feedforward networks, but certain variants of it can still be beneficial.",
+  "categories": [
+    "stat.ML",
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "stat.ML",
+  "published": "2015-10-05T21:45:31+00:00",
+  "updated": "2015-10-05T21:45:31+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1510.01378v1.pdf"
+}

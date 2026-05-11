@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2306.15595v2",
+  "title": "Extending Context Window of Large Language Models via Positional Interpolation",
+  "authors": [
+    "Shouyuan Chen",
+    "Sherman Wong",
+    "Liangjian Chen",
+    "Yuandong Tian"
+  ],
+  "abstract": "We present Position Interpolation (PI) that extends the context window sizes of RoPE-based pretrained LLMs such as LLaMA models to up to 32768 with minimal fine-tuning (within 1000 steps), while demonstrating strong empirical results on various tasks that require long context, including passkey retrieval, language modeling, and long document summarization from LLaMA 7B to 65B. Meanwhile, the extended model by Position Interpolation preserve quality relatively well on tasks within its original context window. To achieve this goal, Position Interpolation linearly down-scales the input position indices to match the original context window size, rather than extrapolating beyond the trained context length which may lead to catastrophically high attention scores that completely ruin the self-attention mechanism. Our theoretical study shows that the upper bound of interpolation is at least $\\sim 600 \\times$ smaller than that of extrapolation, further demonstrating its stability. Models extended via Position Interpolation retain its original architecture and can reuse most pre-existing optimization and infrastructure.",
+  "categories": [
+    "cs.CL",
+    "cs.AI",
+    "cs.LG"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2023-06-27T16:26:26+00:00",
+  "updated": "2023-06-28T04:26:05+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "Fix template issues",
+  "pdf_url": "https://arxiv.org/pdf/2306.15595v2.pdf"
+}

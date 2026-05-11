@@ -1,0 +1,37 @@
+{
+  "arxiv_id": "2402.14034v2",
+  "title": "AgentScope: A Flexible yet Robust Multi-Agent Platform",
+  "authors": [
+    "Dawei Gao",
+    "Zitao Li",
+    "Xuchen Pan",
+    "Weirui Kuang",
+    "Zhijian Ma",
+    "Bingchen Qian",
+    "Fei Wei",
+    "Wenhao Zhang",
+    "Yuexiang Xie",
+    "Daoyuan Chen",
+    "Liuyi Yao",
+    "Hongyi Peng",
+    "Zeyu Zhang",
+    "Lin Zhu",
+    "Chen Cheng",
+    "Hongzhu Shi",
+    "Yaliang Li",
+    "Bolin Ding",
+    "Jingren Zhou"
+  ],
+  "abstract": "With the rapid advancement of Large Language Models (LLMs), significant progress has been made in multi-agent applications. However, the complexities in coordinating agents' cooperation and LLMs' erratic performance pose notable challenges in developing robust and efficient multi-agent applications. To tackle these challenges, we propose AgentScope, a developer-centric multi-agent platform with message exchange as its core communication mechanism. The abundant syntactic tools, built-in agents and service functions, user-friendly interfaces for application demonstration and utility monitor, zero-code programming workstation, and automatic prompt tuning mechanism significantly lower the barriers to both development and deployment. Towards robust and flexible multi-agent application, AgentScope provides both built-in and customizable fault tolerance mechanisms. At the same time, it is also armed with system-level support for managing and utilizing multi-modal data, tools, and external knowledge. Additionally, we design an actor-based distribution framework, enabling easy conversion between local and distributed deployments and automatic parallel optimization without extra effort. With these features, AgentScope empowers developers to build applications that fully realize the potential of intelligent agents. We have released AgentScope at https://github.com/modelscope/agentscope, and hope AgentScope invites wider participation and innovation in this fast-moving field.",
+  "categories": [
+    "cs.MA",
+    "cs.AI"
+  ],
+  "primary_category": "cs.MA",
+  "published": "2024-02-21T04:11:28+00:00",
+  "updated": "2024-05-20T04:01:08+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "We have released code on https://github.com/modelscope/agentscope",
+  "pdf_url": "https://arxiv.org/pdf/2402.14034v2.pdf"
+}

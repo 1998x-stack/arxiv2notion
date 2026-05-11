@@ -1,0 +1,21 @@
+{
+  "arxiv_id": "1702.08608v2",
+  "title": "Towards A Rigorous Science of Interpretable Machine Learning",
+  "authors": [
+    "Finale Doshi-Velez",
+    "Been Kim"
+  ],
+  "abstract": "As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.",
+  "categories": [
+    "stat.ML",
+    "cs.AI",
+    "cs.LG"
+  ],
+  "primary_category": "stat.ML",
+  "published": "2017-02-28T02:19:20+00:00",
+  "updated": "2017-03-02T19:32:10+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1702.08608v2.pdf"
+}

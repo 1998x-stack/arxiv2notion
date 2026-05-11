@@ -1,0 +1,25 @@
+{
+  "arxiv_id": "1508.04395v2",
+  "title": "End-to-End Attention-based Large Vocabulary Speech Recognition",
+  "authors": [
+    "Dzmitry Bahdanau",
+    "Jan Chorowski",
+    "Dmitriy Serdyuk",
+    "Philemon Brakel",
+    "Yoshua Bengio"
+  ],
+  "abstract": "Many of the current state-of-the-art Large Vocabulary Continuous Speech Recognition Systems (LVCSR) are hybrids of neural networks and Hidden Markov Models (HMMs). Most of these systems contain separate components that deal with the acoustic modelling, language modelling and sequence decoding. We investigate a more direct approach in which the HMM is replaced with a Recurrent Neural Network (RNN) that performs sequence prediction directly at the character level. Alignment between the input features and the desired character sequence is learned automatically by an attention mechanism built into the RNN. For each predicted character, the attention mechanism scans the input sequence and chooses relevant frames. We propose two methods to speed up this operation: limiting the scan to a subset of most promising frames and pooling over time the information contained in neighboring frames, thereby reducing source sequence length. Integrating an n-gram language model into the decoding process yields recognition accuracies similar to other HMM-free RNN-based approaches.",
+  "categories": [
+    "cs.CL",
+    "cs.AI",
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2015-08-18T17:40:00+00:00",
+  "updated": "2016-03-14T23:07:20+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1508.04395v2.pdf"
+}

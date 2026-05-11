@@ -1,0 +1,1764 @@
+{
+  "paper_id": "2402.01030v4",
+  "title": "Executable Code Actions Elicit Better LLM Agents",
+  "authors": [
+    "Xingyao Wang1, Yangyi Chen1, Lifan Yuan1, Yizhe Zhang2, Yunzhu Li1, Hao Peng1, Heng Ji1 1 University of Illinois Urbana-Champaign, 2 Apple 1{xingyao6,yangyic3,yunzhuli,haopeng,hengji}@illinois.edu 2yizhe_zhang@apple.com"
+  ],
+  "affiliations": [],
+  "abstract": "Large Language Model (LLM) agents, capable of performing a broad range of actions, such as invoking tools and controlling robots, show great potential in tackling real-world challenges. LLM agents are typically prompted to produce actions by generating JSON or text in a pre-defined format, which is usually limited by constrained action space (e.g., the scope of pre-defined tools) and restricted flexibility (e.g., inability to compose multiple tools). This work proposes to use executable Python code to consolidate LLM agents’ actions into a unified action space (CodeAct). Integrated with a Python interpreter, CodeAct can execute code actions and dynamically revise prior actions or emit new actions upon new observations through multi-turn interactions. Our extensive analysis of 17 LLMs on API-Bank and a newly curated benchmark shows that CodeAct outperforms widely used alternatives (up to 20% higher success rate). The encouraging performance of CodeAct motivates us to build an open-source LLM agent that interacts with environments by executing interpretable code and collaborates with users using natural language. To this end, we collect an instruction-tuning dataset CodeActInstruct that consists of 7k multi-turn interactions using CodeAct. We show that it can be used with existing data to improve models in agent-oriented tasks without compromising their general capability. CodeActAgent, finetuned from Llama2 and Mistral, is integrated with Python interpreter and uniquely tailored to perform sophisticated tasks (e.g., model training) using existing libraries and autonomously self-debug.111The code, data, model, and an online demo for practitioners to try out are available at https://github.com/xingyaoww/code-act.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Large Language Models (LLMs) have emerged as a pivotal breakthrough in natural language processing (NLP).\nWhen augmented with action modules that allow access to APIs, their action space expands beyond conventional text processing, allowing LLMs to acquire capabilities such as tool invocation and memory management [30, 41] and venture into real-world tasks such as controlling robots [1, 19, 29] and performing scientific experiments [3].",
+        "We inquire: how to effectively expand LLM agents’ action space for solving complex real-world problems?\nMuch existing research has examined using text [62, 34, inter alia] or JSON [40, 5, inter alia] to produce actions (e.g., tool uses in Fig. 1 top left).\nHowever, both methods typically suffer from constrained scope of action spaces (actions are usually tailored for specific tasks) and restricted flexibility (e.g., inability to compose multiple tools in a single action).\nAs an alternative approach, several work [26, 44, 48] demonstrate the potential of using LLMs to generate code to control robots or game characters.\nHowever, they typically rely on pre-specified control primitives and hand-engineered prompts and, more importantly, struggle to dynamically adjust or emit actions based on new environmental observation and feedback.",
+        "This work proposes CodeAct, a general-purpose framework that allows LLMs to generate executable Python code as actions (Fig. 1 top right).\nCodeAct is designed to handle a variety of applications and comes with unique advantages:",
+        "Integrated with a Python interpreter, CodeAct can execute code actions and dynamically adjust prior actions or emit new action based on observations it receives through multiple turns of interactions (code execution).",
+        "Code actions allow LLM to leverage existing software packages. CodeAct can use readily available Python packages for an expanded action space instead of hand-crafted task-specific tools [64, 42]. It also allows LLM to use automated feedback (e.g., error messages) implemented in most software to improve task-solving by self-debugging its generated code [8, 52].",
+        "Code data is widely used in pre-training today’s LLMs [58].\nThese models are already familiar with structured programming languages, allowing cost-effective adoption of CodeAct.",
+        "Compared to JSON and text with a pre-defined format, code inherently supports control and data flow, allowing for the storage of intermediate results as variables for reuse and the composition of multiple tools to perform complex logical operations (e.g., if-statements, for-loops) with one piece of code, thereby unlocking LLMs’ potential to tackle complex tasks by leveraging its pre-trained knowledge of programming.\nIn Fig. 1, an LLM using with CodeAct (top right) can apply the same sequence of tools (e.g., passing one tool’s output as input to another tool using the data flow feature) to all inputs through for-loops (i.e., control flow feature) with one action; while text or JSON have to take action for every input (top left).",
+        "Our extensive experiments with 17 LLMs (including both open-source and proprietary ones) confirm the above benefits (3\n& 4) of CodeAct.\nTo demonstrate benefit (3), our first experiment (§2.2) compares CodeAct to baselines on basic tasks involving atomic tool use (i.e., only one tool is used per action), ablating the control and data flow advantage offered by CodeAct.\nThe results show that, for most LLMs, CodeAct achieves comparable or better performance than the baselines.\nCodeAct’s performance gains are more prominent on complex tasks, as demonstrated in our second experiment (benefit 4).\nWe curate a new benchmark consisting of 82 human-curated tasks that typically require multiple calls to multiple tools in multi-turn interactions (M3ToolEval; §2.3).\nProblems in this benchmark often require intricate coordination and composition of multiple tools.\nWith its strengths in control and data flow, CodeAct achieves up to a 20% absolute improvement over baselines on the success rate of solving the problems while requiring up to 30% fewer actions.\nThese performance gains widen as the capabilities of the LLMs increase (Fig. 1 bottom).",
+        "The promising performance of CodeAct motivates an open-source LLM agent that can effectively act through CodeAct, and collaborate with humans through natural language.\nTo this end, we collect an instruction-tuning dataset CodeActInstruct consisting of 7k high-quality multi-turn interaction trajectories with CodeAct (§3.1).\nCodeActInstruct is motivated by a general agent framework consisting of agent, user, and environments (Fig. 2) and focuses on agent-environment interactions with the computer (information seeking, software package use, external memory) and the physical world (robot planning).\nOn CodeActInstruct, we perform careful data selection to promote the capability of improving from multi-turn interaction (e.g., self-debug).\nWe show that CodeActInstruct can be used with commonly used instruction tuning data to improve the models’ performance in agent tasks without compromising their general capabilities (e.g., knowledge-based QA, coding, instruction following, §3.2).\nOur model, dubbed CodeActAgent, is finetuned from LLaMA-2 [47] and Mistral-7B [20] and improves on out-of-domain agent tasks with not only CodeAct, but also text action in a pre-defined format (§3.2).",
+        "CodeAct can further benefit from multi-turn interactions and existing software (benefit 1 & 2, §2.4).\nAs shown in Fig. 3, CodeActAgent, designed for seamless integration with Python, can carry out sophisticated tasks (e.g., model training, data visualization) using existing Python packages. Error messages from the environment further enable it to rectify errors autonomously through self-debugging in multi-turn interaction.\nThanks to LLM’s extensive programming knowledge acquired during pre-training, these are achieved without needing in-context demonstrations, reducing the human efforts for adapting CodeActAgent to different tasks."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "Comparison between CodeAct and Text / JSON as action. (top) Illustrative example comparing different actions. (bottom) Quantitative results on M3ToolEval (§2.3).",
+          "label": "S1.F1"
+        }
+      ],
+      "tables": [
+        {
+          "caption": "The benefit of CodeAct compared to using Text/JSON for LLM action.",
+          "headers": [],
+          "rows": [
+            [
+              "Availability of Data",
+              "✔Large quantity of code available1 for pre-training",
+              "✗Data curation required for particular format"
+            ],
+            [
+              "Complex Operation (e.g., looping, composition of multiple tools)",
+              "✔Natively supported via control and data flow",
+              "✗Requires careful engineering if feasible (e.g., define new tools to mimic if-statement)"
+            ],
+            [
+              "Availability of Tools",
+              "✔Can directly use existing software packages2",
+              "✗Requires human effort to curate tools from scratch or existing software"
+            ],
+            [
+              "Automated Feedback",
+              "✔Feedback mechanism3 (e.g., traceback) is already implemented as an infrastructure for most programming languages",
+              "✗Requires human effort to provide feedback or re-route feedback from the underlying programming language used to implement the tools"
+            ]
+          ],
+          "label": null
+        }
+      ],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x1.png",
+            "alt": "Refer to caption",
+            "caption": "Comparison between CodeAct and Text / JSON as action. (top) Illustrative example comparing different actions. (bottom) Quantitative results on M3ToolEval (§2.3).",
+            "label": "S1.F1"
+          }
+        },
+        {
+          "type": "para",
+          "data": "Large Language Models (LLMs) have emerged as a pivotal breakthrough in natural language processing (NLP).\nWhen augmented with action modules that allow access to APIs, their action space expands beyond conventional text processing, allowing LLMs to acquire capabilities such as tool invocation and memory management [30, 41] and venture into real-world tasks such as controlling robots [1, 19, 29] and performing scientific experiments [3]."
+        },
+        {
+          "type": "para",
+          "data": "We inquire: how to effectively expand LLM agents’ action space for solving complex real-world problems?\nMuch existing research has examined using text [62, 34, inter alia] or JSON [40, 5, inter alia] to produce actions (e.g., tool uses in Fig. 1 top left).\nHowever, both methods typically suffer from constrained scope of action spaces (actions are usually tailored for specific tasks) and restricted flexibility (e.g., inability to compose multiple tools in a single action).\nAs an alternative approach, several work [26, 44, 48] demonstrate the potential of using LLMs to generate code to control robots or game characters.\nHowever, they typically rely on pre-specified control primitives and hand-engineered prompts and, more importantly, struggle to dynamically adjust or emit actions based on new environmental observation and feedback."
+        },
+        {
+          "type": "para",
+          "data": "This work proposes CodeAct, a general-purpose framework that allows LLMs to generate executable Python code as actions (Fig. 1 top right).\nCodeAct is designed to handle a variety of applications and comes with unique advantages:"
+        },
+        {
+          "type": "para",
+          "data": "Integrated with a Python interpreter, CodeAct can execute code actions and dynamically adjust prior actions or emit new action based on observations it receives through multiple turns of interactions (code execution)."
+        },
+        {
+          "type": "para",
+          "data": "Code actions allow LLM to leverage existing software packages. CodeAct can use readily available Python packages for an expanded action space instead of hand-crafted task-specific tools [64, 42]. It also allows LLM to use automated feedback (e.g., error messages) implemented in most software to improve task-solving by self-debugging its generated code [8, 52]."
+        },
+        {
+          "type": "para",
+          "data": "Code data is widely used in pre-training today’s LLMs [58].\nThese models are already familiar with structured programming languages, allowing cost-effective adoption of CodeAct."
+        },
+        {
+          "type": "para",
+          "data": "Compared to JSON and text with a pre-defined format, code inherently supports control and data flow, allowing for the storage of intermediate results as variables for reuse and the composition of multiple tools to perform complex logical operations (e.g., if-statements, for-loops) with one piece of code, thereby unlocking LLMs’ potential to tackle complex tasks by leveraging its pre-trained knowledge of programming.\nIn Fig. 1, an LLM using with CodeAct (top right) can apply the same sequence of tools (e.g., passing one tool’s output as input to another tool using the data flow feature) to all inputs through for-loops (i.e., control flow feature) with one action; while text or JSON have to take action for every input (top left)."
+        },
+        {
+          "type": "para",
+          "data": "Our extensive experiments with 17 LLMs (including both open-source and proprietary ones) confirm the above benefits (3\n& 4) of CodeAct.\nTo demonstrate benefit (3), our first experiment (§2.2) compares CodeAct to baselines on basic tasks involving atomic tool use (i.e., only one tool is used per action), ablating the control and data flow advantage offered by CodeAct.\nThe results show that, for most LLMs, CodeAct achieves comparable or better performance than the baselines.\nCodeAct’s performance gains are more prominent on complex tasks, as demonstrated in our second experiment (benefit 4).\nWe curate a new benchmark consisting of 82 human-curated tasks that typically require multiple calls to multiple tools in multi-turn interactions (M3ToolEval; §2.3).\nProblems in this benchmark often require intricate coordination and composition of multiple tools.\nWith its strengths in control and data flow, CodeAct achieves up to a 20% absolute improvement over baselines on the success rate of solving the problems while requiring up to 30% fewer actions.\nThese performance gains widen as the capabilities of the LLMs increase (Fig. 1 bottom)."
+        },
+        {
+          "type": "para",
+          "data": "The promising performance of CodeAct motivates an open-source LLM agent that can effectively act through CodeAct, and collaborate with humans through natural language.\nTo this end, we collect an instruction-tuning dataset CodeActInstruct consisting of 7k high-quality multi-turn interaction trajectories with CodeAct (§3.1).\nCodeActInstruct is motivated by a general agent framework consisting of agent, user, and environments (Fig. 2) and focuses on agent-environment interactions with the computer (information seeking, software package use, external memory) and the physical world (robot planning).\nOn CodeActInstruct, we perform careful data selection to promote the capability of improving from multi-turn interaction (e.g., self-debug).\nWe show that CodeActInstruct can be used with commonly used instruction tuning data to improve the models’ performance in agent tasks without compromising their general capabilities (e.g., knowledge-based QA, coding, instruction following, §3.2).\nOur model, dubbed CodeActAgent, is finetuned from LLaMA-2 [47] and Mistral-7B [20] and improves on out-of-domain agent tasks with not only CodeAct, but also text action in a pre-defined format (§3.2)."
+        },
+        {
+          "type": "para",
+          "data": "CodeAct can further benefit from multi-turn interactions and existing software (benefit 1 & 2, §2.4).\nAs shown in Fig. 3, CodeActAgent, designed for seamless integration with Python, can carry out sophisticated tasks (e.g., model training, data visualization) using existing Python packages. Error messages from the environment further enable it to rectify errors autonomously through self-debugging in multi-turn interaction.\nThanks to LLM’s extensive programming knowledge acquired during pre-training, these are achieved without needing in-context demonstrations, reducing the human efforts for adapting CodeActAgent to different tasks."
+        },
+        {
+          "type": "table",
+          "data": {
+            "caption": "The benefit of CodeAct compared to using Text/JSON for LLM action.",
+            "headers": [],
+            "rows": [
+              [
+                "Availability of Data",
+                "✔Large quantity of code available1 for pre-training",
+                "✗Data curation required for particular format"
+              ],
+              [
+                "Complex Operation (e.g., looping, composition of multiple tools)",
+                "✔Natively supported via control and data flow",
+                "✗Requires careful engineering if feasible (e.g., define new tools to mimic if-statement)"
+              ],
+              [
+                "Availability of Tools",
+                "✔Can directly use existing software packages2",
+                "✗Requires human effort to curate tools from scratch or existing software"
+              ],
+              [
+                "Automated Feedback",
+                "✔Feedback mechanism3 (e.g., traceback) is already implemented as an infrastructure for most programming languages",
+                "✗Requires human effort to provide feedback or re-route feedback from the underlying programming language used to implement the tools"
+              ]
+            ],
+            "label": null
+          }
+        }
+      ]
+    },
+    {
+      "title": "CodeAct Makes LLMs Better Agents",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we first describe CodeAct framework (§2.1) and provide empirical evidence that supports the choice of CodeAct.\nWe focus on Python as the programming language for CodeAct due to its popularity (ranked top-1 at TIOBE index [46]) and numerous open-source packages.\nWe aim to answer several research questions (RQs) using 17 off-the-shelf LLMs. In §2.2, we examine RQ1: Does LLMs’ familiarity with code due to a large amount of code pre-training data bring CodeAct advantages over text and JSON?\nWe discuss RQ2 in §2.3: Does CodeAct benefit from Python’s innate control and data flow feature in complex problems?\nFinally, as an additional benefit, we discuss how using CodeAct further enhances LLM agents by enabling multi-turn interactions and allowing them to access existing software in §2.4 and Fig. 3."
+      ],
+      "subsections": [
+        {
+          "title": "What is CodeAct?",
+          "level": 3,
+          "paragraphs": [
+            "In Fig. 2, we first introduce a general multi-turn interaction framework for LLM agents’ real-world usage that considers three roles: agent, user, and environment.\nWe define interaction as the information exchange between the agent and an external entity (user or environment).\nFor each turn of interaction, the agent receives an observation (input) either from the user (e.g., natural language instruction) or the environment (e.g., code execution result), optionally planning for its action through chain-of-thought [56], and emits an action (output) to either user in natural language or the environment.\nCodeAct employs Python code to consolidate all actions for agent-environment interaction. In CodeAct, each emitted action to the environment is a piece of Python code, and the agent will receive outputs of code execution (e.g., results, errors) as observation.\nWe include an example prompt of CodeAct in §E."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In Fig. 2, we first introduce a general multi-turn interaction framework for LLM agents’ real-world usage that considers three roles: agent, user, and environment.\nWe define interaction as the information exchange between the agent and an external entity (user or environment).\nFor each turn of interaction, the agent receives an observation (input) either from the user (e.g., natural language instruction) or the environment (e.g., code execution result), optionally planning for its action through chain-of-thought [56], and emits an action (output) to either user in natural language or the environment.\nCodeAct employs Python code to consolidate all actions for agent-environment interaction. In CodeAct, each emitted action to the environment is a piece of Python code, and the agent will receive outputs of code execution (e.g., results, errors) as observation.\nWe include an example prompt of CodeAct in §E."
+            }
+          ]
+        },
+        {
+          "title": "CodeAct Shows the Promise as a Strong Tool Use Framework",
+          "level": 3,
+          "paragraphs": [
+            "In this section, we perform a controlled experiment to understand which format (text, JSON, CodeAct) is more likely to lead an LLM to generate correct atomic tool calls.\nThe performance in this experiment reflects LLM’s familiarity with the corresponding format.\nWe hypothesize that using CodeAct to call tools is a more natural way to use tools for the models, which typically have extensive exposure to code data during their training.",
+            "Setup.\nWe re-purpose API-Bank [24] and test LLMs’ API-calling performance, comparing CodeAct, JSON, and text actions.\nFor each evaluation instance, we instruct LLM to generate one atomic tool call in the format of a Python function call, JSON object, or text expression in a pre-defined format. A concrete example is shown in Tab. A.6.\nWe use API-Bank’s level-1 instructions and the provided toolset. To evaluate API-calling, we follow their correctness metric, matching the ground-truth API outputs with the actual model-generated API’s execution outputs.",
+            "Results.\nWe present results in Tab. 3.\nFor most LLMs, CodeAct achieves comparable or better performance even in atomic actions (the simplistic tool use scenario) where its control and data flow strengths are ablated.\nCompared to closed-source LLMs, CodeAct’s improvements are more prominent in open-source models. Furthermore, code data is usually more accessible for fine-tuning open-source LLMs than the specialized JSON or text tool-calling format.\nAlthough JSON is consistently weaker than other approaches for open-source models, it achieves decent performance with closed-source LLMs, indicating that these closed-source models may have gone through targeted fine-tuning toward their JSON capabilities.\nThese results suggest optimizing for CodeAct is a better route for open-source LLMs than alternatives to improve their tool-use capabilities, as they already show good initial CodeAct capability due to extensive exposure to code data during pre-training."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In this section, we perform a controlled experiment to understand which format (text, JSON, CodeAct) is more likely to lead an LLM to generate correct atomic tool calls.\nThe performance in this experiment reflects LLM’s familiarity with the corresponding format.\nWe hypothesize that using CodeAct to call tools is a more natural way to use tools for the models, which typically have extensive exposure to code data during their training."
+            },
+            {
+              "type": "para",
+              "data": "Setup.\nWe re-purpose API-Bank [24] and test LLMs’ API-calling performance, comparing CodeAct, JSON, and text actions.\nFor each evaluation instance, we instruct LLM to generate one atomic tool call in the format of a Python function call, JSON object, or text expression in a pre-defined format. A concrete example is shown in Tab. A.6.\nWe use API-Bank’s level-1 instructions and the provided toolset. To evaluate API-calling, we follow their correctness metric, matching the ground-truth API outputs with the actual model-generated API’s execution outputs."
+            },
+            {
+              "type": "para",
+              "data": "Results.\nWe present results in Tab. 3.\nFor most LLMs, CodeAct achieves comparable or better performance even in atomic actions (the simplistic tool use scenario) where its control and data flow strengths are ablated.\nCompared to closed-source LLMs, CodeAct’s improvements are more prominent in open-source models. Furthermore, code data is usually more accessible for fine-tuning open-source LLMs than the specialized JSON or text tool-calling format.\nAlthough JSON is consistently weaker than other approaches for open-source models, it achieves decent performance with closed-source LLMs, indicating that these closed-source models may have gone through targeted fine-tuning toward their JSON capabilities.\nThese results suggest optimizing for CodeAct is a better route for open-source LLMs than alternatives to improve their tool-use capabilities, as they already show good initial CodeAct capability due to extensive exposure to code data during pre-training."
+            }
+          ]
+        },
+        {
+          "title": "CodeAct Gets More Done with Fewer Interactions",
+          "level": 3,
+          "paragraphs": [
+            "In this section, we investigate whether LLM agents can benefit from the control and data flow of code on problems that require complex patterns of tool use.",
+            "M3ToolEval.\nAs shown in Tab. A.7, to the best of our knowledge, no existing tool-use benchmarks contain complex tasks requiring the composition of multiple tools while supporting evaluating different action formats. Hence, we curate a benchmark M3ToolEval to fill this gap, which evaluates LLMs’ capabilities in solving complex tasks that typically require multiple calls to multiple tools in multi-turn interactions.\nIt contains 82 human-curated instances, spanning tasks including web browsing, finance, travel itinerary planning, science, and information processing.\nEach domain is accompanied by a unique set of manually crafted tools.\nWe intentionally keep the prompt simple and avoid providing any task demonstration to test the LLM’s zero-shot ability to use tools, similar to how a novice user without domain knowledge of few-shot prompting would use the model.\nPlease refer to §F for prompt examples.",
+            "Setup.\nWe allow the model to generate fully functional Python code that enables control and data flow (e.g., if-statement, for-loop). We follow the action format for JSON and text described in Tab. A.6.\nWithin each turn, the model can either emit an action or propose an answer to be verified by an exact match with the ground-truth solution.\nThe interaction will terminate when a maximum of 10 interaction turns are reached or a correct solution has been submitted, similar to MINT [53].",
+            "Metric. We measure the success rate by calculating the percentage of the model proposed answers that match the ground-truth solutions. We also include the avg. turns metric: the average number of turns on all evaluated instances.",
+            "Quantitative Results on M3ToolEval.\nWe include full results in Tab. 3 and a subset of results for visualization in Fig. 1.\nCodeAct generally has a higher task success rate (12 out of 17 evaluated LLMs), similar to the trend in §2.2. Moreover, using CodeAct requires a lower average number of turns (12 out of 17 evaluated LLMs).\nFor example, the best model gpt-4-1106-preview achieves a $20.7$% absolute improvement compared to the next best action format (text) while requiring $2.1$ fewer interaction turns on average.\nHowever, there is still a significant gap in terms of absolute CodeAct performance between open- and closed-source LLMs as the best open-source model achieving 13.4% while the best closed-source model gpt-4-1106-preview 74.4%. This is potentially due to open-source models’ weak task-solving capability and inability to follow complex instructions without demonstration, suggesting an urgent need to improve open-source LLMs for practical, real-world tasks under the zero-shot setting."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x4.png",
+              "alt": "Refer to caption",
+              "caption": "Example interaction with Python packages in multi-turn interactions using CodeActAgent (Mistral-7b-based). No in-context demonstrations are provided to the model. Some messages are omitted for space. See https://chat.xwang.dev/r/Vqn108G for complete interaction.",
+              "label": "S2.F3"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In this section, we investigate whether LLM agents can benefit from the control and data flow of code on problems that require complex patterns of tool use."
+            },
+            {
+              "type": "para",
+              "data": "M3ToolEval.\nAs shown in Tab. A.7, to the best of our knowledge, no existing tool-use benchmarks contain complex tasks requiring the composition of multiple tools while supporting evaluating different action formats. Hence, we curate a benchmark M3ToolEval to fill this gap, which evaluates LLMs’ capabilities in solving complex tasks that typically require multiple calls to multiple tools in multi-turn interactions.\nIt contains 82 human-curated instances, spanning tasks including web browsing, finance, travel itinerary planning, science, and information processing.\nEach domain is accompanied by a unique set of manually crafted tools.\nWe intentionally keep the prompt simple and avoid providing any task demonstration to test the LLM’s zero-shot ability to use tools, similar to how a novice user without domain knowledge of few-shot prompting would use the model.\nPlease refer to §F for prompt examples."
+            },
+            {
+              "type": "para",
+              "data": "Setup.\nWe allow the model to generate fully functional Python code that enables control and data flow (e.g., if-statement, for-loop). We follow the action format for JSON and text described in Tab. A.6.\nWithin each turn, the model can either emit an action or propose an answer to be verified by an exact match with the ground-truth solution.\nThe interaction will terminate when a maximum of 10 interaction turns are reached or a correct solution has been submitted, similar to MINT [53]."
+            },
+            {
+              "type": "para",
+              "data": "Metric. We measure the success rate by calculating the percentage of the model proposed answers that match the ground-truth solutions. We also include the avg. turns metric: the average number of turns on all evaluated instances."
+            },
+            {
+              "type": "para",
+              "data": "Quantitative Results on M3ToolEval.\nWe include full results in Tab. 3 and a subset of results for visualization in Fig. 1.\nCodeAct generally has a higher task success rate (12 out of 17 evaluated LLMs), similar to the trend in §2.2. Moreover, using CodeAct requires a lower average number of turns (12 out of 17 evaluated LLMs).\nFor example, the best model gpt-4-1106-preview achieves a $20.7$% absolute improvement compared to the next best action format (text) while requiring $2.1$ fewer interaction turns on average.\nHowever, there is still a significant gap in terms of absolute CodeAct performance between open- and closed-source LLMs as the best open-source model achieving 13.4% while the best closed-source model gpt-4-1106-preview 74.4%. This is potentially due to open-source models’ weak task-solving capability and inability to follow complex instructions without demonstration, suggesting an urgent need to improve open-source LLMs for practical, real-world tasks under the zero-shot setting."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x4.png",
+                "alt": "Refer to caption",
+                "caption": "Example interaction with Python packages in multi-turn interactions using CodeActAgent (Mistral-7b-based). No in-context demonstrations are provided to the model. Some messages are omitted for space. See https://chat.xwang.dev/r/Vqn108G for complete interaction.",
+                "label": "S2.F3"
+              }
+            }
+          ]
+        },
+        {
+          "title": "CodeAct Benefits from Multi-turn Interactions and Existing Software Packages",
+          "level": 3,
+          "paragraphs": [
+            "In Fig. 3, we show how an LLM agent can integrate with Python (i.e., CodeActAgent we trained in §3.2) and use existing software to perform complex tasks in multi-turn interactions.\nThanks to its extensive knowledge of Python learned during pre-training, the LLM agent can automatically import the correct Python libraries to solve tasks without requiring user-provided tools or demonstrations.\nAs illustrated in Fig. 3, CodeActAgent can use Pandas to download and process tabular data, use Scikit-Learn for machine learning train-test data split and regression model training, and use Matplotlib for data visualization.\nFurthermore, using the interactive Python interpreter for code execution allows automated error messages that help the LLM agent ‘self-debug’ their actions in a multi-turn interaction and eventually complete the human user’s request correctly."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "In Fig. 3, we show how an LLM agent can integrate with Python (i.e., CodeActAgent we trained in §3.2) and use existing software to perform complex tasks in multi-turn interactions.\nThanks to its extensive knowledge of Python learned during pre-training, the LLM agent can automatically import the correct Python libraries to solve tasks without requiring user-provided tools or demonstrations.\nAs illustrated in Fig. 3, CodeActAgent can use Pandas to download and process tabular data, use Scikit-Learn for machine learning train-test data split and regression model training, and use Matplotlib for data visualization.\nFurthermore, using the interactive Python interpreter for code execution allows automated error messages that help the LLM agent ‘self-debug’ their actions in a multi-turn interaction and eventually complete the human user’s request correctly."
+            }
+          ]
+        }
+      ],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x3.png",
+          "alt": "Refer to caption",
+          "caption": "General agent multi-turn interaction framework that describes the role of CodeAct and motivates the construction of our data mixture. CodeActInstruct focuses on the agent-environment interactions and specifically filters for the self-improved planning behavior, while general conversation data we include focuses on agent-user interaction (§3.1).",
+          "label": "S2.F2"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we first describe CodeAct framework (§2.1) and provide empirical evidence that supports the choice of CodeAct.\nWe focus on Python as the programming language for CodeAct due to its popularity (ranked top-1 at TIOBE index [46]) and numerous open-source packages.\nWe aim to answer several research questions (RQs) using 17 off-the-shelf LLMs. In §2.2, we examine RQ1: Does LLMs’ familiarity with code due to a large amount of code pre-training data bring CodeAct advantages over text and JSON?\nWe discuss RQ2 in §2.3: Does CodeAct benefit from Python’s innate control and data flow feature in complex problems?\nFinally, as an additional benefit, we discuss how using CodeAct further enhances LLM agents by enabling multi-turn interactions and allowing them to access existing software in §2.4 and Fig. 3."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x3.png",
+            "alt": "Refer to caption",
+            "caption": "General agent multi-turn interaction framework that describes the role of CodeAct and motivates the construction of our data mixture. CodeActInstruct focuses on the agent-environment interactions and specifically filters for the self-improved planning behavior, while general conversation data we include focuses on agent-user interaction (§3.1).",
+            "label": "S2.F2"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Empowering Open-source LLM Agent to be Better at CodeAct",
+      "level": 2,
+      "paragraphs": [
+        "The promising results achieved by CodeAct motivate us to build an open-source LLM agent that can both interact with environments through CodeAct and communicate with humans using language.\nTo improve open-source LLMs’ CodeAct capability, in §3.1, we introduce CodeActInstruct, an instruction finetuning dataset that contains agent-environment interaction trajectories.\nWe discuss data selection procedures in §3.1 to promote improvement from interaction behavior.\nAdditionally, we show that CodeAct can be used together with existing agent-user conversation data (§4) to balance the dialog capability of the resulting LLM.\nOur model CodeActAgent, finetuned from LLaMA-2 [47] and Mistral-7B [20] on a mixture of CodeActInstruct and general conversations, improves CodeAct performances without hurting LLM’s general performance on a diverse suite of tasks (§3.2)."
+      ],
+      "subsections": [
+        {
+          "title": "CodeActInstruct: Agent-Environment Interactions",
+          "level": 3,
+          "paragraphs": [
+            "We consider four main use cases in agent-environment interaction and repurpose five existing datasets across different domains to generate trajectories:",
+            "Information Seeking: We use a training subset of HotpotQA [59] to generate information-seeking trajectories, where LLMs use the wikipedia_search API (provided as a Python function) to search for information to answer questions.",
+            "Software Package (Tool) Usage: We use the training set of code generation problems in APPS [16] and math problems in MATH [18]. The code generation tasks already involve importing packages and/or creating new tools by defining a new Python function. For MATH, we provide an in-context demonstration of importing Python packages (e.g., sympy for symbolic math) for problem-solving.",
+            "External Memory: We repurpose the training subset of WikiTableQuestion [35] and tweak it into two variants of tabular reasoning tasks that require accessing external memory: (1) SQL-based, requiring the LLM to interact with an SQL database through sqlite3 package to answer the question via SQL execution; (2) Pandas-based, requiring the model to interact with pandas tables to perform data operations (e.g., select, filter). Examples of instructions can be found in §G.3.1.",
+            "Robot Planning: We use ALFWorld [43], a text-only embodied environment simulator, to generate trajectories that use robot-control APIs (repurposed as Python function) to complete household tasks. Following MINT [53], we provide an in-context demonstration to encourage the use of for-loop and if-statement code blocks to automate repetitive operations (e.g., searching for items by visiting different locations).",
+            "Data Down-sampling.\nWe down-sample each dataset by keeping only the most challenging instances, aiming to make trajectory generation more efficient and cost-effective. Furthermore, it also helps remove simple instances that existing LLMs can already solve.\nThe statistics of the filtered dataset can be found in Tab. A.9. Please refer to §G.1 for details about the down-sample process.",
+            "Repurpose Data for Multi-turn Interaction.\nSome datasets (APPS, MATH, WikiTableQuestions) are initially single-turn problems that expect one solution per instruction, whereas, in a realistic agent use case, we often require multi-turn interaction to complete each task (Fig. 1 top).\nFollowing MINT [53], we repurpose single-turn problems into multi-turn ones by allowing LLM to interact with the environment for multiple turns before it decides to submit one solution for evaluation.\nSpecifically for code generation problems, we provide an in-context example to guide LLMs to test their solution on provided test cases before they submit the solution.\nMetrics from the original data will evaluate the submitted solution to determine its correctness. We include prompt examples in §G.3.",
+            "Trajectory Generation.\nWe use MINT’s evaluation framework [53] to generate interaction trajectories for the aforementioned datasets and determine the correctness of each trajectory.\nWe run gpt-3.5-turbo-0613 from OpenAI, claude-1-instant and claude-2 from Anthropic on down-sampled data, except code generation, which we use a longer-context version of GPT-3.5 (gpt-3.5-turbo-0613-16k) due to the long-context requirement of the self-debugging process.\nOn a subset of problems that none of these models can solve, we use gpt-4-0613 to generate trajectories.",
+            "Enhancing Agent’s Capabilities of Improving from Interaction.\n\nWe select a high-quality subset of all the generated trajectories from CodeActInstruct to promote the agent’s ability to improve the next action based on prior observations (e.g., self-debugging from code execution error message, a planning capability in Fig. 2).\nTo achieve this, we selectively preserve those trajectories wherein the model initially encounters errors but rectifies these inaccuracies in later interactions.\nFor these instances, the LLM typically engages in self-reflection following the initial error, thereby proactively enhancing its future actions.\nOther filtering details are discussed in §G.2.\nOn all trajectories generated, we keep 411 trajectories from gpt-4-0613 and 6728 trajectories from gpt-3.5 and claude.\nThe statistics of the resulting dataset CodeActInstruct are shown in Tab. 4.",
+            "Comparing CodeActInstruct with Prior Work.\nCompared with prior work AgentInstruct [65] and FireAct [6] that mainly focus using text as action, CodeActInstruct results in models that are more practical in real-world implementation, as such models using CodeAct can directly interact with Python interpreters and open-source toolkits (Fig. 3), reducing the development effort for action parsing and tool creations.\nCodeActInstruct is systematically constructed following the general agent framework (Fig. 2).\nIt covers diverse domains (e.g., compared to FireAct that only considers QA-task and search API), contains quality data (e.g., promotes agent’s capability of self-debug) and of larger size (3.8x / 3.5x more data trajectories and 5x / 19x more tokens compared to AgentInstruct / FireAct respectively in Tab. 4).\nAs we empirically show in Tab. 5, the resulting model (same backbone) of CodeActInstruct achieves 24% and 119% relative improvement compared to AgentInstruct and FireAct.",
+            "CodeActInstruct Can Be Used With Existing Agent-User Conversation Data.\n\nWe use a sub-sampled set of OpenOrca [25] that focuses on single-turn chain-of-thought (CoT) reasoning, ShareGPT [2, 32] from two sources that contain multi-turn conversations between human and LLM, and CapyBara [22] that focuses on reasoning in multi-turn conversations.\nDetails of down-sampling can be found in §C.\nPlease refer to Tab. 4 for statistics of general conversations."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Statistics of our training mixture and comparison with prior work. Please refer to §3.1 and §4 for details about CodeActInstruct and general conversation data. Token statistics are computed using Llama-2 tokenizer.",
+              "headers": [],
+              "rows": [
+                [
+                  "Data Mixture",
+                  "Data Type",
+                  "Data Name",
+                  "# of Data Instances",
+                  "# of Total Tokens",
+                  "Avg. Tokens Per Instance"
+                ],
+                [
+                  "Prior Work",
+                  "-",
+                  "FireAct [6]",
+                  "2,06320632,063",
+                  "542,176542176542,176",
+                  "262.81262.81262.81"
+                ],
+                [
+                  "-",
+                  "AgentInstruct [65]",
+                  "1,86618661,866",
+                  "2,517,78525177852,517,785",
+                  "1349.301349.301349.30"
+                ],
+                [
+                  "CodeActInstruct (Ours)",
+                  "Information Seeking",
+                  "HotpotQA [59]",
+                  "1,66416641,664",
+                  "2,472,22724722272,472,227",
+                  "1485.711485.711485.71"
+                ],
+                [
+                  "Software Packages (Tool)",
+                  "MATH (Math, [18])",
+                  "1,73217321,732",
+                  "1,719,46717194671,719,467",
+                  "992.76992.76992.76"
+                ],
+                [
+                  "Software Packages (Tool)",
+                  "APPS (Code, [16])",
+                  "647647647",
+                  "1,235,47212354721,235,472",
+                  "1909.541909.541909.54"
+                ],
+                [
+                  "External Memory",
+                  "WikiTableQuestion [35]",
+                  "1,06510651,065",
+                  "1,316,24613162461,316,246",
+                  "1235.911235.911235.91"
+                ],
+                [
+                  "Robot Planning",
+                  "ALFWorld [43]",
+                  "2,03120312,031",
+                  "3,838,26938382693,838,269",
+                  "1889.841889.841889.84"
+                ],
+                [
+                  "Total",
+                  "7,1397139\\mathbf{7,139}",
+                  "10,581,68110581681\\mathbf{10,581,681}",
+                  "1482.241482.24\\mathbf{1482.24}"
+                ],
+                [
+                  "General Conversation",
+                  "Single-Turn Reasoning",
+                  "OpenOrca (Sub-sampled, [25])",
+                  "50,0005000050,000",
+                  "14,034,1521403415214,034,152",
+                  "280.68280.68280.68"
+                ],
+                [
+                  "Multi-Turn Conversations",
+                  "ShareGPT (Sub-sampled, [2])",
+                  "10,0001000010,000",
+                  "17,933,8611793386117,933,861",
+                  "1793.391793.391793.39"
+                ],
+                [
+                  "Multi-Turn Conversations",
+                  "ShareGPT (GPT-4, [32])",
+                  "4,58345834,583",
+                  "18,195,8781819587818,195,878",
+                  "3970.303970.303970.30"
+                ],
+                [
+                  "Multi-turn Reasoning",
+                  "CapyBara [22]",
+                  "4,64746474,647",
+                  "4,982,43549824354,982,435",
+                  "1072.181072.181072.18"
+                ],
+                [
+                  "Total",
+                  "69,23069230\\mathbf{69,230}",
+                  "55,146,32655146326\\mathbf{55,146,326}",
+                  "796.57796.57\\mathbf{796.57}"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We consider four main use cases in agent-environment interaction and repurpose five existing datasets across different domains to generate trajectories:"
+            },
+            {
+              "type": "para",
+              "data": "Information Seeking: We use a training subset of HotpotQA [59] to generate information-seeking trajectories, where LLMs use the wikipedia_search API (provided as a Python function) to search for information to answer questions."
+            },
+            {
+              "type": "para",
+              "data": "Software Package (Tool) Usage: We use the training set of code generation problems in APPS [16] and math problems in MATH [18]. The code generation tasks already involve importing packages and/or creating new tools by defining a new Python function. For MATH, we provide an in-context demonstration of importing Python packages (e.g., sympy for symbolic math) for problem-solving."
+            },
+            {
+              "type": "para",
+              "data": "External Memory: We repurpose the training subset of WikiTableQuestion [35] and tweak it into two variants of tabular reasoning tasks that require accessing external memory: (1) SQL-based, requiring the LLM to interact with an SQL database through sqlite3 package to answer the question via SQL execution; (2) Pandas-based, requiring the model to interact with pandas tables to perform data operations (e.g., select, filter). Examples of instructions can be found in §G.3.1."
+            },
+            {
+              "type": "para",
+              "data": "Robot Planning: We use ALFWorld [43], a text-only embodied environment simulator, to generate trajectories that use robot-control APIs (repurposed as Python function) to complete household tasks. Following MINT [53], we provide an in-context demonstration to encourage the use of for-loop and if-statement code blocks to automate repetitive operations (e.g., searching for items by visiting different locations)."
+            },
+            {
+              "type": "para",
+              "data": "Data Down-sampling.\nWe down-sample each dataset by keeping only the most challenging instances, aiming to make trajectory generation more efficient and cost-effective. Furthermore, it also helps remove simple instances that existing LLMs can already solve.\nThe statistics of the filtered dataset can be found in Tab. A.9. Please refer to §G.1 for details about the down-sample process."
+            },
+            {
+              "type": "para",
+              "data": "Repurpose Data for Multi-turn Interaction.\nSome datasets (APPS, MATH, WikiTableQuestions) are initially single-turn problems that expect one solution per instruction, whereas, in a realistic agent use case, we often require multi-turn interaction to complete each task (Fig. 1 top).\nFollowing MINT [53], we repurpose single-turn problems into multi-turn ones by allowing LLM to interact with the environment for multiple turns before it decides to submit one solution for evaluation.\nSpecifically for code generation problems, we provide an in-context example to guide LLMs to test their solution on provided test cases before they submit the solution.\nMetrics from the original data will evaluate the submitted solution to determine its correctness. We include prompt examples in §G.3."
+            },
+            {
+              "type": "para",
+              "data": "Trajectory Generation.\nWe use MINT’s evaluation framework [53] to generate interaction trajectories for the aforementioned datasets and determine the correctness of each trajectory.\nWe run gpt-3.5-turbo-0613 from OpenAI, claude-1-instant and claude-2 from Anthropic on down-sampled data, except code generation, which we use a longer-context version of GPT-3.5 (gpt-3.5-turbo-0613-16k) due to the long-context requirement of the self-debugging process.\nOn a subset of problems that none of these models can solve, we use gpt-4-0613 to generate trajectories."
+            },
+            {
+              "type": "para",
+              "data": "Enhancing Agent’s Capabilities of Improving from Interaction.\n\nWe select a high-quality subset of all the generated trajectories from CodeActInstruct to promote the agent’s ability to improve the next action based on prior observations (e.g., self-debugging from code execution error message, a planning capability in Fig. 2).\nTo achieve this, we selectively preserve those trajectories wherein the model initially encounters errors but rectifies these inaccuracies in later interactions.\nFor these instances, the LLM typically engages in self-reflection following the initial error, thereby proactively enhancing its future actions.\nOther filtering details are discussed in §G.2.\nOn all trajectories generated, we keep 411 trajectories from gpt-4-0613 and 6728 trajectories from gpt-3.5 and claude.\nThe statistics of the resulting dataset CodeActInstruct are shown in Tab. 4."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Statistics of our training mixture and comparison with prior work. Please refer to §3.1 and §4 for details about CodeActInstruct and general conversation data. Token statistics are computed using Llama-2 tokenizer.",
+                "headers": [],
+                "rows": [
+                  [
+                    "Data Mixture",
+                    "Data Type",
+                    "Data Name",
+                    "# of Data Instances",
+                    "# of Total Tokens",
+                    "Avg. Tokens Per Instance"
+                  ],
+                  [
+                    "Prior Work",
+                    "-",
+                    "FireAct [6]",
+                    "2,06320632,063",
+                    "542,176542176542,176",
+                    "262.81262.81262.81"
+                  ],
+                  [
+                    "-",
+                    "AgentInstruct [65]",
+                    "1,86618661,866",
+                    "2,517,78525177852,517,785",
+                    "1349.301349.301349.30"
+                  ],
+                  [
+                    "CodeActInstruct (Ours)",
+                    "Information Seeking",
+                    "HotpotQA [59]",
+                    "1,66416641,664",
+                    "2,472,22724722272,472,227",
+                    "1485.711485.711485.71"
+                  ],
+                  [
+                    "Software Packages (Tool)",
+                    "MATH (Math, [18])",
+                    "1,73217321,732",
+                    "1,719,46717194671,719,467",
+                    "992.76992.76992.76"
+                  ],
+                  [
+                    "Software Packages (Tool)",
+                    "APPS (Code, [16])",
+                    "647647647",
+                    "1,235,47212354721,235,472",
+                    "1909.541909.541909.54"
+                  ],
+                  [
+                    "External Memory",
+                    "WikiTableQuestion [35]",
+                    "1,06510651,065",
+                    "1,316,24613162461,316,246",
+                    "1235.911235.911235.91"
+                  ],
+                  [
+                    "Robot Planning",
+                    "ALFWorld [43]",
+                    "2,03120312,031",
+                    "3,838,26938382693,838,269",
+                    "1889.841889.841889.84"
+                  ],
+                  [
+                    "Total",
+                    "7,1397139\\mathbf{7,139}",
+                    "10,581,68110581681\\mathbf{10,581,681}",
+                    "1482.241482.24\\mathbf{1482.24}"
+                  ],
+                  [
+                    "General Conversation",
+                    "Single-Turn Reasoning",
+                    "OpenOrca (Sub-sampled, [25])",
+                    "50,0005000050,000",
+                    "14,034,1521403415214,034,152",
+                    "280.68280.68280.68"
+                  ],
+                  [
+                    "Multi-Turn Conversations",
+                    "ShareGPT (Sub-sampled, [2])",
+                    "10,0001000010,000",
+                    "17,933,8611793386117,933,861",
+                    "1793.391793.391793.39"
+                  ],
+                  [
+                    "Multi-Turn Conversations",
+                    "ShareGPT (GPT-4, [32])",
+                    "4,58345834,583",
+                    "18,195,8781819587818,195,878",
+                    "3970.303970.303970.30"
+                  ],
+                  [
+                    "Multi-turn Reasoning",
+                    "CapyBara [22]",
+                    "4,64746474,647",
+                    "4,982,43549824354,982,435",
+                    "1072.181072.181072.18"
+                  ],
+                  [
+                    "Total",
+                    "69,23069230\\mathbf{69,230}",
+                    "55,146,32655146326\\mathbf{55,146,326}",
+                    "796.57796.57\\mathbf{796.57}"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "Comparing CodeActInstruct with Prior Work.\nCompared with prior work AgentInstruct [65] and FireAct [6] that mainly focus using text as action, CodeActInstruct results in models that are more practical in real-world implementation, as such models using CodeAct can directly interact with Python interpreters and open-source toolkits (Fig. 3), reducing the development effort for action parsing and tool creations.\nCodeActInstruct is systematically constructed following the general agent framework (Fig. 2).\nIt covers diverse domains (e.g., compared to FireAct that only considers QA-task and search API), contains quality data (e.g., promotes agent’s capability of self-debug) and of larger size (3.8x / 3.5x more data trajectories and 5x / 19x more tokens compared to AgentInstruct / FireAct respectively in Tab. 4).\nAs we empirically show in Tab. 5, the resulting model (same backbone) of CodeActInstruct achieves 24% and 119% relative improvement compared to AgentInstruct and FireAct."
+            },
+            {
+              "type": "para",
+              "data": "CodeActInstruct Can Be Used With Existing Agent-User Conversation Data.\n\nWe use a sub-sampled set of OpenOrca [25] that focuses on single-turn chain-of-thought (CoT) reasoning, ShareGPT [2, 32] from two sources that contain multi-turn conversations between human and LLM, and CapyBara [22] that focuses on reasoning in multi-turn conversations.\nDetails of down-sampling can be found in §C.\nPlease refer to Tab. 4 for statistics of general conversations."
+            }
+          ]
+        },
+        {
+          "title": "CodeActAgent",
+          "level": 3,
+          "paragraphs": [
+            "We fine-tune Llama-2 7B [47] and Mistral 7B [20] on a mixture of CodeActInstruct and general conversations (Tab. 4) to obtain CodeActAgent.",
+            "Training Setup. We perform full-parameter supervised fine-tuning with a sequence length of 4,096 tokens for Llama-2 and 16,384 for Mistral. Please refer to §D for more details.",
+            "Evaluation Setup.\nWe use MINT [53] to evaluate LLMs with CodeAct on a diverse range of agent tasks.\nCodeActAgent has some training domains overlapping with MINT’s evaluation (i.e., MINT includes ALFWorld and MATH), hence we report separate numbers for MINT’s in- and out-of-domain performance.\nUnless otherwise specified, we measure MINT tasks’ success rates with interaction turn $k=5$.\nWe also evaluate out-of-domain agent tasks using text actions from MiniWob++ (computer tasks, [21]) and ScienceWorld (text-based simulator for elementary science curriculum, [50]) to test whether CodeActAgent can generalize to different action formats.\nFinally, we include a suite of general LLM evaluation tasks to assess general capability: MMLU [17] for knowledge-based QA, HumanEval [7] for single-turn code-generation, GSM8K [12] for single-turn tool-free math reasoning, and MTBench [67] for instruction-following.",
+            "CodeActAgent Excels in CodeAct Task.\nAs shown in Tab. 5, CodeActAgent (both variants) perform better than all evaluated open-source LLMs on both the in-domain and out-of-domain subsets of MINT.\nOn M3ToolEval, we find CodeActAgent (Mistral) outperforms open-source LLMs of similar size (7B and 13B) and even reaches similar performance to those 70B models (Tab. 3).\nSurprisingly, no improvement is observed for the Llama-2 variant. We discuss the potential reasons in §H.",
+            "CodeActAgent Generalizes to Text Action.\nWhen evaluated on out-of-domain text actions, CodeActAgent (LLaMA2, 7B), which has never been optimized for text action, achieves comparable performance to AgentLM-7B [65] which has explicit tuning for text actions.",
+            "CodeActAgent Maintains or Improves the Performance on General LLM Tasks.\nIn Tab. 5, we find that CodeActAgent (both variants) performs better on generic LLM tasks we tested, except for a slight degradation on MMLU for CodeActAgent (Mistral, 7B).",
+            "Ablation Study.\nTab. A.8 presents ablation experiments to determine the importance of CodeActInstruct and general conversations.\nBoth CodeActInstruct and general conversations contribute to agent tasks, while general conversations are essential to maintain performance on general tasks."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We fine-tune Llama-2 7B [47] and Mistral 7B [20] on a mixture of CodeActInstruct and general conversations (Tab. 4) to obtain CodeActAgent."
+            },
+            {
+              "type": "para",
+              "data": "Training Setup. We perform full-parameter supervised fine-tuning with a sequence length of 4,096 tokens for Llama-2 and 16,384 for Mistral. Please refer to §D for more details."
+            },
+            {
+              "type": "para",
+              "data": "Evaluation Setup.\nWe use MINT [53] to evaluate LLMs with CodeAct on a diverse range of agent tasks.\nCodeActAgent has some training domains overlapping with MINT’s evaluation (i.e., MINT includes ALFWorld and MATH), hence we report separate numbers for MINT’s in- and out-of-domain performance.\nUnless otherwise specified, we measure MINT tasks’ success rates with interaction turn $k=5$.\nWe also evaluate out-of-domain agent tasks using text actions from MiniWob++ (computer tasks, [21]) and ScienceWorld (text-based simulator for elementary science curriculum, [50]) to test whether CodeActAgent can generalize to different action formats.\nFinally, we include a suite of general LLM evaluation tasks to assess general capability: MMLU [17] for knowledge-based QA, HumanEval [7] for single-turn code-generation, GSM8K [12] for single-turn tool-free math reasoning, and MTBench [67] for instruction-following."
+            },
+            {
+              "type": "para",
+              "data": "CodeActAgent Excels in CodeAct Task.\nAs shown in Tab. 5, CodeActAgent (both variants) perform better than all evaluated open-source LLMs on both the in-domain and out-of-domain subsets of MINT.\nOn M3ToolEval, we find CodeActAgent (Mistral) outperforms open-source LLMs of similar size (7B and 13B) and even reaches similar performance to those 70B models (Tab. 3).\nSurprisingly, no improvement is observed for the Llama-2 variant. We discuss the potential reasons in §H."
+            },
+            {
+              "type": "para",
+              "data": "CodeActAgent Generalizes to Text Action.\nWhen evaluated on out-of-domain text actions, CodeActAgent (LLaMA2, 7B), which has never been optimized for text action, achieves comparable performance to AgentLM-7B [65] which has explicit tuning for text actions."
+            },
+            {
+              "type": "para",
+              "data": "CodeActAgent Maintains or Improves the Performance on General LLM Tasks.\nIn Tab. 5, we find that CodeActAgent (both variants) performs better on generic LLM tasks we tested, except for a slight degradation on MMLU for CodeActAgent (Mistral, 7B)."
+            },
+            {
+              "type": "para",
+              "data": "Ablation Study.\nTab. A.8 presents ablation experiments to determine the importance of CodeActInstruct and general conversations.\nBoth CodeActInstruct and general conversations contribute to agent tasks, while general conversations are essential to maintain performance on general tasks."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The promising results achieved by CodeAct motivate us to build an open-source LLM agent that can both interact with environments through CodeAct and communicate with humans using language.\nTo improve open-source LLMs’ CodeAct capability, in §3.1, we introduce CodeActInstruct, an instruction finetuning dataset that contains agent-environment interaction trajectories.\nWe discuss data selection procedures in §3.1 to promote improvement from interaction behavior.\nAdditionally, we show that CodeAct can be used together with existing agent-user conversation data (§4) to balance the dialog capability of the resulting LLM.\nOur model CodeActAgent, finetuned from LLaMA-2 [47] and Mistral-7B [20] on a mixture of CodeActInstruct and general conversations, improves CodeAct performances without hurting LLM’s general performance on a diverse suite of tasks (§3.2)."
+        }
+      ]
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Action Module in LLM Agents",
+          "level": 3,
+          "paragraphs": [
+            "As detailed in [49], LLM-based autonomous agents are typically structured around four components: customized profiles [34, 37], long-term memory capabilities [68, 14], reasoning and planning algorithms [56, 10], and, most crucially, action modules.\nThe action modules are key to facilitating LLM agents to effectively interact with external entities, including humans [23] and tools [39] in the environment [53].\nIn this study, we address the critical problem of standardizing the action space for LLM agents.\nWe further discuss the difference between CodeAct and the line of work that uses code generation for problem-solving in §A.\nWe notice a concurrent study TaskWeaver [38] similarly endorses the use of code. We discuss the principal distinctions in §B."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "As detailed in [49], LLM-based autonomous agents are typically structured around four components: customized profiles [34, 37], long-term memory capabilities [68, 14], reasoning and planning algorithms [56, 10], and, most crucially, action modules.\nThe action modules are key to facilitating LLM agents to effectively interact with external entities, including humans [23] and tools [39] in the environment [53].\nIn this study, we address the critical problem of standardizing the action space for LLM agents.\nWe further discuss the difference between CodeAct and the line of work that uses code generation for problem-solving in §A.\nWe notice a concurrent study TaskWeaver [38] similarly endorses the use of code. We discuss the principal distinctions in §B."
+            }
+          ]
+        },
+        {
+          "title": "Improving LLM Agents",
+          "level": 3,
+          "paragraphs": [
+            "Two primary methods for enhancing LLM agents are prompt engineering and instruction tuning, as surveyed by [49].\nFor prompt engineering [27], numerous strategies have been introduced to improve the chain-of-thought reasoning [56], including self-consistency-based reasoning [54, 10] and tree-based approaches [61].\nMoreover, LLMs can be strategically prompted to reflect on previous plans [63, 55, 66], enabling them to refine initial actions through trial and error.\nContrast to prompt engineering, instruction tuning intrinsically enhances LLMs [11], particularly in their agent capabilities [65, 6].\nFor effective training, human annotators can curate expert demonstrations for specific agent tasks, such as web browsing [60, 31].\nTo minimize human annotation efforts, prior work creates synthetic datasets using stronger LLMs to distill agent capabilities into local models, focusing on tool usage [40], interaction [9], and social skills [28].\nCodeActInstruct aligns with the latter approach and creates datasets using stronger LLMs due to limited resources for annotation."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Two primary methods for enhancing LLM agents are prompt engineering and instruction tuning, as surveyed by [49].\nFor prompt engineering [27], numerous strategies have been introduced to improve the chain-of-thought reasoning [56], including self-consistency-based reasoning [54, 10] and tree-based approaches [61].\nMoreover, LLMs can be strategically prompted to reflect on previous plans [63, 55, 66], enabling them to refine initial actions through trial and error.\nContrast to prompt engineering, instruction tuning intrinsically enhances LLMs [11], particularly in their agent capabilities [65, 6].\nFor effective training, human annotators can curate expert demonstrations for specific agent tasks, such as web browsing [60, 31].\nTo minimize human annotation efforts, prior work creates synthetic datasets using stronger LLMs to distill agent capabilities into local models, focusing on tool usage [40], interaction [9], and social skills [28].\nCodeActInstruct aligns with the latter approach and creates datasets using stronger LLMs due to limited resources for annotation."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Conclusions",
+      "level": 2,
+      "paragraphs": [
+        "This work introduces CodeAct that employs executable Python code for the LLM agent’s action, which is advantageous over using text or JSON action, especially in complex scenarios.\nWe collect CodeAct-focused multi-turn interaction trajectories CodeActInstruct for instruction tuning, and train CodeActAgent that is specially designed for seamless integration with Python and can execute sophisticated tasks (e.g., model training) leveraging existing Python packages and autonomously rectifying errors through self-debugging."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "This work introduces CodeAct that employs executable Python code for the LLM agent’s action, which is advantageous over using text or JSON action, especially in complex scenarios.\nWe collect CodeAct-focused multi-turn interaction trajectories CodeActInstruct for instruction tuning, and train CodeActAgent that is specially designed for seamless integration with Python and can execute sophisticated tasks (e.g., model training) leveraging existing Python packages and autonomously rectifying errors through self-debugging."
+        }
+      ]
+    },
+    {
+      "title": "Broader Impacts, Limitations, and Future Work",
+      "level": 2,
+      "paragraphs": [
+        "This paper presents work whose goal is to advance LLM-based autonomous agents that can communicate with humans through natural language and assist human users by performing tasks in environments on behalf of humans.\nIn this section, we discuss potential societal consequences, limitations, and future work related to our work and its goal.",
+        "CodeActAgent is an initial prototype of an autonomous agent and still has several practical limitations. For example, it may suffer from hallucination commonly seen in LLMs (e.g., imagine the content of a variable without actually printing it out), suggesting the need for subsequent alignment [33] for further improvements.",
+        "Despite being a prototype, CodeActAgent has already demonstrated limited self-improving capability (e.g., self-debug error messages to improve its action) and the ability to interact with environments.\nFuture work may build upon CodeActAgent to develop better agents by having them perform extensive interactions within a given environment and iteratively bootstrap their self-improving capability to learn to improve from past mistakes.\nMore powerful agents, as results of such algorithms, are potentially beneficial for solving a wide range of real-world problems (e.g., theorem proving, drug discovery).\nAs extensively discussed in [13], a fully autonomous agent may transform the current landscape of the labor market and impact the jobs of existing workers.",
+        "Furthermore, since CodeAct directly grants access for the agent to freely execute code in a sandbox environment, in the worst scenario (e.g., in Sci-Fi movies), such an agent may potentially break free of the sandbox restriction and cause harm to the world through cyber-attack, highlighting the need for future work to design better safety mechanism to safeguard autonomous agents."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "This paper presents work whose goal is to advance LLM-based autonomous agents that can communicate with humans through natural language and assist human users by performing tasks in environments on behalf of humans.\nIn this section, we discuss potential societal consequences, limitations, and future work related to our work and its goal."
+        },
+        {
+          "type": "para",
+          "data": "CodeActAgent is an initial prototype of an autonomous agent and still has several practical limitations. For example, it may suffer from hallucination commonly seen in LLMs (e.g., imagine the content of a variable without actually printing it out), suggesting the need for subsequent alignment [33] for further improvements."
+        },
+        {
+          "type": "para",
+          "data": "Despite being a prototype, CodeActAgent has already demonstrated limited self-improving capability (e.g., self-debug error messages to improve its action) and the ability to interact with environments.\nFuture work may build upon CodeActAgent to develop better agents by having them perform extensive interactions within a given environment and iteratively bootstrap their self-improving capability to learn to improve from past mistakes.\nMore powerful agents, as results of such algorithms, are potentially beneficial for solving a wide range of real-world problems (e.g., theorem proving, drug discovery).\nAs extensively discussed in [13], a fully autonomous agent may transform the current landscape of the labor market and impact the jobs of existing workers."
+        },
+        {
+          "type": "para",
+          "data": "Furthermore, since CodeAct directly grants access for the agent to freely execute code in a sandbox environment, in the worst scenario (e.g., in Sci-Fi movies), such an agent may potentially break free of the sandbox restriction and cause harm to the world through cyber-attack, highlighting the need for future work to design better safety mechanism to safeguard autonomous agents."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Comparison between CodeAct and Text / JSON as action. (top) Illustrative example comparing different actions. (bottom) Quantitative results on M3ToolEval (§2.3).",
+      "label": "S1.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "General agent multi-turn interaction framework that describes the role of CodeAct and motivates the construction of our data mixture. CodeActInstruct focuses on the agent-environment interactions and specifically filters for the self-improved planning behavior, while general conversation data we include focuses on agent-user interaction (§3.1).",
+      "label": "S2.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2402.01030/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Example interaction with Python packages in multi-turn interactions using CodeActAgent (Mistral-7b-based). No in-context demonstrations are provided to the model. Some messages are omitted for space. See https://chat.xwang.dev/r/Vqn108G for complete interaction.",
+      "label": "S2.F3"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "The benefit of CodeAct compared to using Text/JSON for LLM action.",
+      "headers": [],
+      "rows": [
+        [
+          "Availability of Data",
+          "✔Large quantity of code available1 for pre-training",
+          "✗Data curation required for particular format"
+        ],
+        [
+          "Complex Operation (e.g., looping, composition of multiple tools)",
+          "✔Natively supported via control and data flow",
+          "✗Requires careful engineering if feasible (e.g., define new tools to mimic if-statement)"
+        ],
+        [
+          "Availability of Tools",
+          "✔Can directly use existing software packages2",
+          "✗Requires human effort to curate tools from scratch or existing software"
+        ],
+        [
+          "Automated Feedback",
+          "✔Feedback mechanism3 (e.g., traceback) is already implemented as an infrastructure for most programming languages",
+          "✗Requires human effort to provide feedback or re-route feedback from the underlying programming language used to implement the tools"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Statistics of our training mixture and comparison with prior work. Please refer to §3.1 and §4 for details about CodeActInstruct and general conversation data. Token statistics are computed using Llama-2 tokenizer.",
+      "headers": [],
+      "rows": [
+        [
+          "Data Mixture",
+          "Data Type",
+          "Data Name",
+          "# of Data Instances",
+          "# of Total Tokens",
+          "Avg. Tokens Per Instance"
+        ],
+        [
+          "Prior Work",
+          "-",
+          "FireAct [6]",
+          "2,06320632,063",
+          "542,176542176542,176",
+          "262.81262.81262.81"
+        ],
+        [
+          "-",
+          "AgentInstruct [65]",
+          "1,86618661,866",
+          "2,517,78525177852,517,785",
+          "1349.301349.301349.30"
+        ],
+        [
+          "CodeActInstruct (Ours)",
+          "Information Seeking",
+          "HotpotQA [59]",
+          "1,66416641,664",
+          "2,472,22724722272,472,227",
+          "1485.711485.711485.71"
+        ],
+        [
+          "Software Packages (Tool)",
+          "MATH (Math, [18])",
+          "1,73217321,732",
+          "1,719,46717194671,719,467",
+          "992.76992.76992.76"
+        ],
+        [
+          "Software Packages (Tool)",
+          "APPS (Code, [16])",
+          "647647647",
+          "1,235,47212354721,235,472",
+          "1909.541909.541909.54"
+        ],
+        [
+          "External Memory",
+          "WikiTableQuestion [35]",
+          "1,06510651,065",
+          "1,316,24613162461,316,246",
+          "1235.911235.911235.91"
+        ],
+        [
+          "Robot Planning",
+          "ALFWorld [43]",
+          "2,03120312,031",
+          "3,838,26938382693,838,269",
+          "1889.841889.841889.84"
+        ],
+        [
+          "Total",
+          "7,1397139\\mathbf{7,139}",
+          "10,581,68110581681\\mathbf{10,581,681}",
+          "1482.241482.24\\mathbf{1482.24}"
+        ],
+        [
+          "General Conversation",
+          "Single-Turn Reasoning",
+          "OpenOrca (Sub-sampled, [25])",
+          "50,0005000050,000",
+          "14,034,1521403415214,034,152",
+          "280.68280.68280.68"
+        ],
+        [
+          "Multi-Turn Conversations",
+          "ShareGPT (Sub-sampled, [2])",
+          "10,0001000010,000",
+          "17,933,8611793386117,933,861",
+          "1793.391793.391793.39"
+        ],
+        [
+          "Multi-Turn Conversations",
+          "ShareGPT (GPT-4, [32])",
+          "4,58345834,583",
+          "18,195,8781819587818,195,878",
+          "3970.303970.303970.30"
+        ],
+        [
+          "Multi-turn Reasoning",
+          "CapyBara [22]",
+          "4,64746474,647",
+          "4,982,43549824354,982,435",
+          "1072.181072.181072.18"
+        ],
+        [
+          "Total",
+          "69,23069230\\mathbf{69,230}",
+          "55,146,32655146326\\mathbf{55,146,326}",
+          "796.57796.57\\mathbf{796.57}"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Table A.6: Example of actions for re-purposed API-Bank [24] and M3ToolEval.",
+      "headers": [
+        "Format",
+        "Action"
+      ],
+      "rows": [
+        [
+          "AddAgenda(content=\"Meeting with John\", time=\"2023-10-26 09:00:00\")"
+        ],
+        [
+          "{\"action\": \"AddAgenda\", \"content\": \"Meeting with John\", \"time\": \"2023-10-26 09:00:00\"}"
+        ],
+        [
+          "Action: AddAgenda, content: Meeting with John, time: 2023-10-26 09:00:00"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Table A.7: Comparison between M3ToolEval and existing tool-use evaluation benchmark.",
+      "headers": [
+        "Benchmark",
+        "M3ToolEval",
+        "ToolBench",
+        "APIBench",
+        "API-Bank",
+        "ToolBench",
+        "",
+        "(This work)",
+        "[40]",
+        "[36]",
+        "[24]",
+        "[57]"
+      ],
+      "rows": [
+        [
+          "✔",
+          "✔",
+          "✗",
+          "✗",
+          "✗"
+        ],
+        [
+          "✔",
+          "✔",
+          "✔",
+          "✔",
+          "✔"
+        ],
+        [
+          "Answer Match",
+          "LLM Evaluator",
+          "AST Tree Match",
+          "API-Call Match",
+          "Test Case"
+        ],
+        [
+          "✔",
+          "✗",
+          "✗",
+          "✔",
+          "✗"
+        ],
+        [
+          "CodeAct & JSON & Text",
+          "JSON",
+          "CodeAct",
+          "JSON",
+          "CodeAct"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Table A.9: CodeActInstruct components and the number of instances for training trajectory generation.",
+      "headers": [
+        "Domain",
+        "Capability",
+        "Dataset",
+        "# of Instances"
+      ],
+      "rows": [
+        [
+          "Web Search",
+          "Information seeking through search API",
+          "HotpotQA [59]",
+          "3,000"
+        ],
+        [
+          "Math Reasoning",
+          "Math problem-solving using math Libraries in Python (e.g., sympy)",
+          "MATH [16]",
+          "5,586"
+        ],
+        [
+          "Code Generation",
+          "Self-debug from Python error messages and traceback",
+          "APPS [18]",
+          "4,439"
+        ],
+        [
+          "Tabular Reasoning",
+          "Tabular Reasoning using pandas and sqlite3 (for SQL) library",
+          "WikiTableQuestion [35]",
+          "3,000"
+        ],
+        [
+          "Embodied Planning",
+          "Interact with embodied environments through APIs",
+          "ALFWorld [43]",
+          "3,553"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [],
+  "references": [
+    {
+      "raw_text": "Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebotar, Omar Cortes, Byron David, Chelsea Finn, Chuyuan Fu, Keerthana Gopalakrishnan, Karol Hausman, Alex Herzog, Daniel Ho, Jasmine Hsu, Julian Ibarz, Brian Ichter, Alex Irpan, Eric Jang, Rosario Jauregui Ruano, Kyle Jeffrey, Sally Jesmonth, Nikhil Joshi, Ryan Julian, Dmitry Kalashnikov, Yuheng Kuang, Kuang-Huei Lee, Sergey Levine, Yao Lu, Linda Luu, Carolina Parada, Peter Pastor, Jornell Quiambao, Kanishka Rao, Jarek Rettinghouse, Diego Reyes, Pierre Sermanet, Nicolas Sievers, Clayton Tan, Alexander Toshev, Vincent Vanhoucke, Fei Xia, Ted Xiao, Peng Xu, Sichun Xu, Mengyuan Yan, and Andy Zeng. Do as i can and not as i say: Grounding language in robotic affordances. In arXiv preprint arXiv:2204.01691, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2204.01691",
+      "doi": null,
+      "url": null,
+      "citation_key": "[1]"
+    },
+    {
+      "raw_text": "Anonymous. Sharegpt dataset. https://hf.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/blob/main/ShareGPT_V3_unfiltered_cleaned_split_no_imsorry.json, 2023. A dataset containing multi-turn conversations between human and LLM assistant.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://hf.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/blob/main/ShareGPT_V3_unfiltered_cleaned_split_no_imsorry.json",
+      "citation_key": "[2]"
+    },
+    {
+      "raw_text": "Andres M Bran, Sam Cox, Andrew D White, and Philippe Schwaller. Chemcrow: Augmenting large-language models with chemistry tools. arXiv preprint arXiv:2304.05376, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.05376",
+      "doi": null,
+      "url": null,
+      "citation_key": "[3]"
+    },
+    {
+      "raw_text": "Alejandro Hernández Cano, Matteo Pagliardini, Andreas Köpf, Kyle Matoba, Amirkeivan Mohtashami, Xingyao Wang, Olivia Simin Fan, Axel Marmet, Deniz Bayazit, Igor Krawczuk, Zeming Chen, Francesco Salvi, Antoine Bosselut, and Martin Jaggi. epfllm megatron-llm, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[4]"
+    },
+    {
+      "raw_text": "Harrison Chase. LangChain, October 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[5]"
+    },
+    {
+      "raw_text": "Baian Chen, Chang Shu, Ehsan Shareghi, Nigel Collier, Karthik Narasimhan, and Shunyu Yao. Fireact: Toward language agent fine-tuning. arXiv preprint arXiv:2310.05915, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.05915",
+      "doi": null,
+      "url": null,
+      "citation_key": "[6]"
+    },
+    {
+      "raw_text": "Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large language models trained on code. arXiv preprint arXiv:2107.03374, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2107.03374",
+      "doi": null,
+      "url": null,
+      "citation_key": "[7]"
+    },
+    {
+      "raw_text": "Xinyun Chen, Maxwell Lin, Nathanael Schärli, and Denny Zhou. Teaching large language models to self-debug. arXiv preprint arXiv:2304.05128, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.05128",
+      "doi": null,
+      "url": null,
+      "citation_key": "[8]"
+    },
+    {
+      "raw_text": "Yangyi Chen, Karan Sikka, Michael Cogswell, Heng Ji, and Ajay Divakaran. Dress: Instructing large vision-language models to align and interact with humans via natural language feedback. arXiv preprint arXiv:2311.10081, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2311.10081",
+      "doi": null,
+      "url": null,
+      "citation_key": "[9]"
+    },
+    {
+      "raw_text": "Yangyi Chen, Karan Sikka, Michael Cogswell, Heng Ji, and Ajay Divakaran. Measuring and improving chain-of-thought reasoning in vision-language models. arXiv preprint arXiv:2309.04461, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2309.04461",
+      "doi": null,
+      "url": null,
+      "citation_key": "[10]"
+    },
+    {
+      "raw_text": "Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li, Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models. arXiv preprint arXiv:2210.11416, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2210.11416",
+      "doi": null,
+      "url": null,
+      "citation_key": "[11]"
+    },
+    {
+      "raw_text": "Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2110.14168",
+      "doi": null,
+      "url": null,
+      "citation_key": "[12]"
+    },
+    {
+      "raw_text": "Tyna Eloundou, Sam Manning, Pamela Mishkin, and Daniel Rock. Gpts are gpts: An early look at the labor market impact potential of large language models. arXiv preprint arXiv:2303.10130, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2303.10130",
+      "doi": null,
+      "url": null,
+      "citation_key": "[13]"
+    },
+    {
+      "raw_text": "Kevin A Fischer. Reflective linguistic programming (rlp): A stepping stone in socially-aware agi (socialagi). arXiv preprint arXiv:2305.12647, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.12647",
+      "doi": null,
+      "url": null,
+      "citation_key": "[14]"
+    },
+    {
+      "raw_text": "Luyu Gao, Aman Madaan, Shuyan Zhou, Uri Alon, Pengfei Liu, Yiming Yang, Jamie Callan, and Graham Neubig. Pal: Program-aided language models. In International Conference on Machine Learning, pages 10764–10799. PMLR, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[15]"
+    },
+    {
+      "raw_text": "Dan Hendrycks, Steven Basart, Saurav Kadavath, Mantas Mazeika, Akul Arora, Ethan Guo, Collin Burns, Samir Puranik, Horace He, Dawn Song, et al. Measuring coding challenge competence with apps. In Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2), 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[16]"
+    },
+    {
+      "raw_text": "Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. Measuring massive multitask language understanding. In International Conference on Learning Representations, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[17]"
+    },
+    {
+      "raw_text": "Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song, and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. In Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2), 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[18]"
+    },
+    {
+      "raw_text": "Wenlong Huang, Chen Wang, Ruohan Zhang, Yunzhu Li, Jiajun Wu, and Li Fei-Fei. Voxposer: Composable 3d value maps for robotic manipulation with language models. arXiv preprint arXiv:2307.05973, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.05973",
+      "doi": null,
+      "url": null,
+      "citation_key": "[19]"
+    },
+    {
+      "raw_text": "Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al. Mistral 7b. arXiv preprint arXiv:2310.06825, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.06825",
+      "doi": null,
+      "url": null,
+      "citation_key": "[20]"
+    },
+    {
+      "raw_text": "Geunwoo Kim, Pierre Baldi, and Stephen McAleer. Language models can solve computer tasks. arXiv preprint arXiv:2303.17491, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2303.17491",
+      "doi": null,
+      "url": null,
+      "citation_key": "[21]"
+    },
+    {
+      "raw_text": "LDJnr. Capybara dataset. https://hf.co/datasets/LDJnr/Verified-Camel, https://hf.co/datasets/LDJnr/Pure-Dove, https://hf.co/datasets/LDJnr/LessWrong-Amplify-Instruct, 2023. A dataset focusing on reasoning in multi-turn conversations.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://hf.co/datasets/LDJnr/Verified-Camel",
+      "citation_key": "[22]"
+    },
+    {
+      "raw_text": "Mina Lee, Percy Liang, and Qian Yang. Coauthor: Designing a human-ai collaborative writing dataset for exploring language model capabilities. In Proceedings of the 2022 CHI conference on human factors in computing systems, pages 1–19, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[23]"
+    },
+    {
+      "raw_text": "Minghao Li, Feifan Song, Bowen Yu, Haiyang Yu, Zhoujun Li, Fei Huang, and Yongbin Li. Api-bank: A benchmark for tool-augmented llms, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[24]"
+    },
+    {
+      "raw_text": "Wing Lian, Bleys Goodson, Eugene Pentland, Austin Cook, Chanvichet Vong, and ”Teknium”. Openorca: An open dataset of gpt augmented flan reasoning traces. https://https://huggingface.co/Open-Orca/OpenOrca, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://https://huggingface.co/Open-Orca/OpenOrca",
+      "citation_key": "[25]"
+    },
+    {
+      "raw_text": "Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, and Andy Zeng. Code as policies: Language model programs for embodied control. In arXiv preprint arXiv:2209.07753, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2209.07753",
+      "doi": null,
+      "url": null,
+      "citation_key": "[26]"
+    },
+    {
+      "raw_text": "Pengfei Liu, Weizhe Yuan, Jinlan Fu, Zhengbao Jiang, Hiroaki Hayashi, and Graham Neubig. Pre-train, prompt, and predict: A systematic survey of prompting methods in natural language processing. ACM Computing Surveys, 55(9):1–35, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[27]"
+    },
+    {
+      "raw_text": "Ruibo Liu, Ruixin Yang, Chenyan Jia, Ge Zhang, Denny Zhou, Andrew M Dai, Diyi Yang, and Soroush Vosoughi. Training socially aligned language models in simulated human society. arXiv preprint arXiv:2305.16960, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.16960",
+      "doi": null,
+      "url": null,
+      "citation_key": "[28]"
+    },
+    {
+      "raw_text": "Yecheng Jason Ma, William Liang, Guanzhi Wang, De-An Huang, Osbert Bastani, Dinesh Jayaraman, Yuke Zhu, Linxi Fan, and Anima Anandkumar. Eureka: Human-level reward design via coding large language models. arXiv preprint arXiv:2310.12931, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.12931",
+      "doi": null,
+      "url": null,
+      "citation_key": "[29]"
+    },
+    {
+      "raw_text": "Grégoire Mialon, Roberto Dessì, Maria Lomeli, Christoforos Nalmpantis, Ram Pasunuru, Roberta Raileanu, Baptiste Rozière, Timo Schick, Jane Dwivedi-Yu, Asli Celikyilmaz, et al. Augmented language models: a survey. arXiv preprint arXiv:2302.07842, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.07842",
+      "doi": null,
+      "url": null,
+      "citation_key": "[30]"
+    },
+    {
+      "raw_text": "Reiichiro Nakano, Jacob Hilton, Suchir Balaji, Jeff Wu, Long Ouyang, Christina Kim, Christopher Hesse, Shantanu Jain, Vineet Kosaraju, William Saunders, et al. Webgpt: Browser-assisted question-answering with human feedback. arXiv preprint arXiv:2112.09332, 2021.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2112.09332",
+      "doi": null,
+      "url": null,
+      "citation_key": "[31]"
+    },
+    {
+      "raw_text": "OpenChat. Sharegpt dataset. https://hf.co/datasets/openchat/openchat_sharegpt_v3/blob/main/sharegpt_gpt4.json, 2023. A dataset containing multi-turn conversations between human and LLM assistants. It is filtered to contain data only from GPT-4.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://hf.co/datasets/openchat/openchat_sharegpt_v3/blob/main/sharegpt_gpt4.json",
+      "citation_key": "[32]"
+    },
+    {
+      "raw_text": "Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. Advances in Neural Information Processing Systems, 35:27730–27744, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[33]"
+    },
+    {
+      "raw_text": "Joon Sung Park, Joseph O’Brien, Carrie Jun Cai, Meredith Ringel Morris, Percy Liang, and Michael S Bernstein. Generative agents: Interactive simulacra of human behavior. In Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology, pages 1–22, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[34]"
+    },
+    {
+      "raw_text": "Panupong Pasupat and Percy Liang. Compositional semantic parsing on semi-structured tables. In Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing (Volume 1: Long Papers), pages 1470–1480, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[35]"
+    },
+    {
+      "raw_text": "Shishir G. Patil, Tianjun Zhang, Xin Wang, and Joseph E. Gonzalez. Gorilla: Large language model connected with massive apis. ArXiv, abs/2305.15334, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.15334",
+      "doi": null,
+      "url": null,
+      "citation_key": "[36]"
+    },
+    {
+      "raw_text": "Chen Qian, Xin Cong, Cheng Yang, Weize Chen, Yusheng Su, Juyuan Xu, Zhiyuan Liu, and Maosong Sun. Communicative agents for software development. arXiv preprint arXiv:2307.07924, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.07924",
+      "doi": null,
+      "url": null,
+      "citation_key": "[37]"
+    },
+    {
+      "raw_text": "Bo Qiao, Liqun Li, Xu Zhang, Shilin He, Yu Kang, Chaoyun Zhang, Fangkai Yang, Hang Dong, Jue Zhang, Lu Wang, et al. Taskweaver: A code-first agent framework. arXiv preprint arXiv:2311.17541, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2311.17541",
+      "doi": null,
+      "url": null,
+      "citation_key": "[38]"
+    },
+    {
+      "raw_text": "Yujia Qin, Shengding Hu, Yankai Lin, Weize Chen, Ning Ding, Ganqu Cui, Zheni Zeng, Yufei Huang, Chaojun Xiao, Chi Han, et al. Tool learning with foundation models. arXiv preprint arXiv:2304.08354, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.08354",
+      "doi": null,
+      "url": null,
+      "citation_key": "[39]"
+    },
+    {
+      "raw_text": "Yujia Qin, Shi Liang, Yining Ye, Kunlun Zhu, Lan Yan, Ya-Ting Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, Sihan Zhao, Runchu Tian, Ruobing Xie, Jie Zhou, Marc H. Gerstein, Dahai Li, Zhiyuan Liu, and Maosong Sun. Toolllm: Facilitating large language models to master 16000+ real-world apis. ArXiv, abs/2307.16789, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.16789",
+      "doi": null,
+      "url": null,
+      "citation_key": "[40]"
+    },
+    {
+      "raw_text": "Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. Toolformer: Language models can teach themselves to use tools. arXiv preprint arXiv:2302.04761, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.04761",
+      "doi": null,
+      "url": null,
+      "citation_key": "[41]"
+    },
+    {
+      "raw_text": "Yongliang Shen, Kaitao Song, Xu Tan, Dongsheng Li, Weiming Lu, and Yueting Zhuang. Hugginggpt: Solving ai tasks with chatgpt and its friends in huggingface. arXiv preprint arXiv:2303.17580, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2303.17580",
+      "doi": null,
+      "url": null,
+      "citation_key": "[42]"
+    },
+    {
+      "raw_text": "Mohit Shridhar, Xingdi Yuan, Marc-Alexandre Cote, Yonatan Bisk, Adam Trischler, and Matthew Hausknecht. Alfworld: Aligning text and embodied environments for interactive learning. In International Conference on Learning Representations, 2020.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[43]"
+    },
+    {
+      "raw_text": "Ishika Singh, Valts Blukis, Arsalan Mousavian, Ankit Goyal, Danfei Xu, Jonathan Tremblay, Dieter Fox, Jesse Thomason, and Animesh Garg. Progprompt: Generating situated robot task plans using large language models. In 2023 IEEE International Conference on Robotics and Automation (ICRA), pages 11523–11530, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[44]"
+    },
+    {
+      "raw_text": "Dídac Surís, Sachit Menon, and Carl Vondrick. Vipergpt: Visual inference via python execution for reasoning. Proceedings of IEEE International Conference on Computer Vision (ICCV), 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[45]"
+    },
+    {
+      "raw_text": "TIOBE Index. Tiobe index. https://www.tiobe.com/tiobe-index/, Accessed at Jan 23rd, 2024, 2024. The TIOBE Programming Community index is an indicator of the popularity of programming languages. The index is updated once a month. The ratings are based on the number of skilled engineers world-wide, courses and third party vendors.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.tiobe.com/tiobe-index/",
+      "citation_key": "[46]"
+    },
+    {
+      "raw_text": "Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.09288",
+      "doi": null,
+      "url": null,
+      "citation_key": "[47]"
+    },
+    {
+      "raw_text": "Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. Voyager: An open-ended embodied agent with large language models. arXiv preprint arXiv:2305.16291, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.16291",
+      "doi": null,
+      "url": null,
+      "citation_key": "[48]"
+    },
+    {
+      "raw_text": "Lei Wang, Chen Ma, Xueyang Feng, Zeyu Zhang, Hao Yang, Jingsen Zhang, Zhiyuan Chen, Jiakai Tang, Xu Chen, Yankai Lin, et al. A survey on large language model based autonomous agents. arXiv preprint arXiv:2308.11432, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2308.11432",
+      "doi": null,
+      "url": null,
+      "citation_key": "[49]"
+    },
+    {
+      "raw_text": "Ruoyao Wang, Peter Alexander Jansen, Marc-Alexandre Côté, and Prithviraj Ammanabrolu. Scienceworld: Is your agent smarter than a 5th grader? In Conference on Empirical Methods in Natural Language Processing, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[50]"
+    },
+    {
+      "raw_text": "Xingyao Wang, Sha Li, and Heng Ji. Code4Struct: Code generation for few-shot event structure prediction. In Anna Rogers, Jordan Boyd-Graber, and Naoaki Okazaki, editors, Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages 3640–3663, Toronto, Canada, July 2023. Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[51]"
+    },
+    {
+      "raw_text": "Xingyao Wang, Hao Peng, Reyhaneh Jabbarvand, and Heng Ji. Leti: Learning to generate from textual interactions. ArXiv, abs/2305.10314, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.10314",
+      "doi": null,
+      "url": null,
+      "citation_key": "[52]"
+    },
+    {
+      "raw_text": "Xingyao Wang, Zihan Wang, Jiateng Liu, Yangyi Chen, Lifan Yuan, Hao Peng, and Heng Ji. Mint: Evaluating llms in multi-turn interaction with tools and language feedback. arXiv preprint arXiv:2309.10691, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2309.10691",
+      "doi": null,
+      "url": null,
+      "citation_key": "[53]"
+    },
+    {
+      "raw_text": "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language models. arXiv preprint arXiv:2203.11171, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2203.11171",
+      "doi": null,
+      "url": null,
+      "citation_key": "[54]"
+    },
+    {
+      "raw_text": "Zihao Wang, Shaofei Cai, Anji Liu, Xiaojian Ma, and Yitao Liang. Describe, explain, plan and select: Interactive planning with large language models enables open-world multi-task agents. arXiv preprint arXiv:2302.01560, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.01560",
+      "doi": null,
+      "url": null,
+      "citation_key": "[55]"
+    },
+    {
+      "raw_text": "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. Advances in Neural Information Processing Systems, 35:24824–24837, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[56]"
+    },
+    {
+      "raw_text": "Qiantong Xu, Fenglu Hong, Bo Li, Changran Hu, Zhengyu Chen, and Jian Zhang. On the tool manipulation capability of open-source large language models, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[57]"
+    },
+    {
+      "raw_text": "Ke Yang, Jiateng Liu, John Wu, Chaoqi Yang, Yi R. Fung, Sha Li, Zixuan Huang, Xu Cao, Xingyao Wang, Yiquan Wang, Heng Ji, and Chengxiang Zhai. If llm is the wizard, then code is the wand: A survey on how code empowers large language models to serve as intelligent agents, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[58]"
+    },
+    {
+      "raw_text": "Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William Cohen, Ruslan Salakhutdinov, and Christopher D Manning. Hotpotqa: A dataset for diverse, explainable multi-hop question answering. In Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing, pages 2369–2380, 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[59]"
+    },
+    {
+      "raw_text": "Shunyu Yao, Howard Chen, John Yang, and Karthik Narasimhan. Webshop: Towards scalable real-world web interaction with grounded language agents. Advances in Neural Information Processing Systems, 35:20744–20757, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[60]"
+    },
+    {
+      "raw_text": "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L Griffiths, Yuan Cao, and Karthik Narasimhan. Tree of thoughts: Deliberate problem solving with large language models. arXiv preprint arXiv:2305.10601, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.10601",
+      "doi": null,
+      "url": null,
+      "citation_key": "[61]"
+    },
+    {
+      "raw_text": "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan Cao. React: Synergizing reasoning and acting in language models. In The Eleventh International Conference on Learning Representations, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[62]"
+    },
+    {
+      "raw_text": "Weiran Yao, Shelby Heinecke, Juan Carlos Niebles, Zhiwei Liu, Yihao Feng, Le Xue, Rithesh Murthy, Zeyuan Chen, Jianguo Zhang, Devansh Arpit, et al. Retroformer: Retrospective large language agents with policy gradient optimization. arXiv preprint arXiv:2308.02151, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2308.02151",
+      "doi": null,
+      "url": null,
+      "citation_key": "[63]"
+    },
+    {
+      "raw_text": "Lifan Yuan, Yangyi Chen, Xingyao Wang, Yi Ren Fung, Hao Peng, and Heng Ji. Craft: Customizing llms by creating and retrieving from specialized toolsets. ArXiv, abs/2309.17428, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2309.17428",
+      "doi": null,
+      "url": null,
+      "citation_key": "[64]"
+    },
+    {
+      "raw_text": "Aohan Zeng, Mingdao Liu, Rui Lu, Bowen Wang, Xiao Liu, Yuxiao Dong, and Jie Tang. Agenttuning: Enabling generalized agent abilities for llms, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "[65]"
+    },
+    {
+      "raw_text": "Chenrui Zhang, Lin Liu, Jinpeng Wang, Chuyuan Wang, Xiao Sun, Hongyu Wang, and Mingchen Cai. Prefer: Prompt ensemble learning via feedback-reflect-refine. arXiv preprint arXiv:2308.12033, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2308.12033",
+      "doi": null,
+      "url": null,
+      "citation_key": "[66]"
+    },
+    {
+      "raw_text": "Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging llm-as-a-judge with mt-bench and chatbot arena. arXiv preprint arXiv:2306.05685, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2306.05685",
+      "doi": null,
+      "url": null,
+      "citation_key": "[67]"
+    },
+    {
+      "raw_text": "Xizhou Zhu, Yuntao Chen, Hao Tian, Chenxin Tao, Weijie Su, Chenyu Yang, Gao Huang, Bin Li, Lewei Lu, Xiaogang Wang, et al. Ghost in the minecraft: Generally capable agents for open-world enviroments via large language models with text-based knowledge and memory. arXiv preprint arXiv:2305.17144, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2305.17144",
+      "doi": null,
+      "url": null,
+      "citation_key": "[68]"
+    }
+  ],
+  "full_text": "## Introduction\n\nLarge Language Models (LLMs) have emerged as a pivotal breakthrough in natural language processing (NLP).\nWhen augmented with action modules that allow access to APIs, their action space expands beyond conventional text processing, allowing LLMs to acquire capabilities such as tool invocation and memory management [30, 41] and venture into real-world tasks such as controlling robots [1, 19, 29] and performing scientific experiments [3].\n\nWe inquire: how to effectively expand LLM agents’ action space for solving complex real-world problems?\nMuch existing research has examined using text [62, 34, inter alia] or JSON [40, 5, inter alia] to produce actions (e.g., tool uses in Fig. 1 top left).\nHowever, both methods typically suffer from constrained scope of action spaces (actions are usually tailored for specific tasks) and restricted flexibility (e.g., inability to compose multiple tools in a single action).\nAs an alternative approach, several work [26, 44, 48] demonstrate the potential of using LLMs to generate code to control robots or game characters.\nHowever, they typically rely on pre-specified control primitives and hand-engineered prompts and, more importantly, struggle to dynamically adjust or emit actions based on new environmental observation and feedback.\n\nThis work proposes CodeAct, a general-purpose framework that allows LLMs to generate executable Python code as actions (Fig. 1 top right).\nCodeAct is designed to handle a variety of applications and comes with unique advantages:\n\nIntegrated with a Python interpreter, CodeAct can execute code actions and dynamically adjust prior actions or emit new action based on observations it receives through multiple turns of interactions (code execution).\n\nCode actions allow LLM to leverage existing software packages. CodeAct can use readily available Python packages for an expanded action space instead of hand-crafted task-specific tools [64, 42]. It also allows LLM to use automated feedback (e.g., error messages) implemented in most software to improve task-solving by self-debugging its generated code [8, 52].\n\nCode data is widely used in pre-training today’s LLMs [58].\nThese models are already familiar with structured programming languages, allowing cost-effective adoption of CodeAct.\n\nCompared to JSON and text with a pre-defined format, code inherently supports control and data flow, allowing for the storage of intermediate results as variables for reuse and the composition of multiple tools to perform complex logical operations (e.g., if-statements, for-loops) with one piece of code, thereby unlocking LLMs’ potential to tackle complex tasks by leveraging its pre-trained knowledge of programming.\nIn Fig. 1, an LLM using with CodeAct (top right) can apply the same sequence of tools (e.g., passing one tool’s output as input to another tool using the data flow feature) to all inputs through for-loops (i.e., control flow feature) with one action; while text or JSON have to take action for every input (top left).\n\nOur extensive experiments with 17 LLMs (including both open-source and proprietary ones) confirm the above benefits (3\n& 4) of CodeAct.\nTo demonstrate benefit (3), our first experiment (§2.2) compares CodeAct to baselines on basic tasks involving atomic tool use (i.e., only one tool is used per action), ablating the control and data flow advantage offered by CodeAct.\nThe results show that, for most LLMs, CodeAct achieves comparable or better performance than the baselines.\nCodeAct’s performance gains are more prominent on complex tasks, as demonstrated in our second experiment (benefit 4).\nWe curate a new benchmark consisting of 82 human-curated tasks that typically require multiple calls to multiple tools in multi-turn interactions (M3ToolEval; §2.3).\nProblems in this benchmark often require intricate coordination and composition of multiple tools.\nWith its strengths in control and data flow, CodeAct achieves up to a 20% absolute improvement over baselines on the success rate of solving the problems while requiring up to 30% fewer actions.\nThese performance gains widen as the capabilities of the LLMs increase (Fig. 1 bottom).\n\nThe promising performance of CodeAct motivates an open-source LLM agent that can effectively act through CodeAct, and collaborate with humans through natural language.\nTo this end, we collect an instruction-tuning dataset CodeActInstruct consisting of 7k high-quality multi-turn interaction trajectories with CodeAct (§3.1).\nCodeActInstruct is motivated by a general agent framework consisting of agent, user, and environments (Fig. 2) and focuses on agent-environment interactions with the computer (information seeking, software package use, external memory) and the physical world (robot planning).\nOn CodeActInstruct, we perform careful data selection to promote the capability of improving from multi-turn interaction (e.g., self-debug).\nWe show that CodeActInstruct can be used with commonly used instruction tuning data to improve the models’ performance in agent tasks without compromising their general capabilities (e.g., knowledge-based QA, coding, instruction following, §3.2).\nOur model, dubbed CodeActAgent, is finetuned from LLaMA-2 [47] and Mistral-7B [20] and improves on out-of-domain agent tasks with not only CodeAct, but also text action in a pre-defined format (§3.2).\n\nCodeAct can further benefit from multi-turn interactions and existing software (benefit 1 & 2, §2.4).\nAs shown in Fig. 3, CodeActAgent, designed for seamless integration with Python, can carry out sophisticated tasks (e.g., model training, data visualization) using existing Python packages. Error messages from the environment further enable it to rectify errors autonomously through self-debugging in multi-turn interaction.\nThanks to LLM’s extensive programming knowledge acquired during pre-training, these are achieved without needing in-context demonstrations, reducing the human efforts for adapting CodeActAgent to different tasks.\n\n## CodeAct Makes LLMs Better Agents\n\nIn this section, we first describe CodeAct framework (§2.1) and provide empirical evidence that supports the choice of CodeAct.\nWe focus on Python as the programming language for CodeAct due to its popularity (ranked top-1 at TIOBE index [46]) and numerous open-source packages.\nWe aim to answer several research questions (RQs) using 17 off-the-shelf LLMs. In §2.2, we examine RQ1: Does LLMs’ familiarity with code due to a large amount of code pre-training data bring CodeAct advantages over text and JSON?\nWe discuss RQ2 in §2.3: Does CodeAct benefit from Python’s innate control and data flow feature in complex problems?\nFinally, as an additional benefit, we discuss how using CodeAct further enhances LLM agents by enabling multi-turn interactions and allowing them to access existing software in §2.4 and Fig. 3.\n\n### What is CodeAct?\n\nIn Fig. 2, we first introduce a general multi-turn interaction framework for LLM agents’ real-world usage that considers three roles: agent, user, and environment.\nWe define interaction as the information exchange between the agent and an external entity (user or environment).\nFor each turn of interaction, the agent receives an observation (input) either from the user (e.g., natural language instruction) or the environment (e.g., code execution result), optionally planning for its action through chain-of-thought [56], and emits an action (output) to either user in natural language or the environment.\nCodeAct employs Python code to consolidate all actions for agent-environment interaction. In CodeAct, each emitted action to the environment is a piece of Python code, and the agent will receive outputs of code execution (e.g., results, errors) as observation.\nWe include an example prompt of CodeAct in §E.\n\n### CodeAct Shows the Promise as a Strong Tool Use Framework\n\nIn this section, we perform a controlled experiment to understand which format (text, JSON, CodeAct) is more likely to lead an LLM to generate correct atomic tool calls.\nThe performance in this experiment reflects LLM’s familiarity with the corresponding format.\nWe hypothesize that using CodeAct to call tools is a more natural way to use tools for the models, which typically have extensive exposure to code data during their training.\n\nSetup.\nWe re-purpose API-Bank [24] and test LLMs’ API-calling performance, comparing CodeAct, JSON, and text actions.\nFor each evaluation instance, we instruct LLM to generate one atomic tool call in the format of a Python function call, JSON object, or text expression in a pre-defined format. A concrete example is shown in Tab. A.6.\nWe use API-Bank’s level-1 instructions and the provided toolset. To evaluate API-calling, we follow their correctness metric, matching the ground-truth API outputs with the actual model-generated API’s execution outputs.\n\nResults.\nWe present results in Tab. 3.\nFor most LLMs, CodeAct achieves comparable or better performance even in atomic actions (the simplistic tool use scenario) where its control and data flow strengths are ablated.\nCompared to closed-source LLMs, CodeAct’s improvements are more prominent in open-source models. Furthermore, code data is usually more accessible for fine-tuning open-source LLMs than the specialized JSON or text tool-calling format.\nAlthough JSON is consistently weaker than other approaches for open-source models, it achieves decent performance with closed-source LLMs, indicating that these closed-source models may have gone through targeted fine-tuning toward their JSON capabilities.\nThese results suggest optimizing for CodeAct is a better route for open-source LLMs than alternatives to improve their tool-use capabilities, as they already show good initial CodeAct capability due to extensive exposure to code data during pre-training.\n\n### CodeAct Gets More Done with Fewer Interactions\n\nIn this section, we investigate whether LLM agents can benefit from the control and data flow of code on problems that require complex patterns of tool use.\n\nM3ToolEval.\nAs shown in Tab. A.7, to the best of our knowledge, no existing tool-use benchmarks contain complex tasks requiring the composition of multiple tools while supporting evaluating different action formats. Hence, we curate a benchmark M3ToolEval to fill this gap, which evaluates LLMs’ capabilities in solving complex tasks that typically require multiple calls to multiple tools in multi-turn interactions.\nIt contains 82 human-curated instances, spanning tasks including web browsing, finance, travel itinerary planning, science, and information processing.\nEach domain is accompanied by a unique set of manually crafted tools.\nWe intentionally keep the prompt simple and avoid providing any task demonstration to test the LLM’s zero-shot ability to use tools, similar to how a novice user without domain knowledge of few-shot prompting would use the model.\nPlease refer to §F for prompt examples.\n\nSetup.\nWe allow the model to generate fully functional Python code that enables control and data flow (e.g., if-statement, for-loop). We follow the action format for JSON and text described in Tab. A.6.\nWithin each turn, the model can either emit an action or propose an answer to be verified by an exact match with the ground-truth solution.\nThe interaction will terminate when a maximum of 10 interaction turns are reached or a correct solution has been submitted, similar to MINT [53].\n\nMetric. We measure the success rate by calculating the percentage of the model proposed answers that match the ground-truth solutions. We also include the avg. turns metric: the average number of turns on all evaluated instances.\n\nQuantitative Results on M3ToolEval.\nWe include full results in Tab. 3 and a subset of results for visualization in Fig. 1.\nCodeAct generally has a higher task success rate (12 out of 17 evaluated LLMs), similar to the trend in §2.2. Moreover, using CodeAct requires a lower average number of turns (12 out of 17 evaluated LLMs).\nFor example, the best model gpt-4-1106-preview achieves a $20.7$% absolute improvement compared to the next best action format (text) while requiring $2.1$ fewer interaction turns on average.\nHowever, there is still a significant gap in terms of absolute CodeAct performance between open- and closed-source LLMs as the best open-source model achieving 13.4% while the best closed-source model gpt-4-1106-preview 74.4%. This is potentially due to open-source models’ weak task-solving capability and inability to follow complex instructions without demonstration, suggesting an urgent need to improve open-source LLMs for practical, real-world tasks under the zero-shot setting.\n\n### CodeAct Benefits from Multi-turn Interactions and Existing Software Packages\n\nIn Fig. 3, we show how an LLM agent can integrate with Python (i.e., CodeActAgent we trained in §3.2) and use existing software to perform complex tasks in multi-turn interactions.\nThanks to its extensive knowledge of Python learned during pre-training, the LLM agent can automatically import the correct Python libraries to solve tasks without requiring user-provided tools or demonstrations.\nAs illustrated in Fig. 3, CodeActAgent can use Pandas to download and process tabular data, use Scikit-Learn for machine learning train-test data split and regression model training, and use Matplotlib for data visualization.\nFurthermore, using the interactive Python interpreter for code execution allows automated error messages that help the LLM agent ‘self-debug’ their actions in a multi-turn interaction and eventually complete the human user’s request correctly.\n\n## Empowering Open-source LLM Agent to be Better at CodeAct\n\nThe promising results achieved by CodeAct motivate us to build an open-source LLM agent that can both interact with environments through CodeAct and communicate with humans using language.\nTo improve open-source LLMs’ CodeAct capability, in §3.1, we introduce CodeActInstruct, an instruction finetuning dataset that contains agent-environment interaction trajectories.\nWe discuss data selection procedures in §3.1 to promote improvement from interaction behavior.\nAdditionally, we show that CodeAct can be used together with existing agent-user conversation data (§4) to balance the dialog capability of the resulting LLM.\nOur model CodeActAgent, finetuned from LLaMA-2 [47] and Mistral-7B [20] on a mixture of CodeActInstruct and general conversations, improves CodeAct performances without hurting LLM’s general performance on a diverse suite of tasks (§3.2).\n\n### CodeActInstruct: Agent-Environment Interactions\n\nWe consider four main use cases in agent-environment interaction and repurpose five existing datasets across different domains to generate trajectories:\n\nInformation Seeking: We use a training subset of HotpotQA [59] to generate information-seeking trajectories, where LLMs use the wikipedia_search API (provided as a Python function) to search for information to answer questions.\n\nSoftware Package (Tool) Usage: We use the training set of code generation problems in APPS [16] and math problems in MATH [18]. The code generation tasks already involve importing packages and/or creating new tools by defining a new Python function. For MATH, we provide an in-context demonstration of importing Python packages (e.g., sympy for symbolic math) for problem-solving.\n\nExternal Memory: We repurpose the training subset of WikiTableQuestion [35] and tweak it into two variants of tabular reasoning tasks that require accessing external memory: (1) SQL-based, requiring the LLM to interact with an SQL database through sqlite3 package to answer the question via SQL execution; (2) Pandas-based, requiring the model to interact with pandas tables to perform data operations (e.g., select, filter). Examples of instructions can be found in §G.3.1.\n\nRobot Planning: We use ALFWorld [43], a text-only embodied environment simulator, to generate trajectories that use robot-control APIs (repurposed as Python function) to complete household tasks. Following MINT [53], we provide an in-context demonstration to encourage the use of for-loop and if-statement code blocks to automate repetitive operations (e.g., searching for items by visiting different locations).\n\nData Down-sampling.\nWe down-sample each dataset by keeping only the most challenging instances, aiming to make trajectory generation more efficient and cost-effective. Furthermore, it also helps remove simple instances that existing LLMs can already solve.\nThe statistics of the filtered dataset can be found in Tab. A.9. Please refer to §G.1 for details about the down-sample process.\n\nRepurpose Data for Multi-turn Interaction.\nSome datasets (APPS, MATH, WikiTableQuestions) are initially single-turn problems that expect one solution per instruction, whereas, in a realistic agent use case, we often require multi-turn interaction to complete each task (Fig. 1 top).\nFollowing MINT [53], we repurpose single-turn problems into multi-turn ones by allowing LLM to interact with the environment for multiple turns before it decides to submit one solution for evaluation.\nSpecifically for code generation problems, we provide an in-context example to guide LLMs to test their solution on provided test cases before they submit the solution.\nMetrics from the original data will evaluate the submitted solution to determine its correctness. We include prompt examples in §G.3.\n\nTrajectory Generation.\nWe use MINT’s evaluation framework [53] to generate interaction trajectories for the aforementioned datasets and determine the correctness of each trajectory.\nWe run gpt-3.5-turbo-0613 from OpenAI, claude-1-instant and claude-2 from Anthropic on down-sampled data, except code generation, which we use a longer-context version of GPT-3.5 (gpt-3.5-turbo-0613-16k) due to the long-context requirement of the self-debugging process.\nOn a subset of problems that none of these models can solve, we use gpt-4-0613 to generate trajectories.\n\nEnhancing Agent’s Capabilities of Improving from Interaction.\n\nWe select a high-quality subset of all the generated trajectories from CodeActInstruct to promote the agent’s ability to improve the next action based on prior observations (e.g., self-debugging from code execution error message, a planning capability in Fig. 2).\nTo achieve this, we selectively preserve those trajectories wherein the model initially encounters errors but rectifies these inaccuracies in later interactions.\nFor these instances, the LLM typically engages in self-reflection following the initial error, thereby proactively enhancing its future actions.\nOther filtering details are discussed in §G.2.\nOn all trajectories generated, we keep 411 trajectories from gpt-4-0613 and 6728 trajectories from gpt-3.5 and claude.\nThe statistics of the resulting dataset CodeActInstruct are shown in Tab. 4.\n\nComparing CodeActInstruct with Prior Work.\nCompared with prior work AgentInstruct [65] and FireAct [6] that mainly focus using text as action, CodeActInstruct results in models that are more practical in real-world implementation, as such models using CodeAct can directly interact with Python interpreters and open-source toolkits (Fig. 3), reducing the development effort for action parsing and tool creations.\nCodeActInstruct is systematically constructed following the general agent framework (Fig. 2).\nIt covers diverse domains (e.g., compared to FireAct that only considers QA-task and search API), contains quality data (e.g., promotes agent’s capability of self-debug) and of larger size (3.8x / 3.5x more data trajectories and 5x / 19x more tokens compared to AgentInstruct / FireAct respectively in Tab. 4).\nAs we empirically show in Tab. 5, the resulting model (same backbone) of CodeActInstruct achieves 24% and 119% relative improvement compared to AgentInstruct and FireAct.\n\nCodeActInstruct Can Be Used With Existing Agent-User Conversation Data.\n\nWe use a sub-sampled set of OpenOrca [25] that focuses on single-turn chain-of-thought (CoT) reasoning, ShareGPT [2, 32] from two sources that contain multi-turn conversations between human and LLM, and CapyBara [22] that focuses on reasoning in multi-turn conversations.\nDetails of down-sampling can be found in §C.\nPlease refer to Tab. 4 for statistics of general conversations.\n\n### CodeActAgent\n\nWe fine-tune Llama-2 7B [47] and Mistral 7B [20] on a mixture of CodeActInstruct and general conversations (Tab. 4) to obtain CodeActAgent.\n\nTraining Setup. We perform full-parameter supervised fine-tuning with a sequence length of 4,096 tokens for Llama-2 and 16,384 for Mistral. Please refer to §D for more details.\n\nEvaluation Setup.\nWe use MINT [53] to evaluate LLMs with CodeAct on a diverse range of agent tasks.\nCodeActAgent has some training domains overlapping with MINT’s evaluation (i.e., MINT includes ALFWorld and MATH), hence we report separate numbers for MINT’s in- and out-of-domain performance.\nUnless otherwise specified, we measure MINT tasks’ success rates with interaction turn $k=5$.\nWe also evaluate out-of-domain agent tasks using text actions from MiniWob++ (computer tasks, [21]) and ScienceWorld (text-based simulator for elementary science curriculum, [50]) to test whether CodeActAgent can generalize to different action formats.\nFinally, we include a suite of general LLM evaluation tasks to assess general capability: MMLU [17] for knowledge-based QA, HumanEval [7] for single-turn code-generation, GSM8K [12] for single-turn tool-free math reasoning, and MTBench [67] for instruction-following.\n\nCodeActAgent Excels in CodeAct Task.\nAs shown in Tab. 5, CodeActAgent (both variants) perform better than all evaluated open-source LLMs on both the in-domain and out-of-domain subsets of MINT.\nOn M3ToolEval, we find CodeActAgent (Mistral) outperforms open-source LLMs of similar size (7B and 13B) and even reaches similar performance to those 70B models (Tab. 3).\nSurprisingly, no improvement is observed for the Llama-2 variant. We discuss the potential reasons in §H.\n\nCodeActAgent Generalizes to Text Action.\nWhen evaluated on out-of-domain text actions, CodeActAgent (LLaMA2, 7B), which has never been optimized for text action, achieves comparable performance to AgentLM-7B [65] which has explicit tuning for text actions.\n\nCodeActAgent Maintains or Improves the Performance on General LLM Tasks.\nIn Tab. 5, we find that CodeActAgent (both variants) performs better on generic LLM tasks we tested, except for a slight degradation on MMLU for CodeActAgent (Mistral, 7B).\n\nAblation Study.\nTab. A.8 presents ablation experiments to determine the importance of CodeActInstruct and general conversations.\nBoth CodeActInstruct and general conversations contribute to agent tasks, while general conversations are essential to maintain performance on general tasks.\n\n## Related Work\n\n### Action Module in LLM Agents\n\nAs detailed in [49], LLM-based autonomous agents are typically structured around four components: customized profiles [34, 37], long-term memory capabilities [68, 14], reasoning and planning algorithms [56, 10], and, most crucially, action modules.\nThe action modules are key to facilitating LLM agents to effectively interact with external entities, including humans [23] and tools [39] in the environment [53].\nIn this study, we address the critical problem of standardizing the action space for LLM agents.\nWe further discuss the difference between CodeAct and the line of work that uses code generation for problem-solving in §A.\nWe notice a concurrent study TaskWeaver [38] similarly endorses the use of code. We discuss the principal distinctions in §B.\n\n### Improving LLM Agents\n\nTwo primary methods for enhancing LLM agents are prompt engineering and instruction tuning, as surveyed by [49].\nFor prompt engineering [27], numerous strategies have been introduced to improve the chain-of-thought reasoning [56], including self-consistency-based reasoning [54, 10] and tree-based approaches [61].\nMoreover, LLMs can be strategically prompted to reflect on previous plans [63, 55, 66], enabling them to refine initial actions through trial and error.\nContrast to prompt engineering, instruction tuning intrinsically enhances LLMs [11], particularly in their agent capabilities [65, 6].\nFor effective training, human annotators can curate expert demonstrations for specific agent tasks, such as web browsing [60, 31].\nTo minimize human annotation efforts, prior work creates synthetic datasets using stronger LLMs to distill agent capabilities into local models, focusing on tool usage [40], interaction [9], and social skills [28].\nCodeActInstruct aligns with the latter approach and creates datasets using stronger LLMs due to limited resources for annotation.\n\n## Conclusions\n\nThis work introduces CodeAct that employs executable Python code for the LLM agent’s action, which is advantageous over using text or JSON action, especially in complex scenarios.\nWe collect CodeAct-focused multi-turn interaction trajectories CodeActInstruct for instruction tuning, and train CodeActAgent that is specially designed for seamless integration with Python and can execute sophisticated tasks (e.g., model training) leveraging existing Python packages and autonomously rectifying errors through self-debugging.\n\n## Broader Impacts, Limitations, and Future Work\n\nThis paper presents work whose goal is to advance LLM-based autonomous agents that can communicate with humans through natural language and assist human users by performing tasks in environments on behalf of humans.\nIn this section, we discuss potential societal consequences, limitations, and future work related to our work and its goal.\n\nCodeActAgent is an initial prototype of an autonomous agent and still has several practical limitations. For example, it may suffer from hallucination commonly seen in LLMs (e.g., imagine the content of a variable without actually printing it out), suggesting the need for subsequent alignment [33] for further improvements.\n\nDespite being a prototype, CodeActAgent has already demonstrated limited self-improving capability (e.g., self-debug error messages to improve its action) and the ability to interact with environments.\nFuture work may build upon CodeActAgent to develop better agents by having them perform extensive interactions within a given environment and iteratively bootstrap their self-improving capability to learn to improve from past mistakes.\nMore powerful agents, as results of such algorithms, are potentially beneficial for solving a wide range of real-world problems (e.g., theorem proving, drug discovery).\nAs extensively discussed in [13], a fully autonomous agent may transform the current landscape of the labor market and impact the jobs of existing workers.\n\nFurthermore, since CodeAct directly grants access for the agent to freely execute code in a sandbox environment, in the worst scenario (e.g., in Sci-Fi movies), such an agent may potentially break free of the sandbox restriction and cause harm to the world through cyber-attack, highlighting the need for future work to design better safety mechanism to safeguard autonomous agents.\n",
+  "extracted_at": "2026-04-13T16:52:58.477707"
+}

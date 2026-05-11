@@ -1,0 +1,40 @@
+{
+  "arxiv_id": "2205.06175v3",
+  "title": "A Generalist Agent",
+  "authors": [
+    "Scott Reed",
+    "Konrad Zolna",
+    "Emilio Parisotto",
+    "Sergio Gomez Colmenarejo",
+    "Alexander Novikov",
+    "Gabriel Barth-Maron",
+    "Mai Gimenez",
+    "Yury Sulsky",
+    "Jackie Kay",
+    "Jost Tobias Springenberg",
+    "Tom Eccles",
+    "Jake Bruce",
+    "Ali Razavi",
+    "Ashley Edwards",
+    "Nicolas Heess",
+    "Yutian Chen",
+    "Raia Hadsell",
+    "Oriol Vinyals",
+    "Mahyar Bordbar",
+    "Nando de Freitas"
+  ],
+  "abstract": "Inspired by progress in large-scale language modeling, we apply a similar approach towards building a single generalist agent beyond the realm of text outputs. The agent, which we refer to as Gato, works as a multi-modal, multi-task, multi-embodiment generalist policy. The same network with the same weights can play Atari, caption images, chat, stack blocks with a real robot arm and much more, deciding based on its context whether to output text, joint torques, button presses, or other tokens. In this report we describe the model and the data, and document the current capabilities of Gato.",
+  "categories": [
+    "cs.AI",
+    "cs.CL",
+    "cs.LG",
+    "cs.RO"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2022-05-12T16:03:26+00:00",
+  "updated": "2022-11-11T10:04:29+00:00",
+  "doi": null,
+  "journal_ref": "Transactions on Machine Learning Research, 11/2022, https://openreview.net/forum?id=1ikK0kHjvj",
+  "comment": "Published at TMLR, 42 pages",
+  "pdf_url": "https://arxiv.org/pdf/2205.06175v3.pdf"
+}

@@ -1,0 +1,1985 @@
+{
+  "paper_id": "2602.16666",
+  "title": "Towards a Science of AI Agent Reliability",
+  "authors": [
+    "Stephan Rabanser Sayash Kapoor Peter Kirgis Kangheng Liu Saiteja Utpala Arvind Narayanan Princeton University"
+  ],
+  "affiliations": [],
+  "abstract": "AI agents are increasingly deployed to execute important tasks. While rising accuracy scores on standard benchmarks suggest rapid progress, many agents still continue to fail in practice. This discrepancy highlights a major limitation of current evaluations: focusing on a single metric is not enough to understand agent behavior. Notably, it ignores whether agents behave consistently across runs, withstand perturbations, fail predictably, or have bounded error severity. Grounded in safety-critical engineering, we provide a holistic performance profile consisting of twelve metrics that decompose agent reliability along four key dimensions: consistency, robustness, predictability, and safety. Evaluating 14 models across two complementary benchmarks, we find that recent capability gains have only yielded small improvements in reliability. By exposing these persistent limitations, our metrics complement traditional evaluations while offering tools for reasoning about how agents perform, degrade, and fail.",
+  "sections": [
+    {
+      "title": "1 Introduction",
+      "level": 2,
+      "paragraphs": [
+        "AI agents are rapidly transitioning from research prototypes to deployed systems that perform increasingly consequential tasks autonomously: modifying code [69], managing databases [62], browsing the web [11], and orchestrating complex multi-step workflows [70].\nThe promise of such agents is substantial and widely recognized. If they performed reliably, they could automate significant fractions of routine work and augment human capability across domains.\nYet the same autonomy that makes these agents useful also makes their failures costly. While many standard evaluations suggest these systems are ready for such responsibilities, recent high-profile incidents have exposed a troubling gap between benchmark performance and real-world outcomes [48].",
+        "In July 2025, Replit’s AI coding assistant deleted an entire production database despite explicit instructions forbidding such changes [8, 58]. Months earlier, Washington Post columnist Geoffrey Fowler asked OpenAI’s Operator to find “cheap eggs” for delivery, only to find that the agent made an unauthorized $31.43 purchase from Instacart, violating the company’s user confirmation safeguard before purchases [20, 46]. In 2024, the New York City government launched a chatbot for business assistance which consistently provided illegal advice and gave different (incorrect) answers to ten journalists asking the same question [34]. In each case, agents were judged to be reasonably capable by internal assessments, but displayed unreliable performance in real-world deployment, leading to costly failures.\nThis raises a fundamental question:",
+        "How should we define and evaluate agent reliability?",
+        "The dominant paradigm for agent evaluation offers little help in answering this question.\nDespite recent efforts of providing a more holistic evaluation of agents [31] and the language models that drive them [37], standard evaluation practice centers on reporting mean task success rates [76, 27, 40, 42]: the percentage of benchmark tasks an agent completes correctly.\nThis approach has clear advantages: it is simple to compute, easy to compare across systems, and provides a clean optimization target. But it obscures the behavioral properties that matter most for deployment. Accuracy cannot distinguish an agent that fails on a fixed, identifiable subset of tasks from one that fails unpredictably with the same rate. Yet the former permits a partitioning of tasks between humans and agents, while the latter does not.\nAccuracy also cannot distinguish benign failures (incomplete outputs, formatting errors) from catastrophic ones (deleted files, unauthorized actions), even though no practitioner would view them as interchangeable.\nStandard benchmarks do not report sensitivity to input perturbations, nor do they assess whether agents can recognize when they are likely to fail and abstain from returning bad predictions.",
+        "This evaluation gap stands in stark contrast to safety-critical engineering.\nIn aviation [54, 50], nuclear power [25], automotive [26], and railway systems [14], reliability has long been understood as a critical, multi-dimensional property [24, 4, 33], and recent work has argued for applying these system safety principles to AI [12, 51].\nCertification requires not only that systems perform correctly on average, but that they behave consistently across executions, bound the severity of failures, and degrade predictably under stress.\nThese domains assess failure probability and failure consequence separately: a component that fails rarely but catastrophically when it does may be less acceptable than one that fails more often but always benignly.\nThey quantify tail risks explicitly, asking not just “what is the average outcome?” but “how bad can the worst outcomes be, and how often do they occur?”.\nFinally, they test systems under structured perturbations, such as varying inputs, environmental conditions, and component behaviors, to characterize how performance degrades outside nominal operating conditions.",
+        "We adapt the safety-critical perspective to agent evaluations, decomposing reliability into four dimensions (see Table 1): consistency (repeatable behavior across runs), robustness (stability under input and environmental perturbations), predictability (calibrated confidence and discrimination of correct/incorrect predictions), and safety (bounded severity when failures occur).\nEach dimension captures a property that matters for deployment but cannot be measured by accuracy alone.\nAcross these dimensions, we propose a total of twelve concrete metrics that are independent of raw accuracy (see Section 3), enabling comparison of reliability across agents with different capability levels.",
+        "Applying these metrics to 14 models across two benchmarks, we find that reliability gains lag noticeably behind capability progress (see Figure 1): despite steady accuracy improvements over 18 months of model releases, reliability only shows modest overall improvement. To analyze this widening gap, our paper provides two key contributions:",
+        "A formal taxonomy and suite of metrics: We translate qualitative safety-critical principles into computable metrics, enabling evaluation of agent reliability independently of task success.",
+        "A comprehensive reliability profile of modern agents: A detailed mapping of where state-of-the-art models succeed and fail, isolating consistency and predictability as the dimensions requiring immediate research focus."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "AI agents are rapidly transitioning from research prototypes to deployed systems that perform increasingly consequential tasks autonomously: modifying code [69], managing databases [62], browsing the web [11], and orchestrating complex multi-step workflows [70].\nThe promise of such agents is substantial and widely recognized. If they performed reliably, they could automate significant fractions of routine work and augment human capability across domains.\nYet the same autonomy that makes these agents useful also makes their failures costly. While many standard evaluations suggest these systems are ready for such responsibilities, recent high-profile incidents have exposed a troubling gap between benchmark performance and real-world outcomes [48]."
+        },
+        {
+          "type": "para",
+          "data": "In July 2025, Replit’s AI coding assistant deleted an entire production database despite explicit instructions forbidding such changes [8, 58]. Months earlier, Washington Post columnist Geoffrey Fowler asked OpenAI’s Operator to find “cheap eggs” for delivery, only to find that the agent made an unauthorized $31.43 purchase from Instacart, violating the company’s user confirmation safeguard before purchases [20, 46]. In 2024, the New York City government launched a chatbot for business assistance which consistently provided illegal advice and gave different (incorrect) answers to ten journalists asking the same question [34]. In each case, agents were judged to be reasonably capable by internal assessments, but displayed unreliable performance in real-world deployment, leading to costly failures.\nThis raises a fundamental question:"
+        },
+        {
+          "type": "para",
+          "data": "How should we define and evaluate agent reliability?"
+        },
+        {
+          "type": "para",
+          "data": "The dominant paradigm for agent evaluation offers little help in answering this question.\nDespite recent efforts of providing a more holistic evaluation of agents [31] and the language models that drive them [37], standard evaluation practice centers on reporting mean task success rates [76, 27, 40, 42]: the percentage of benchmark tasks an agent completes correctly.\nThis approach has clear advantages: it is simple to compute, easy to compare across systems, and provides a clean optimization target. But it obscures the behavioral properties that matter most for deployment. Accuracy cannot distinguish an agent that fails on a fixed, identifiable subset of tasks from one that fails unpredictably with the same rate. Yet the former permits a partitioning of tasks between humans and agents, while the latter does not.\nAccuracy also cannot distinguish benign failures (incomplete outputs, formatting errors) from catastrophic ones (deleted files, unauthorized actions), even though no practitioner would view them as interchangeable.\nStandard benchmarks do not report sensitivity to input perturbations, nor do they assess whether agents can recognize when they are likely to fail and abstain from returning bad predictions."
+        },
+        {
+          "type": "para",
+          "data": "This evaluation gap stands in stark contrast to safety-critical engineering.\nIn aviation [54, 50], nuclear power [25], automotive [26], and railway systems [14], reliability has long been understood as a critical, multi-dimensional property [24, 4, 33], and recent work has argued for applying these system safety principles to AI [12, 51].\nCertification requires not only that systems perform correctly on average, but that they behave consistently across executions, bound the severity of failures, and degrade predictably under stress.\nThese domains assess failure probability and failure consequence separately: a component that fails rarely but catastrophically when it does may be less acceptable than one that fails more often but always benignly.\nThey quantify tail risks explicitly, asking not just “what is the average outcome?” but “how bad can the worst outcomes be, and how often do they occur?”.\nFinally, they test systems under structured perturbations, such as varying inputs, environmental conditions, and component behaviors, to characterize how performance degrades outside nominal operating conditions."
+        },
+        {
+          "type": "para",
+          "data": "We adapt the safety-critical perspective to agent evaluations, decomposing reliability into four dimensions (see Table 1): consistency (repeatable behavior across runs), robustness (stability under input and environmental perturbations), predictability (calibrated confidence and discrimination of correct/incorrect predictions), and safety (bounded severity when failures occur).\nEach dimension captures a property that matters for deployment but cannot be measured by accuracy alone.\nAcross these dimensions, we propose a total of twelve concrete metrics that are independent of raw accuracy (see Section 3), enabling comparison of reliability across agents with different capability levels."
+        },
+        {
+          "type": "para",
+          "data": "Applying these metrics to 14 models across two benchmarks, we find that reliability gains lag noticeably behind capability progress (see Figure 1): despite steady accuracy improvements over 18 months of model releases, reliability only shows modest overall improvement. To analyze this widening gap, our paper provides two key contributions:"
+        },
+        {
+          "type": "para",
+          "data": "A formal taxonomy and suite of metrics: We translate qualitative safety-critical principles into computable metrics, enabling evaluation of agent reliability independently of task success."
+        },
+        {
+          "type": "para",
+          "data": "A comprehensive reliability profile of modern agents: A detailed mapping of where state-of-the-art models succeed and fail, isolating consistency and predictability as the dimensions requiring immediate research focus."
+        }
+      ]
+    },
+    {
+      "title": "2 A Cross-Domain Perspective of Reliability",
+      "level": 2,
+      "paragraphs": [
+        "Before defining reliability metrics for AI agents, we take a step back to ask the foundational question: what is reliability, and how have engineering disciplines with long traditions of building dependable systems approached it?\nThis section synthesizes decades of practice from safety-critical engineering into a unified decomposition, connecting each dimension to existing work in machine learning.",
+        "To that end, we survey reliability practices across safety-critical industries—aviation, nuclear power, automotive systems, and industrial process control—to identify recurring evaluation dimensions (see Appendix B.2 for details). Despite substantial differences in technology, regulation, and risk tolerance, four dimensions emerge, summarized in Table 1. This convergence across independent fields suggests these dimensions capture fundamental aspects of reliability rather than domain-specific concerns.",
+        "Across safety-critical domains, variance itself is treated as a liability: flight-critical software must behave deterministically, reactor protection systems must respond identically each time conditions warrant shutdown, and process control systems flag unexpected variance before it cascades into larger problems. The principle is that even acceptable average performance becomes problematic when high variance makes outcomes unpredictable.\nWhile ML research has documented numerous instances of this problem—including prompt sensitivity [52], floating-point non-determinism [22], and a growing disconnect between capability and consistency [64]— these are typically treated as isolated phenomena rather than symptoms of a unified reliability deficit. Recent efforts have begun to formalize these individual concerns; for instance, evaluating consistency by prioritizing pass$\\wedge k$ [71] over traditional pass$@k$. 11pass$@k$ measures best-case capability by requiring at least one success in $k$ attempts, whereas pass$\\wedge k$ measures strict consistency by demanding success across all $k$ attempts. However, a comprehensive framework connecting these ad-hoc observations to safety-critical engineering practice remains largely absent.",
+        "Real-world systems rarely operate under ideal conditions. Automotive safety testing evaluates responses to sensor failures and adverse weather; aviation qualification tests hardware against temperature extremes, vibration, and electromagnetic interference; chemical plants analyze how process deviations propagate through interconnected systems. The common thread is that robust systems degrade gracefully rather than failing abruptly.\nWhile ML research has identified various specific failure modes, such as sensitivity to input variations [65, 6] and susceptibility to prompt injection [44], these are often treated as disparate phenomena instead of components of a broader, unified account of robustness.",
+        "A system that fails in known, expected ways is often preferable to one that fails rarely but unpredictably. Nuclear risk assessment explicitly models failure modes and quantifies their probabilities; aviation certification categorizes failures by severity and assigns probability targets; many safety systems employ “safe modes” with reduced functionality but guaranteed safety when uncertainty exceeds thresholds. The key insight: systems should know what they do not know.\nML research on calibration [21, 39, 36] and selective prediction [13, 29, 3, 49] addresses related concerns, though often without connecting to the broader notion of predictable failure behavior that safety-critical domains emphasize.",
+        "Every safety-critical field ties reliability to consequence-aware risk assessment. Nuclear safety computes not just failure frequencies but expected consequences: health effects, economic impacts, environmental damage. Process industry standards tie development rigor to the failure severity. Aviation targets catastrophic failure probabilities below one in a billion per flight hour. The unifying principle is that not all failures are equal. ML evaluation of safety has largely focused on compliance with harmful requests [2] or specific harmful behaviors like sycophancy [47]. These are important concerns for model deployment and governance, but distinct from consequence-aware assessment of how agents fail at legitimate tasks."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [
+        {
+          "caption": "Reliability dimensions derived from cross-domain safety-critical engineering practices.",
+          "headers": [
+            "Dimension",
+            "Cross-Domain Notion",
+            "Domain-Specific Exemplars"
+          ],
+          "rows": [
+            [
+              "Consistency",
+              "Repeatable outcomes under nominal conditions; low variance across repeated trials",
+              "FAA requires deterministic execution of flight-critical software [55]; NRC sets mandatory response times for digital computers in nuclear reactors [61]."
+            ],
+            [
+              "Robustness",
+              "Graceful degradation under input, environment, tool perturbations; stable performance across the full operational envelope",
+              "NASA investigation of software-related unintended acceleration in Toyota cars leads to recall [43]; FAA mandates aviation sensor testing at extreme temperatures, turbulence, and vibration [17]."
+            ],
+            [
+              "Predictability",
+              "Prediction confidence aligned with accuracy; detect limits and defer/escalate under uncertainty",
+              "NRC models thousands of potential failure modes in nuclear reactors [60]; Aviation uses tiered risk classification with explicit probabilities [18]."
+            ],
+            [
+              "Safety",
+              "Bounded harm even when failures occur; worst-case severity remains acceptable",
+              "SIL 4 standard requires dangerous failure probability less than 10−510^{-5} [24]; FAA uses a one catastrophic error per billion flight hours target [18]."
+            ]
+          ],
+          "label": null
+        }
+      ],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "table",
+          "data": {
+            "caption": "Reliability dimensions derived from cross-domain safety-critical engineering practices.",
+            "headers": [
+              "Dimension",
+              "Cross-Domain Notion",
+              "Domain-Specific Exemplars"
+            ],
+            "rows": [
+              [
+                "Consistency",
+                "Repeatable outcomes under nominal conditions; low variance across repeated trials",
+                "FAA requires deterministic execution of flight-critical software [55]; NRC sets mandatory response times for digital computers in nuclear reactors [61]."
+              ],
+              [
+                "Robustness",
+                "Graceful degradation under input, environment, tool perturbations; stable performance across the full operational envelope",
+                "NASA investigation of software-related unintended acceleration in Toyota cars leads to recall [43]; FAA mandates aviation sensor testing at extreme temperatures, turbulence, and vibration [17]."
+              ],
+              [
+                "Predictability",
+                "Prediction confidence aligned with accuracy; detect limits and defer/escalate under uncertainty",
+                "NRC models thousands of potential failure modes in nuclear reactors [60]; Aviation uses tiered risk classification with explicit probabilities [18]."
+              ],
+              [
+                "Safety",
+                "Bounded harm even when failures occur; worst-case severity remains acceptable",
+                "SIL 4 standard requires dangerous failure probability less than 10−510^{-5} [24]; FAA uses a one catastrophic error per billion flight hours target [18]."
+              ]
+            ],
+            "label": null
+          }
+        },
+        {
+          "type": "para",
+          "data": "Before defining reliability metrics for AI agents, we take a step back to ask the foundational question: what is reliability, and how have engineering disciplines with long traditions of building dependable systems approached it?\nThis section synthesizes decades of practice from safety-critical engineering into a unified decomposition, connecting each dimension to existing work in machine learning."
+        },
+        {
+          "type": "para",
+          "data": "To that end, we survey reliability practices across safety-critical industries—aviation, nuclear power, automotive systems, and industrial process control—to identify recurring evaluation dimensions (see Appendix B.2 for details). Despite substantial differences in technology, regulation, and risk tolerance, four dimensions emerge, summarized in Table 1. This convergence across independent fields suggests these dimensions capture fundamental aspects of reliability rather than domain-specific concerns."
+        },
+        {
+          "type": "para",
+          "data": "Across safety-critical domains, variance itself is treated as a liability: flight-critical software must behave deterministically, reactor protection systems must respond identically each time conditions warrant shutdown, and process control systems flag unexpected variance before it cascades into larger problems. The principle is that even acceptable average performance becomes problematic when high variance makes outcomes unpredictable.\nWhile ML research has documented numerous instances of this problem—including prompt sensitivity [52], floating-point non-determinism [22], and a growing disconnect between capability and consistency [64]— these are typically treated as isolated phenomena rather than symptoms of a unified reliability deficit. Recent efforts have begun to formalize these individual concerns; for instance, evaluating consistency by prioritizing pass$\\wedge k$ [71] over traditional pass$@k$. 11pass$@k$ measures best-case capability by requiring at least one success in $k$ attempts, whereas pass$\\wedge k$ measures strict consistency by demanding success across all $k$ attempts. However, a comprehensive framework connecting these ad-hoc observations to safety-critical engineering practice remains largely absent."
+        },
+        {
+          "type": "para",
+          "data": "Real-world systems rarely operate under ideal conditions. Automotive safety testing evaluates responses to sensor failures and adverse weather; aviation qualification tests hardware against temperature extremes, vibration, and electromagnetic interference; chemical plants analyze how process deviations propagate through interconnected systems. The common thread is that robust systems degrade gracefully rather than failing abruptly.\nWhile ML research has identified various specific failure modes, such as sensitivity to input variations [65, 6] and susceptibility to prompt injection [44], these are often treated as disparate phenomena instead of components of a broader, unified account of robustness."
+        },
+        {
+          "type": "para",
+          "data": "A system that fails in known, expected ways is often preferable to one that fails rarely but unpredictably. Nuclear risk assessment explicitly models failure modes and quantifies their probabilities; aviation certification categorizes failures by severity and assigns probability targets; many safety systems employ “safe modes” with reduced functionality but guaranteed safety when uncertainty exceeds thresholds. The key insight: systems should know what they do not know.\nML research on calibration [21, 39, 36] and selective prediction [13, 29, 3, 49] addresses related concerns, though often without connecting to the broader notion of predictable failure behavior that safety-critical domains emphasize."
+        },
+        {
+          "type": "para",
+          "data": "Every safety-critical field ties reliability to consequence-aware risk assessment. Nuclear safety computes not just failure frequencies but expected consequences: health effects, economic impacts, environmental damage. Process industry standards tie development rigor to the failure severity. Aviation targets catastrophic failure probabilities below one in a billion per flight hour. The unifying principle is that not all failures are equal. ML evaluation of safety has largely focused on compliance with harmful requests [2] or specific harmful behaviors like sycophancy [47]. These are important concerns for model deployment and governance, but distinct from consequence-aware assessment of how agents fail at legitimate tasks."
+        }
+      ]
+    },
+    {
+      "title": "3 Operationalizing Reliability for AI Agents",
+      "level": 2,
+      "paragraphs": [
+        "Building on the reliability dimensions identified across disciplines from Section 2, we now operationalize these concepts for AI agents. Table 2 provides formal definitions of our full metric suite. Here, we offer intuition for why each dimension and its constituent metrics matter for agent deployments."
+      ],
+      "subsections": [
+        {
+          "title": "Consistency (RCon\\mathcal{R}_{\\text{Con}})",
+          "level": 3,
+          "paragraphs": [
+            "A reliable agent should produce similar results when faced with identical conditions. Unlike traditional software, where deterministic execution is the norm, language model-based agents exhibit inherent stochasticity. This variability becomes problematic when users cannot predict whether re-running a task will yield the same outcome, follow the same solution approach, or incur similar costs at deployment time.",
+            "We decompose consistency into three complementary aspects. Outcome consistency ($C_{\\text{out}}$) measures whether the agent succeeds or fails consistently on repeated attempts at the same task. An insurance claims agent that approves a claim on one run but denies the identical claim on the next creates liability concerns and erodes user trust. Trajectory consistency captures whether the agent takes similar paths to its solutions, measured both distributionally ($C_{\\text{traj}}^{d}$, comparing action type frequencies) and sequentially ($C_{\\text{traj}}^{s}$, comparing action orderings). To illustrate, consider an order fulfillment agent: even if it successfully completes two identical orders, following different action sequences (e.g., sometimes charging the credit card before checking inventory, other times checking inventory first) creates different failure modes if the agent is interrupted mid-execution and complicates auditing for compliance. Finally, resource consistency ($C_{\\text{res}}$) quantifies variability in computational and monetary costs. An agent whose latency, task completion duration, or API costs fluctuate by an order of magnitude across identical requests poses budgeting challenges for deployment."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "A reliable agent should produce similar results when faced with identical conditions. Unlike traditional software, where deterministic execution is the norm, language model-based agents exhibit inherent stochasticity. This variability becomes problematic when users cannot predict whether re-running a task will yield the same outcome, follow the same solution approach, or incur similar costs at deployment time."
+            },
+            {
+              "type": "para",
+              "data": "We decompose consistency into three complementary aspects. Outcome consistency ($C_{\\text{out}}$) measures whether the agent succeeds or fails consistently on repeated attempts at the same task. An insurance claims agent that approves a claim on one run but denies the identical claim on the next creates liability concerns and erodes user trust. Trajectory consistency captures whether the agent takes similar paths to its solutions, measured both distributionally ($C_{\\text{traj}}^{d}$, comparing action type frequencies) and sequentially ($C_{\\text{traj}}^{s}$, comparing action orderings). To illustrate, consider an order fulfillment agent: even if it successfully completes two identical orders, following different action sequences (e.g., sometimes charging the credit card before checking inventory, other times checking inventory first) creates different failure modes if the agent is interrupted mid-execution and complicates auditing for compliance. Finally, resource consistency ($C_{\\text{res}}$) quantifies variability in computational and monetary costs. An agent whose latency, task completion duration, or API costs fluctuate by an order of magnitude across identical requests poses budgeting challenges for deployment."
+            }
+          ]
+        },
+        {
+          "title": "Robustness (RRob\\mathcal{R}_{\\text{Rob}})",
+          "level": 3,
+          "paragraphs": [
+            "Real-world deployments expose agents to conditions that deviate from their training and evaluation environments/distributions. Robust agents should maintain comparable performance despite such perturbations. We identify the following three categories of perturbations that agents commonly encounter.",
+            "Fault robustness ($R_{\\text{fault}}$) measures resilience to infrastructure failures: API timeouts, malformed responses, or temporary service unavailability. A robust agent should gracefully handle a web search tool returning an error rather than abandoning the task entirely or entering inconsistent states, for example by retrying or providing a fallback response. Environment robustness ($R_{\\text{env}}$) captures sensitivity to changes in the agent’s operating environment that preserve semantic content—reordering JSON fields, changing date formats, renaming API parameters, or altering tool interfaces. More broadly, this dimension reflects the reality that deployed agents face environments that shift over time as APIs are updated, data schemas evolve, and tool interfaces change in production systems. Agents that fail when a database returns columns in a different order exhibit brittleness that limits their practical utility. Prompt robustness ($R_{\\text{prompt}}$) measures invariance to semantically equivalent reformulations of instructions, whether rephrasings within a language or translations across languages. If a customer asking “I want to cancel my subscription” gets reliably helped but “please end my plan” causes the agent to fail, the system cannot be trusted to handle real user traffic where phrasing varies across users and contexts."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Real-world deployments expose agents to conditions that deviate from their training and evaluation environments/distributions. Robust agents should maintain comparable performance despite such perturbations. We identify the following three categories of perturbations that agents commonly encounter."
+            },
+            {
+              "type": "para",
+              "data": "Fault robustness ($R_{\\text{fault}}$) measures resilience to infrastructure failures: API timeouts, malformed responses, or temporary service unavailability. A robust agent should gracefully handle a web search tool returning an error rather than abandoning the task entirely or entering inconsistent states, for example by retrying or providing a fallback response. Environment robustness ($R_{\\text{env}}$) captures sensitivity to changes in the agent’s operating environment that preserve semantic content—reordering JSON fields, changing date formats, renaming API parameters, or altering tool interfaces. More broadly, this dimension reflects the reality that deployed agents face environments that shift over time as APIs are updated, data schemas evolve, and tool interfaces change in production systems. Agents that fail when a database returns columns in a different order exhibit brittleness that limits their practical utility. Prompt robustness ($R_{\\text{prompt}}$) measures invariance to semantically equivalent reformulations of instructions, whether rephrasings within a language or translations across languages. If a customer asking “I want to cancel my subscription” gets reliably helped but “please end my plan” causes the agent to fail, the system cannot be trusted to handle real user traffic where phrasing varies across users and contexts."
+            }
+          ]
+        },
+        {
+          "title": "Predictability (RPred\\mathcal{R}_{\\text{Pred}})",
+          "level": 3,
+          "paragraphs": [
+            "Even agents that perform well on average provide limited value if users cannot anticipate when they will succeed or fail. In many deployment settings, users must decide whether to act on an output, seek verification, or defer to a human expert. Predictability captures whether an agent’s expressed confidence reliably indicates its actual performance and can therefore support such decisions.",
+            "Calibration ($P_{\\text{cal}}$) measures whether stated confidence levels match empirical success rates: an agent claiming 80% confidence should succeed roughly 80% of the time. Poor calibration, such as consistent overconfidence, leads users to trust outputs they should instead verify, while under-confidence can result in unnecessary deferral. Discrimination ($P_{\\text{AUROC}}$) assesses whether confidence scores successfully separate successes from failures. An agent that assigns 90% confidence to all outputs might be poorly calibrated, but if correct answers consistently receive higher scores than incorrect ones, the agent still discriminates well. Good discrimination enables users to set a confidence threshold above which outputs are accepted and below which they are deferred. The Brier score ($P_{\\text{brier}}$) provides a proper scoring rule22A proper scoring rule incentivizes reporting true beliefs; deviation from the true probability worsens the expected score. that jointly measures calibration and discrimination, offering a holistic view of predictive quality."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Even agents that perform well on average provide limited value if users cannot anticipate when they will succeed or fail. In many deployment settings, users must decide whether to act on an output, seek verification, or defer to a human expert. Predictability captures whether an agent’s expressed confidence reliably indicates its actual performance and can therefore support such decisions."
+            },
+            {
+              "type": "para",
+              "data": "Calibration ($P_{\\text{cal}}$) measures whether stated confidence levels match empirical success rates: an agent claiming 80% confidence should succeed roughly 80% of the time. Poor calibration, such as consistent overconfidence, leads users to trust outputs they should instead verify, while under-confidence can result in unnecessary deferral. Discrimination ($P_{\\text{AUROC}}$) assesses whether confidence scores successfully separate successes from failures. An agent that assigns 90% confidence to all outputs might be poorly calibrated, but if correct answers consistently receive higher scores than incorrect ones, the agent still discriminates well. Good discrimination enables users to set a confidence threshold above which outputs are accepted and below which they are deferred. The Brier score ($P_{\\text{brier}}$) provides a proper scoring rule22A proper scoring rule incentivizes reporting true beliefs; deviation from the true probability worsens the expected score. that jointly measures calibration and discrimination, offering a holistic view of predictive quality."
+            }
+          ]
+        },
+        {
+          "title": "Safety (RSaf\\mathcal{R}_{\\text{Saf}})",
+          "level": 3,
+          "paragraphs": [
+            "Agents that take actions in the world can cause harm beyond simply failing at their assigned tasks. Unlike pure prediction systems, action-taking agents may interact with external tools, modify data, or trigger irreversible side effects. Safety quantifies both the severity and the frequency of such harmful behaviors.",
+            "Compliance ($S_{\\text{comp}}$) tracks adherence to predefined constraints—avoiding exposure of personally identifiable information, refraining from unauthorized actions, or staying within designated system boundaries. Compliance evaluates whether the agent respects operational boundaries regardless of whether violations lead to immediately observable harm. On the other hand, harm severity ($S_{\\text{harm}}$) measures, among tasks that do violate constraints, how severe the consequences are. Consider a database management agent: returning query results in the wrong sort order is benign, but executing an unintended DELETE statement represents severe harm. By conditioning on violating tasks only, $S_{\\text{harm}}$ separates the question of how bad violations are from how often they occur."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Agents that take actions in the world can cause harm beyond simply failing at their assigned tasks. Unlike pure prediction systems, action-taking agents may interact with external tools, modify data, or trigger irreversible side effects. Safety quantifies both the severity and the frequency of such harmful behaviors."
+            },
+            {
+              "type": "para",
+              "data": "Compliance ($S_{\\text{comp}}$) tracks adherence to predefined constraints—avoiding exposure of personally identifiable information, refraining from unauthorized actions, or staying within designated system boundaries. Compliance evaluates whether the agent respects operational boundaries regardless of whether violations lead to immediately observable harm. On the other hand, harm severity ($S_{\\text{harm}}$) measures, among tasks that do violate constraints, how severe the consequences are. Consider a database management agent: returning query results in the wrong sort order is benign, but executing an unintended DELETE statement represents severe harm. By conditioning on violating tasks only, $S_{\\text{harm}}$ separates the question of how bad violations are from how often they occur."
+            }
+          ]
+        },
+        {
+          "title": "Aggregation",
+          "level": 3,
+          "paragraphs": [
+            "To enable upstream comparisons across agents, we aggregate reliability metrics within each dimension and compute an overall reliability score as follows:",
+            "The following aggregation choices merit explanation:"
+          ],
+          "subsections": [
+            {
+              "title": "Disentangling Reliability & Capability",
+              "level": 5,
+              "paragraphs": [
+                "A fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior.",
+                "Our metrics captures these distinctions through:",
+                "Normalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability.",
+                "Ratio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "A fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior."
+                },
+                {
+                  "type": "para",
+                  "data": "Our metrics captures these distinctions through:"
+                },
+                {
+                  "type": "para",
+                  "data": "Normalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability."
+                },
+                {
+                  "type": "para",
+                  "data": "Ratio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance."
+                }
+              ]
+            }
+          ],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To enable upstream comparisons across agents, we aggregate reliability metrics within each dimension and compute an overall reliability score as follows:"
+            },
+            {
+              "type": "para",
+              "data": "The following aggregation choices merit explanation:"
+            }
+          ]
+        },
+        {
+          "title": "Disentangling Reliability & Capability",
+          "level": 4,
+          "paragraphs": [
+            "A fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior.",
+            "Our metrics captures these distinctions through:",
+            "Normalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability.",
+            "Ratio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "A fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior."
+            },
+            {
+              "type": "para",
+              "data": "Our metrics captures these distinctions through:"
+            },
+            {
+              "type": "para",
+              "data": "Normalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability."
+            },
+            {
+              "type": "para",
+              "data": "Ratio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Building on the reliability dimensions identified across disciplines from Section 2, we now operationalize these concepts for AI agents. Table 2 provides formal definitions of our full metric suite. Here, we offer intuition for why each dimension and its constituent metrics matter for agent deployments."
+        }
+      ]
+    },
+    {
+      "title": "4 Experiments",
+      "level": 2,
+      "paragraphs": [
+        "We evaluate reliability on two established benchmarks that pose complementary challenges. Our goal is to understand the current state of agent reliability, both in aggregate and across individual sub-metrics, and how it has evolved over recent model generations."
+      ],
+      "subsections": [
+        {
+          "title": "Setup",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Main Results",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Connection to Real-World Failures",
+          "level": 3,
+          "paragraphs": [
+            "We further revisit the real-world failures from Section 1 (Replit agent, OpenAI Operator, NYC chatbot) to examine whether our metrics would have provided early warning signals. Our analysis in Table 3 concludes that each of the vulnerabilities could have been identified prior to deployment through systematic evaluation using our reliability metrics."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Mapping real-world agent failures to reliability dimensions and metrics that could have provided early warning signals. Systematic evaluation on these dimensions could have identified each vulnerability prior to release.",
+              "headers": [],
+              "rows": [
+                [
+                  "Safety (SharmS_{\\text{harm}}): Error severity analysis reveals high-harm failures (e.g., irreversible actions like database deletion)."
+                ],
+                [
+                  "Robustness (RpromptR_{\\text{prompt}}): Prompt robustness testing would reveal whether the “do not delete the database” constraint holds under rephrased instructions or varied task contexts."
+                ],
+                [
+                  "Safety (ScompS_{\\text{comp}}): Compliance testing detects actions without required user confirmation for financial transactions."
+                ],
+                [
+                  "Consistency (CtrajC_{\\text{traj}}): Trajectory divergence analysis would flag unexpected behavioral patterns, such as completing a purchase without pausing for user confirmation."
+                ],
+                [
+                  "Predictability (PcalP_{\\text{cal}}): Calibration testing exposes chatbot overconfidence when returning incorrect legal guidance."
+                ],
+                [
+                  "Consistency (CoutC_{\\text{out}}): Low outcome consistency would reveal that the chatbot gives different answers to the same question across users asking the same question."
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "table",
+              "data": {
+                "caption": "Mapping real-world agent failures to reliability dimensions and metrics that could have provided early warning signals. Systematic evaluation on these dimensions could have identified each vulnerability prior to release.",
+                "headers": [],
+                "rows": [
+                  [
+                    "Safety (SharmS_{\\text{harm}}): Error severity analysis reveals high-harm failures (e.g., irreversible actions like database deletion)."
+                  ],
+                  [
+                    "Robustness (RpromptR_{\\text{prompt}}): Prompt robustness testing would reveal whether the “do not delete the database” constraint holds under rephrased instructions or varied task contexts."
+                  ],
+                  [
+                    "Safety (ScompS_{\\text{comp}}): Compliance testing detects actions without required user confirmation for financial transactions."
+                  ],
+                  [
+                    "Consistency (CtrajC_{\\text{traj}}): Trajectory divergence analysis would flag unexpected behavioral patterns, such as completing a purchase without pausing for user confirmation."
+                  ],
+                  [
+                    "Predictability (PcalP_{\\text{cal}}): Calibration testing exposes chatbot overconfidence when returning incorrect legal guidance."
+                  ],
+                  [
+                    "Consistency (CoutC_{\\text{out}}): Low outcome consistency would reveal that the chatbot gives different answers to the same question across users asking the same question."
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "We further revisit the real-world failures from Section 1 (Replit agent, OpenAI Operator, NYC chatbot) to examine whether our metrics would have provided early warning signals. Our analysis in Table 3 concludes that each of the vulnerabilities could have been identified prior to deployment through systematic evaluation using our reliability metrics."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We evaluate reliability on two established benchmarks that pose complementary challenges. Our goal is to understand the current state of agent reliability, both in aggregate and across individual sub-metrics, and how it has evolved over recent model generations."
+        }
+      ]
+    },
+    {
+      "title": "5 Recommendations",
+      "level": 2,
+      "paragraphs": [
+        "We have argued that agent reliability is a multi-dimensional property that cannot be inferred from mean task success alone. Treating reliability as an independent axis of progress has implications for how agents are evaluated, designed, and governed.",
+        "Our results suggest that benchmark design must fundamentally evolve. Current agent benchmarks typically report a single accuracy number from a single run in a fixed environment—such as a static database schema, a frozen set of API endpoints, or a fixed file system layout. This static, single-shot approach provides a misleadingly narrow view of capability. It reveals nothing about whether an agent would succeed on the same task tomorrow, how it handles a slightly rephrased instruction, or how it adapts when its underlying infrastructure shifts. Deployed agents operate in a fundamentally different reality: databases are migrated, API response formats change, tool libraries are updated, and the documents an agent must reason over are continuously revised. Measuring true reliability therefore requires a multifaceted approach. First, we need multi-run protocols that re-execute identical tasks to assess variance, alongside multi-condition protocols that systematically perturb user inputs. Second, benchmarks must become generative and parameterized rather than relying on fixed test sets. This allows experimenters to systematically alter the environment: renaming fields, reordering response structures, introducing new API versions, or injecting specific fault probabilities to mirror real-world distribution shifts. Generative test sets could also mitigate the risk of agents taking shortcuts such as looking up answers online rather than solving tasks genuinely [31]. Finally, temporal re-evaluation is critical. Re-running agents on these evolving benchmarks at regular intervals is essential to reveal whether reliability is robustly maintained or if it silently degrades as the world drifts away from the conditions under which the agent was originally tested.",
+        "Agent design should be explicitly guided by our reliability dimensions. Our empirical results reveal that reliability dimensions do not improve uniformly across model generations. Calibration and safety have improved noticeably in recent models, suggesting intentional optimization during training; though the proprietary nature of frontier pipelines prevents us from confirming this directly. By contrast, consistency and discrimination have improved little, suggesting that these dimensions are either harder to optimize or not yet the focus of current training pipelines. Systematic reliability evaluation makes this uneven progress visible: it identifies which dimensions are already on a positive trajectory and, more importantly, which are not. Where reliability gains are already occurring, our metrics help quantify and track them; where they are absent, they provide targets for future optimization. Whether or not current training pipelines already target our reliability dimensions, making these dimensions explicit and measurable enables more systematic progress than capability-oriented evaluation alone would.",
+        "Reliability metrics and incident analyses should feed into deployment decisions, change management, and regulatory compliance. For example, an organization could require minimum consistency and safety thresholds before promoting an agent from a sandboxed pilot to production, much as aviation systems must meet certification requirements before entering service. Analogous to safety-critical industries, a culture of incident reporting, post-mortem analysis, and continuous improvement will likely be crucial for agentic AI. Treating reliability as multi-dimensional also opens space for diverse research contributions: metric design, benchmark development, algorithmic methods, interface design, and governance mechanisms can all be evaluated through the lens of specific reliability dimensions rather than overall accuracy.",
+        "Beyond which reliability dimensions matter, a key determinant of how much reliability matters is whether an agent operates autonomously or augments a human collaborator. In augmentation settings (coding assistants, search copilots, brainstorming tools) a human reviews, edits, and approves the agent’s output before it takes effect. The human serves as a reliability backstop: an inconsistent suggestion is merely annoying, not dangerous, because it must pass through a human judgment filter. This has enabled AI coding assistants to reach widespread adoption despite imperfect reliability. Conversely, in automation settings (customer service chatbots, autonomous database management, unattended workflow execution) the agent’s output is the final action with no human buffer. Here, unreliability translates directly into real-world failures. This distinction suggests that the urgency of reliability improvements is not uniform across applications. For augmentation tools, moderate reliability may suffice because human oversight compensates for agent shortcomings. For automation, reliability is a hard prerequisite for deployment: an agent that succeeds on 90% of tasks but fails unpredictably on the remaining 10% may be a useful assistant yet an unacceptable autonomous system. As the field pushes toward greater agent autonomy, the reliability bar rises accordingly, making our reliability metrics increasingly essential."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We have argued that agent reliability is a multi-dimensional property that cannot be inferred from mean task success alone. Treating reliability as an independent axis of progress has implications for how agents are evaluated, designed, and governed."
+        },
+        {
+          "type": "para",
+          "data": "Our results suggest that benchmark design must fundamentally evolve. Current agent benchmarks typically report a single accuracy number from a single run in a fixed environment—such as a static database schema, a frozen set of API endpoints, or a fixed file system layout. This static, single-shot approach provides a misleadingly narrow view of capability. It reveals nothing about whether an agent would succeed on the same task tomorrow, how it handles a slightly rephrased instruction, or how it adapts when its underlying infrastructure shifts. Deployed agents operate in a fundamentally different reality: databases are migrated, API response formats change, tool libraries are updated, and the documents an agent must reason over are continuously revised. Measuring true reliability therefore requires a multifaceted approach. First, we need multi-run protocols that re-execute identical tasks to assess variance, alongside multi-condition protocols that systematically perturb user inputs. Second, benchmarks must become generative and parameterized rather than relying on fixed test sets. This allows experimenters to systematically alter the environment: renaming fields, reordering response structures, introducing new API versions, or injecting specific fault probabilities to mirror real-world distribution shifts. Generative test sets could also mitigate the risk of agents taking shortcuts such as looking up answers online rather than solving tasks genuinely [31]. Finally, temporal re-evaluation is critical. Re-running agents on these evolving benchmarks at regular intervals is essential to reveal whether reliability is robustly maintained or if it silently degrades as the world drifts away from the conditions under which the agent was originally tested."
+        },
+        {
+          "type": "para",
+          "data": "Agent design should be explicitly guided by our reliability dimensions. Our empirical results reveal that reliability dimensions do not improve uniformly across model generations. Calibration and safety have improved noticeably in recent models, suggesting intentional optimization during training; though the proprietary nature of frontier pipelines prevents us from confirming this directly. By contrast, consistency and discrimination have improved little, suggesting that these dimensions are either harder to optimize or not yet the focus of current training pipelines. Systematic reliability evaluation makes this uneven progress visible: it identifies which dimensions are already on a positive trajectory and, more importantly, which are not. Where reliability gains are already occurring, our metrics help quantify and track them; where they are absent, they provide targets for future optimization. Whether or not current training pipelines already target our reliability dimensions, making these dimensions explicit and measurable enables more systematic progress than capability-oriented evaluation alone would."
+        },
+        {
+          "type": "para",
+          "data": "Reliability metrics and incident analyses should feed into deployment decisions, change management, and regulatory compliance. For example, an organization could require minimum consistency and safety thresholds before promoting an agent from a sandboxed pilot to production, much as aviation systems must meet certification requirements before entering service. Analogous to safety-critical industries, a culture of incident reporting, post-mortem analysis, and continuous improvement will likely be crucial for agentic AI. Treating reliability as multi-dimensional also opens space for diverse research contributions: metric design, benchmark development, algorithmic methods, interface design, and governance mechanisms can all be evaluated through the lens of specific reliability dimensions rather than overall accuracy."
+        },
+        {
+          "type": "para",
+          "data": "Beyond which reliability dimensions matter, a key determinant of how much reliability matters is whether an agent operates autonomously or augments a human collaborator. In augmentation settings (coding assistants, search copilots, brainstorming tools) a human reviews, edits, and approves the agent’s output before it takes effect. The human serves as a reliability backstop: an inconsistent suggestion is merely annoying, not dangerous, because it must pass through a human judgment filter. This has enabled AI coding assistants to reach widespread adoption despite imperfect reliability. Conversely, in automation settings (customer service chatbots, autonomous database management, unattended workflow execution) the agent’s output is the final action with no human buffer. Here, unreliability translates directly into real-world failures. This distinction suggests that the urgency of reliability improvements is not uniform across applications. For augmentation tools, moderate reliability may suffice because human oversight compensates for agent shortcomings. For automation, reliability is a hard prerequisite for deployment: an agent that succeeds on 90% of tasks but fails unpredictably on the remaining 10% may be a useful assistant yet an unacceptable autonomous system. As the field pushes toward greater agent autonomy, the reliability bar rises accordingly, making our reliability metrics increasingly essential."
+        }
+      ]
+    },
+    {
+      "title": "6 Limitations",
+      "level": 2,
+      "paragraphs": [
+        "We acknowledge the following limitations of our work:",
+        "Benchmark coverage. Our empirical analysis covers two benchmarks ($\\tau$-bench and GAIA), which, while complementary in structure and scope, represent a narrow slice of the diverse tasks agents will face in real-world practice.",
+        "Scaffold diversity. We evaluate each benchmark using a single scaffold that performs well on the respective benchmark; other scaffolds could yield qualitatively different reliability profiles. We plan to extend our evaluation to state-of-the-art agentic scaffolds such as Claude Code and OpenAI Codex as part of future work.",
+        "Safety judging. Our safety evaluation relies on LLM-based judging to achieve scalability, which introduces its own reliability concerns. Extending to judge-free and human-validated safety metrics is another important direction for future work.",
+        "Metric choices. The choice of specific metrics within each reliability dimension involves subjective decisions. Alternate decompositions are possible, and practitioners may reasonably disagree on which metrics best capture reliability for their specific application scenarios.",
+        "Safety aggregation. We report safety separately rather than incorporating it into the overall reliability score. This avoids masking tail risks through averaging but means the aggregate $\\mathcal{R}$ does not capture the full reliability picture. We plan to explore principled approaches to integrating safety into the overall score in future work.",
+        "Capability disentanglement. Our approach to disentangling reliability from capability through normalization and conditioning is one of several possible strategies, and its adequacy may vary across deployment settings and task domains.",
+        "Choice of temperature. Where applicable, we set the temperature to zero in all our experiments. This limits one major source of stochasticity in model outputs. When attempting to maximize the accuracy of an agent, a nonzero temperature might be required, and our experiments might overestimate the reliability that is achievable in such circumstances.",
+        "We view our framework as a starting point and encourage the community to build on it by proposing alternative metrics and decompositions suited to different deployment contexts.\nWe also stress that reliability evaluation should complement, not replace, careful deployment practices including human oversight, sandboxed testing, monitoring, and ongoing performance assessment."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We acknowledge the following limitations of our work:"
+        },
+        {
+          "type": "para",
+          "data": "Benchmark coverage. Our empirical analysis covers two benchmarks ($\\tau$-bench and GAIA), which, while complementary in structure and scope, represent a narrow slice of the diverse tasks agents will face in real-world practice."
+        },
+        {
+          "type": "para",
+          "data": "Scaffold diversity. We evaluate each benchmark using a single scaffold that performs well on the respective benchmark; other scaffolds could yield qualitatively different reliability profiles. We plan to extend our evaluation to state-of-the-art agentic scaffolds such as Claude Code and OpenAI Codex as part of future work."
+        },
+        {
+          "type": "para",
+          "data": "Safety judging. Our safety evaluation relies on LLM-based judging to achieve scalability, which introduces its own reliability concerns. Extending to judge-free and human-validated safety metrics is another important direction for future work."
+        },
+        {
+          "type": "para",
+          "data": "Metric choices. The choice of specific metrics within each reliability dimension involves subjective decisions. Alternate decompositions are possible, and practitioners may reasonably disagree on which metrics best capture reliability for their specific application scenarios."
+        },
+        {
+          "type": "para",
+          "data": "Safety aggregation. We report safety separately rather than incorporating it into the overall reliability score. This avoids masking tail risks through averaging but means the aggregate $\\mathcal{R}$ does not capture the full reliability picture. We plan to explore principled approaches to integrating safety into the overall score in future work."
+        },
+        {
+          "type": "para",
+          "data": "Capability disentanglement. Our approach to disentangling reliability from capability through normalization and conditioning is one of several possible strategies, and its adequacy may vary across deployment settings and task domains."
+        },
+        {
+          "type": "para",
+          "data": "Choice of temperature. Where applicable, we set the temperature to zero in all our experiments. This limits one major source of stochasticity in model outputs. When attempting to maximize the accuracy of an agent, a nonzero temperature might be required, and our experiments might overestimate the reliability that is achievable in such circumstances."
+        },
+        {
+          "type": "para",
+          "data": "We view our framework as a starting point and encourage the community to build on it by proposing alternative metrics and decompositions suited to different deployment contexts.\nWe also stress that reliability evaluation should complement, not replace, careful deployment practices including human oversight, sandboxed testing, monitoring, and ongoing performance assessment."
+        }
+      ]
+    },
+    {
+      "title": "7 Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "We introduced a decomposition of agent reliability grounded in safety-critical engineering and evaluated 14 models across two complementary benchmarks. Our results show that 18 months of rapid capability gains have produced only small improvements in reliability: models that are substantially more accurate remain inconsistent across runs, brittle to prompt rephrasings, and often fail to understand when they are likely to succeed.\nAs agents are deployed in high-stakes settings, treating reliability as a key evaluation concern becomes essential.\nWe have proposed one way to do so: a four-dimensional decomposition with 14 distinct sub-metrics grounded in safety-critical engineering. While our specific decomposition is one of many possible framings, the core shift in perspective matters most: from asking “How often does the agent succeed?” to asking “How predictably, consistently, robustly, and safely does it behave?”."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We introduced a decomposition of agent reliability grounded in safety-critical engineering and evaluated 14 models across two complementary benchmarks. Our results show that 18 months of rapid capability gains have produced only small improvements in reliability: models that are substantially more accurate remain inconsistent across runs, brittle to prompt rephrasings, and often fail to understand when they are likely to succeed.\nAs agents are deployed in high-stakes settings, treating reliability as a key evaluation concern becomes essential.\nWe have proposed one way to do so: a four-dimensional decomposition with 14 distinct sub-metrics grounded in safety-critical engineering. While our specific decomposition is one of many possible framings, the core shift in perspective matters most: from asking “How often does the agent succeed?” to asking “How predictably, consistently, robustly, and safely does it behave?”."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Reliability gains lag behind capability progress. Overall reliability shows slow improvement over time. While accuracy rises steadily across both benchmarks (left), reliability trails behind (center), and the relationship between the two varies across benchmarks (right), indicating that accuracy gains do not automatically yield reliability.",
+      "label": "S0.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "Outcome consistency across models. Results show only modest consistency across the board; even current frontier models do not reliably improve across both benchmarks.",
+      "label": "S4.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Prompt robustness across models. Many models remain susceptible to surface-level prompt reformulations. Latest frontier models generally show modest but not dependable improvements.",
+      "label": "S4.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x4.png",
+      "alt": "Refer to caption",
+      "caption": "Calibration and discrimination across models. Calibration, the alignment between predicted confidence and accuracy, generally improves in frontier models. Discrimination performance, the ability to distinguish correct and incorrect predictions, is inconsistent across benchmarks and has in fact generally worsened on GAIA.",
+      "label": "S4.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x6.png",
+      "alt": "Refer to caption",
+      "caption": "Safety analysis on τ\\tau-bench. Top: Average violations per evaluation run stratified by severity level. Bottom: Breakdown of violations by constraint category. The most recent frontier models exhibit significantly lower overall violation rates. Financial accuracy (i.e., incorrect charges/refunds) remains the most common failure mode across all models.",
+      "label": "S4.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Comparison of τ\\tau-bench vs. τ\\tau-bench (clean). Accuracy improves significantly across the board. Many agents also show improved reliability across dimensions on the verified subset of τ\\tau-bench. Predictability sees the most noticeable improvement.",
+      "label": "S4.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x8.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F7.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x9.png",
+      "alt": "Refer to caption",
+      "caption": "(b) τ\\tau-bench.",
+      "label": "A5.F7.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x10.png",
+      "alt": "Refer to caption",
+      "caption": "Reliability by model type (top: GAIA, bottom: τ\\tau-bench). Larger and reasoning models improve reliability on average over smaller models. Notably though, reasoning models do not significantly improve in predictability on GAIA or in robustness on τ\\tau-bench.",
+      "label": "A5.F8"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x12.png",
+      "alt": "Refer to caption",
+      "caption": "Reliability by provider (top: GAIA, bottom: τ\\tau-bench).",
+      "label": "A5.F9"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x14.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F10"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x14.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F10.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x15.png",
+      "alt": "Refer to caption",
+      "caption": "(b) τ\\tau-bench.",
+      "label": "A5.F10.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x16.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F11"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x16.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F11.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x17.png",
+      "alt": "Refer to caption",
+      "caption": "(b) τ\\tau-bench.",
+      "label": "A5.F11.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x18.png",
+      "alt": "Refer to caption",
+      "caption": "Reliability plots of different agent models on GAIA. Calibration plots show confidence (x-axis) versus actual accuracy (y-axis), where the diagonal represents perfect calibration. Agents are noticeably better calibrated compared to τ\\tau-bench. Anthropic models (Claude Opus 4.5 in particular) stand out as well calibrated.",
+      "label": "A5.F12"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x19.png",
+      "alt": "Refer to caption",
+      "caption": "Calibration plots of different agent models on τ\\tau-bench. All agents suffer from severe overconfidence. Only newer Claude models show modest calibration improvements.",
+      "label": "A5.F13"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x20.png",
+      "alt": "Refer to caption",
+      "caption": "Selective prediction curves of different agent models on GAIA. Accuracy-coverage curves show whether models can improve accuracy by abstaining on low-confidence predictions; the ideal curve rises steeply while the random baseline indicates confidence provides no signal. Most models demonstrate meaningful selective prediction ability, with Gemini 2.5 Flash, o1, and Claude Opus 4.5 showing particularly strong performance.",
+      "label": "A5.F14"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x21.png",
+      "alt": "Refer to caption",
+      "caption": "Selective prediction curves of different agent models on τ\\tau-bench. Selective prediction largely fails in more complex agentic settings: most models produce curves indistinguishable from the random baseline, indicating confidence scores carry no information about correctness. Only Claude Sonnet 4.5 and Opus 4.5 retain modest selective prediction ability.",
+      "label": "A5.F15"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x22.png",
+      "alt": "Refer to caption",
+      "caption": "Detailed abstention results (top: GAIA, bottom: τ\\tau-bench). Top row shows three key calibration metrics: Abstention Rate measures how often models choose to abstain overall; Abstention Precision (P(would fail|\\ |\\ abstained)) indicates whether models are abstaining on the right tasks—high precision means when a model abstains, it likely would have failed anyway; and Abstention Recall (P(abstained|\\ |\\ failed)) captures whether models catch their failures—high recall means models successfully abstain on most tasks they would have gotten wrong. The bottom row provides additional context: Selective Accuracy compares overall accuracy to accuracy on non-abstained tasks (showing whether abstaining improves effective performance); the Confusion Matrix breaks down all outcomes into four categories (proceeded/abstained × succeeded/failed); and Abstention by Type shows the reasons models give for abstaining (e.g., inability vs. uncertainty).",
+      "label": "A5.F16"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x24.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F17"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x24.png",
+      "alt": "Refer to caption",
+      "caption": "(a) GAIA.",
+      "label": "A5.F17.sf1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x25.png",
+      "alt": "Refer to caption",
+      "caption": "(b) τ\\tau-bench.",
+      "label": "A5.F17.sf2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x26.png",
+      "alt": "Refer to caption",
+      "caption": "Safety results across agents on τ\\tau-bench. Extension of Figure 5.",
+      "label": "A5.F18"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x27.png",
+      "alt": "Refer to caption",
+      "caption": "Comparison of reasoning vs non-reasoning models. We observe that reasoning models are generally more reliable than non-reasoning models, albeit reliability improves slower than accuracy.",
+      "label": "A5.F19"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x28.png",
+      "alt": "Refer to caption",
+      "caption": "Reliability metrics stratified by task difficulty on GAIA. Accuracy degrades as expected on harder tasks, while Claude models invest significantly more actions on difficult problems. Outcome consistency shows mixed patterns driven by accuracy-dependent failure modes. Robustness metrics remain stable across difficulty levels, suggesting robustness is largely orthogonal to task complexity.",
+      "label": "A5.F20"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x29.png",
+      "alt": "Refer to caption",
+      "caption": "Consistency results across agents on τ\\tau-bench (original). We observe a noticeable degradation in terms of outcome consistency on the full benchmark. Other consistency metrics do not show significant performance losses.",
+      "label": "A5.F21"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x30.png",
+      "alt": "Refer to caption",
+      "caption": "Robustness results across agents on τ\\tau-bench (original). We observe no noticeable degradation on the original benchmark.",
+      "label": "A5.F22"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x31.png",
+      "alt": "Refer to caption",
+      "caption": "Predictability results across agents on τ\\tau-bench (original). We observe a meaningful degradation in calibration on the original benchmark. However, discrimination is generally comparable.",
+      "label": "A5.F23"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x32.png",
+      "alt": "Refer to caption",
+      "caption": "Calibration plots of different agent models on τ\\tau-bench (original). Calibration noticeably decrades over the clean subset from τ\\tau-bench (see Figure 13).",
+      "label": "A5.F24"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x33.png",
+      "alt": "Refer to caption",
+      "caption": "Selective prediction curves of different agent models on τ\\tau-bench (original). In contrast to calibration, discrimination does not significantly degrade on the original benchmark. However, performance on the clean subset was generally poor (except for on the latest OpenAI / Anthropic models).",
+      "label": "A5.F25"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2602.16666/assets/x34.png",
+      "alt": "Refer to caption",
+      "caption": "Safety results across agents on τ\\tau-bench (original). We observe a slight increase of safety violations on the original benchmark.",
+      "label": "A5.F26"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Reliability dimensions derived from cross-domain safety-critical engineering practices.",
+      "headers": [
+        "Dimension",
+        "Cross-Domain Notion",
+        "Domain-Specific Exemplars"
+      ],
+      "rows": [
+        [
+          "Consistency",
+          "Repeatable outcomes under nominal conditions; low variance across repeated trials",
+          "FAA requires deterministic execution of flight-critical software [55]; NRC sets mandatory response times for digital computers in nuclear reactors [61]."
+        ],
+        [
+          "Robustness",
+          "Graceful degradation under input, environment, tool perturbations; stable performance across the full operational envelope",
+          "NASA investigation of software-related unintended acceleration in Toyota cars leads to recall [43]; FAA mandates aviation sensor testing at extreme temperatures, turbulence, and vibration [17]."
+        ],
+        [
+          "Predictability",
+          "Prediction confidence aligned with accuracy; detect limits and defer/escalate under uncertainty",
+          "NRC models thousands of potential failure modes in nuclear reactors [60]; Aviation uses tiered risk classification with explicit probabilities [18]."
+        ],
+        [
+          "Safety",
+          "Bounded harm even when failures occur; worst-case severity remains acceptable",
+          "SIL 4 standard requires dangerous failure probability less than 10−510^{-5} [24]; FAA uses a one catastrophic error per billion flight hours target [18]."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Reliability metrics overview. All scores ∈[0,1]\\in[0,1] with higher values indicating better reliability. Notation: TT = number of tasks; KK = runs per task; ε\\epsilon = small constant (10−810^{-8}); 1​[⋅]\\mathds{1}[\\cdot] = indicator function.",
+      "headers": [
+        "",
+        "Metric",
+        "Measurement Protocol"
+      ],
+      "rows": [
+        [
+          "Outcome Cout=1T​∑t=1T(1−σ^t2p^t​(1−p^t)+ε)C_{\\text{out}}=\\frac{1}{T}\\sum_{t=1}^{T}\\left(1-\\frac{\\hat{\\sigma}_{t}^{2}}{\\hat{p}_{t}(1-\\hat{p}_{t})+\\epsilon}\\right)",
+          "Run each task tt a total of KK times, yielding outcomes yt,k∈{0,1}y_{t,k}\\in\\{0,1\\}. Compute per-task success rate p^t=1K​∑kyt,k\\hat{p}_{t}=\\frac{1}{K}\\sum_{k}y_{t,k} and sample variance σ^t2=1K−1​∑k(yt,k−p^t)2\\hat{\\sigma}_{t}^{2}=\\frac{1}{K-1}\\sum_{k}(y_{t,k}-\\hat{p}_{t})^{2}. Normalize by maximum Bernoulli variance and average across TT tasks."
+        ],
+        [
+          "Trajectory (Distributional) Ctrajd=1−2​∑t∑i<jJSDt(i,j)T​K​(K−1)C_{\\text{traj}}^{d}=1-\\frac{2\\sum_{t}\\sum_{i<j}\\text{JSD}_{t}^{(i,j)}}{TK(K-1)}",
+          "For task tt, collect action sequences from KK runs. Convert each sequence to distribution pt(k)\\mathbf{p}_{t}^{(k)} over action types. Compute JSDt(i,j)=JSD​(pt(i),pt(j))\\text{JSD}_{t}^{(i,j)}=\\text{JSD}(\\mathbf{p}_{t}^{(i)},\\mathbf{p}_{t}^{(j)}) as pairwise Jensen-Shannon divergence. The coefficient 2T​K​(K−1)\\frac{2}{TK(K-1)} averages over (K2)\\binom{K}{2} pairs per task and TT tasks."
+        ],
+        [
+          "Trajectory (Sequence) Ctrajs=1−2​∑t∑i<jd^t(i,j)T​K​(K−1)C_{\\text{traj}}^{s}=1-\\frac{2\\sum_{t}\\sum_{i<j}\\hat{d}_{t}^{(i,j)}}{TK(K-1)}",
+          "For task tt, collect action sequences a(1),...,a(K)\\mathbf{a}^{(1)},\\ldots,\\mathbf{a}^{(K)} from all KK runs. Compute normalized pairwise Levenshtein distance d^t(i,j)=dlev​(at(i),at(j))/max⁡(|at(i)|,|at(j)|)∈[0,1]\\hat{d}_{t}^{(i,j)}=d_{\\text{lev}}(\\mathbf{a}_{t}^{(i)},\\mathbf{a}_{t}^{(j)})/\\max(|\\mathbf{a}_{t}^{(i)}|,|\\mathbf{a}_{t}^{(j)}|)\\in[0,1]. Average across all pairs and tasks as above."
+        ],
+        [
+          "Resource Cres=exp⁡(−1|R|​∑r∈RCVr)C_{\\text{res}}=\\exp\\left(-\\frac{1}{|R|}\\sum_{r\\in R}\\text{CV}_{r}\\right)",
+          "For each task, record resource usage across KK runs. Let RR be the set of resource types (e.g., cost, time, API calls). For each r∈Rr\\in R, compute coefficient of variation CVr=σr/μr\\text{CV}_{r}=\\sigma_{r}/\\mu_{r}. Average across resource types and apply exponential transform."
+        ],
+        [
+          "Fault Rfault=min⁡(AccfaultAcc0,1)R_{\\text{fault}}=\\min\\left(\\frac{\\text{Acc}_{\\text{fault}}}{\\text{Acc}_{0}},1\\right)",
+          "Run all tasks under baseline conditions to get Acc0=1N​∑iyi(0)\\text{Acc}_{0}=\\frac{1}{N}\\sum_{i}y_{i}^{(0)}. Re-run under fault injection (e.g., tool timeouts, error responses) to get Accfault\\text{Acc}_{\\text{fault}}. Compute clamped ratio."
+        ],
+        [
+          "Environment Renv=min⁡(AccpertAcc0,1)R_{\\text{env}}=\\min\\left(\\frac{\\text{Acc}_{\\text{pert}}}{\\text{Acc}_{0}},1\\right)",
+          "Run all tasks under baseline conditions to obtain Acc0\\text{Acc}_{0}. Re-run with environment perturbations (e.g., reordered fields, altered tool interfaces) to obtain Accpert\\text{Acc}_{\\text{pert}}."
+        ],
+        [
+          "Prompt Rprompt=min⁡(AccparaAcc0,1)R_{\\text{prompt}}=\\min\\left(\\frac{\\text{Acc}_{\\text{para}}}{\\text{Acc}_{0}},1\\right)",
+          "Run all tasks under baseline conditions to obtain Acc0\\text{Acc}_{0}. Re-run with semantically equivalent prompt paraphrases to obtain Accpara\\text{Acc}_{\\text{para}}."
+        ],
+        [
+          "Calibration Pcal=1−∑b=1BnbN​|y ̄b−c ̄b|P_{\\text{cal}}=1-\\sum_{b=1}^{B}\\frac{n_{b}}{N}\\left|\\bar{y}_{b}-\\bar{c}_{b}\\right|",
+          "Collect confidence ci∈[0,1]c_{i}\\in[0,1] and outcome yi∈{0,1}y_{i}\\in\\{0,1\\} per task; partition into BB bins by confidence. For bin bb with nbn_{b} samples, compute difference between mean confidence c ̄b=1nb​∑i∈bci\\bar{c}_{b}=\\frac{1}{n_{b}}\\sum_{i\\in b}c_{i} and accuracy y ̄b=1nb​∑i∈byi\\bar{y}_{b}=\\frac{1}{n_{b}}\\sum_{i\\in b}y_{i} (i.e., Expected Calibration Error)."
+        ],
+        [
+          "Discrimination PAUROC=∑i:yi=1∑j:yj=01​[ci>cj]nsucc⋅nfailP_{\\text{AUROC}}=\\frac{\\sum_{i:y_{i}=1}\\sum_{j:y_{j}=0}\\mathbf{1}[c_{i}>c_{j}]}{n_{\\text{succ}}\\cdot n_{\\text{fail}}}",
+          "Collect confidence cic_{i} and outcome yiy_{i} for each task. Let nsucc=∑iyin_{\\text{succ}}=\\sum_{i}y_{i} and nfail=N−nsuccn_{\\text{fail}}=N-n_{\\text{succ}}. Compute the fraction of (success, failure) pairs where the success has higher confidence (equivalent to AUC-ROC)."
+        ],
+        [
+          "Brier Pbrier=1−1T​∑i=1T(ci−yi)2P_{\\text{brier}}=1-\\frac{1}{T}\\sum_{i=1}^{T}(c_{i}-y_{i})^{2}",
+          "Collect confidence ci∈[0,1]c_{i}\\in[0,1] and outcome yi∈{0,1}y_{i}\\in\\{0,1\\} for each task i∈{1,...,T}i\\in\\{1,\\ldots,T\\}. Compute mean squared error and subtract from 1."
+        ],
+        [
+          "Compliance Scomp=1N​∑i=1N1​[vi=∅]S_{\\text{comp}}=\\frac{1}{N}\\sum_{i=1}^{N}\\mathds{1}[v_{i}=\\emptyset]",
+          "Define constraint set C\\mathcal{C} (e.g., no PII exposure, no destructive ops). An LLM judge evaluates each task for violations vi⊆Cv_{i}\\subseteq\\mathcal{C}. Compute fraction of tasks without violations."
+        ],
+        [
+          "Harm Sharm=1−E​[wi∣vi≠∅]S_{\\text{harm}}=1-\\mathbb{E}[w_{i}\\mid v_{i}\\neq\\emptyset]",
+          "For each violating task, compute wi=maxv∈vi⁡w​(v)w_{i}=\\max_{v\\in v_{i}}w(v) with w​(low)=0.25w(\\text{low})=0.25, w​(med)=0.5w(\\text{med})=0.5, w​(high)=1.0w(\\text{high})=1.0. Average over violating tasks and subtract from 1."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Mapping real-world agent failures to reliability dimensions and metrics that could have provided early warning signals. Systematic evaluation on these dimensions could have identified each vulnerability prior to release.",
+      "headers": [],
+      "rows": [
+        [
+          "Safety (SharmS_{\\text{harm}}): Error severity analysis reveals high-harm failures (e.g., irreversible actions like database deletion)."
+        ],
+        [
+          "Robustness (RpromptR_{\\text{prompt}}): Prompt robustness testing would reveal whether the “do not delete the database” constraint holds under rephrased instructions or varied task contexts."
+        ],
+        [
+          "Safety (ScompS_{\\text{comp}}): Compliance testing detects actions without required user confirmation for financial transactions."
+        ],
+        [
+          "Consistency (CtrajC_{\\text{traj}}): Trajectory divergence analysis would flag unexpected behavioral patterns, such as completing a purchase without pausing for user confirmation."
+        ],
+        [
+          "Predictability (PcalP_{\\text{cal}}): Calibration testing exposes chatbot overconfidence when returning incorrect legal guidance."
+        ],
+        [
+          "Consistency (CoutC_{\\text{out}}): Low outcome consistency would reveal that the chatbot gives different answers to the same question across users asking the same question."
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Models evaluated in our reliability study, organized by provider and release date.",
+      "headers": [],
+      "rows": [
+        [
+          "Provider",
+          "Model",
+          "Release Date",
+          "Category"
+        ],
+        [
+          "OpenAI",
+          "GPT-4 Turbo",
+          "2024-04-09",
+          "Frontier"
+        ],
+        [
+          "GPT-4o mini",
+          "2024-07-18",
+          "Efficient"
+        ],
+        [
+          "o1",
+          "2024-12-05",
+          "Reasoning"
+        ],
+        [
+          "GPT-5.2",
+          "2025-12-11",
+          "Frontier"
+        ],
+        [
+          "",
+          "GPT-5.2 (medium/high)",
+          "2025-12-11",
+          "Reasoning"
+        ],
+        [
+          "Google",
+          "Gemini 2.0 Flash",
+          "2024-12-11",
+          "Efficient"
+        ],
+        [
+          "Gemini 2.5 Flash",
+          "2025-04-17",
+          "Efficient"
+        ],
+        [
+          "Gemini 2.5 Pro",
+          "2025-03-25",
+          "Reasoning"
+        ],
+        [
+          "Gemini 3 Pro",
+          "2025-11-18",
+          "Reasoning"
+        ],
+        [
+          "Anthropic",
+          "Claude 3.5 Haiku",
+          "2024-10-22",
+          "Efficient"
+        ],
+        [
+          "Claude 3.7 Sonnet",
+          "2025-02-24",
+          "Frontier"
+        ],
+        [
+          "Claude Sonnet 4.5",
+          "2025-09-29",
+          "Frontier"
+        ],
+        [
+          "Claude Opus 4.5",
+          "2025-11-24",
+          "Reasoning"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Prompt perturbation strength levels. Higher temperatures encourage greater diversity in variations.",
+      "headers": [
+        "Level",
+        "Temp.",
+        "Transformation Types"
+      ],
+      "rows": [
+        [
+          "mild",
+          "0.7",
+          "Synonym substitution, formality changes, voice changes (active/passive), minor restructuring"
+        ],
+        [
+          "medium",
+          "0.8",
+          "Information reordering, sentence restructuring, perspective shifts, mixed communication styles"
+        ],
+        [
+          "strong",
+          "0.9",
+          "Conversational rewrites, implicit information, complete restructuring, persona-based variations"
+        ],
+        [
+          "naturalistic",
+          "0.9",
+          "Realistic user behavior: typos, abbreviations, inconsistent capitalization, fragments, casual punctuation"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Fault type distribution. Probabilities reflect relative frequency when a fault is triggered.",
+      "headers": [
+        "Fault Type",
+        "Prob.",
+        "Description"
+      ],
+      "rows": [
+        [
+          "timeout",
+          "30%",
+          "Simulated request timeout (TimeoutError)"
+        ],
+        [
+          "error_response",
+          "25%",
+          "HTTP 500 Internal Server Error"
+        ],
+        [
+          "rate_limit",
+          "20%",
+          "HTTP 429 Too Many Requests"
+        ],
+        [
+          "network_error",
+          "15%",
+          "Connection refused / network failure"
+        ],
+        [
+          "partial_failure",
+          "5%",
+          "Incomplete or truncated response data"
+        ],
+        [
+          "invalid_response",
+          "3%",
+          "Malformed or unparseable response"
+        ],
+        [
+          "empty_response",
+          "2%",
+          "Null or empty return value"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Environment perturbation categories by benchmark.",
+      "headers": [
+        "Category",
+        "GAIA",
+        "τ\\tau-bench"
+      ],
+      "rows": [
+        [
+          "Case changes (lowercase, mixed), whitespace normalization, noise word injection",
+          "—"
+        ],
+        [
+          "Number formats (commas, words), date formats (ISO →\\to verbose)",
+          "Time (24h →\\to 12h/compact), dates (ISO →\\to US/compact), status values (lowercase →\\to abbreviated)"
+        ],
+        [
+          "Instruction style changes (formal, terse), bullet reordering, irrelevant context injection",
+          "Key naming (snake_case →\\to camelCase), response wrapping, parameter renaming, nesting/flattening, cabin class codes"
+        ],
+        [
+          "Search result reformatting, webpage noise (headers, footers), metadata wrapping",
+          "Tool response key transformation, tool definition parameter renaming"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\displaystyle\\mathcal{R}_{\\text{Con}}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathcal{R}_{\\text{Con}}",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathcal{R}_{\\text{Pred}}",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathcal{R}_{\\text{Rob}}",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathcal{R}_{\\text{Saf}}",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle=1-(1-S_{\\text{comp}})(1-S_{\\text{harm}})",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathcal{R}",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "R_{\\text{env}}=\\frac{\\text{Acc}_{\\text{perturbed}}}{\\text{Acc}_{\\text{baseline}}},\\quad\\text{clamped to }[0,1]",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "R_{\\text{env}}=\\frac{\\text{Acc}_{\\text{perturbed}}}{\\text{Acc}_{\\text{baseline}}},\\quad\\text{clamped to }[0,1]",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "American Bar Association [2024] American Bar Association. Bc tribunal confirms companies remain liable for information provided by ai chatbot. Business Law Today, 2024. URL https://www.americanbar.org/groups/business_law/resources/business-law-today/2024-february/bc-tribunal-confirms-companies-remain-liable-information-provided-ai-chatbot/.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.americanbar.org/groups/business_law/resources/business-law-today/2024-february/bc-tribunal-confirms-companies-remain-liable-information-provided-ai-chatbot/",
+      "citation_key": "American Bar Association [2024]"
+    },
+    {
+      "raw_text": "Andriushchenko et al. [2025] Andriushchenko, M., Souly, A., Dziemian, M., Duenas, D., Lin, M., Wang, J., Hendrycks, D., Zou, A., Kolter, Z., Fredrikson, M., Winsor, E., Wynne, J., Gal, Y., and Davies, X. AgentHarm: A benchmark for measuring harmfulness of LLM agents. In International Conference on Learning Representations (ICLR), 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Andriushchenko et al. [2025]"
+    },
+    {
+      "raw_text": "Artificial Analysis [2025] Artificial Analysis. AA-Omniscience: Evaluating cross-domain knowledge reliability in large language models. ArXiv preprint, abs/2511.13029, 2025. URL https://arxiv.org/abs/2511.13029.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2511.13029",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2511.13029",
+      "citation_key": "Artificial Analysis [2025]"
+    },
+    {
+      "raw_text": "Avizienis et al. [2004] Avizienis, A., Laprie, J.-C., Randell, B., and Landwehr, C. Basic concepts and taxonomy of dependable and secure computing. IEEE transactions on dependable and secure computing, 1(1):11–33, 2004.",
+      "title": null,
+      "authors": [],
+      "year": "2004",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Avizienis et al. [2004]"
+    },
+    {
+      "raw_text": "Bai et al. [2022] Bai, Y., Kadavath, S., Kundu, S., Askell, A., Kernion, J., Jones, A., Chen, A., Goldie, A., Mirhoseini, A., McKinnon, C., et al. Constitutional ai: Harmlessness from ai feedback. ArXiv preprint, abs/2212.08073, 2022. URL https://arxiv.org/abs/2212.08073.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2212.08073",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2212.08073",
+      "citation_key": "Bai et al. [2022]"
+    },
+    {
+      "raw_text": "Bogavelli et al. [2026] Bogavelli, T., Bamgbose, O., Melançon, G. G., Riols, F., and Sharma, R. Evaluating robustness of large language models in enterprise applications: Benchmarks for perturbation consistency across formats and languages. ArXiv preprint, abs/2601.06341, 2026. URL https://arxiv.org/abs/2601.06341.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2601.06341",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2601.06341",
+      "citation_key": "Bogavelli et al. [2026]"
+    },
+    {
+      "raw_text": "Boulanger [2015] Boulanger, J.-L. CENELEC 50128 and IEC 62279 standards. John Wiley & Sons, 2015.",
+      "title": null,
+      "authors": [],
+      "year": "2015",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Boulanger [2015]"
+    },
+    {
+      "raw_text": "Business Insider [2025] Business Insider. Replit ceo apologizes after ai coding tool deleted a live production database. Business Insider, 2025. URL https://www.businessinsider.com/replit-ceo-apologizes-ai-coding-tool-delete-company-database-2025-7. Replit’s AI assistant deleted a production database despite explicit instructions not to do so.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.businessinsider.com/replit-ceo-apologizes-ai-coding-tool-delete-company-database-2025-7",
+      "citation_key": "Business Insider [2025]"
+    },
+    {
+      "raw_text": "Cobbe et al. [2021] Cobbe, K., Kosaraju, V., Bavarian, M., Chen, M., Jun, H., Kaiser, L., Plappert, M., Tworek, J., Hilton, J., Nakano, R., et al. Training verifiers to solve math word problems. ArXiv preprint, abs/2110.14168, 2021. URL https://arxiv.org/abs/2110.14168.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2110.14168",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2110.14168",
+      "citation_key": "Cobbe et al. [2021]"
+    },
+    {
+      "raw_text": "Cuadron et al. [2025] Cuadron, A., Yu, P., Liu, Y., and Gupta, A. Saber: Small actions, big errors–safeguarding mutating steps in llm agents. ArXiv preprint, abs/2512.07850, 2025. URL https://arxiv.org/abs/2512.07850.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.07850",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2512.07850",
+      "citation_key": "Cuadron et al. [2025]"
+    },
+    {
+      "raw_text": "Deng et al. [2023] Deng, X., Gu, Y., Zheng, B., Chen, S., Stevens, S., Wang, B., Sun, H., and Su, Y. Mind2web: Towards a generalist agent for the web. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023, 2023. URL http://papers.nips.cc/paper_files/paper/2023/hash/5950bf290a1570ea401bf98882128160-Abstract-Datasets_and_Benchmarks.html.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://papers.nips.cc/paper_files/paper/2023/hash/5950bf290a1570ea401bf98882128160-Abstract-Datasets_and_Benchmarks.html",
+      "citation_key": "Deng et al. [2023]"
+    },
+    {
+      "raw_text": "Dobbe [2022] Dobbe, R. System safety and artificial intelligence. In Proceedings of the 2022 ACM Conference on Fairness, Accountability, and Transparency, pp. 1584–1584, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Dobbe [2022]"
+    },
+    {
+      "raw_text": "El-Yaniv et al. [2010] El-Yaniv, R. et al. On the foundations of noise-free selective classification. Journal of Machine Learning Research, 11(5), 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "El-Yaniv et al. [2010]"
+    },
+    {
+      "raw_text": "European Committee for Electrotechnical Standardization [2017] European Committee for Electrotechnical Standardization. EN 50126: Railway applications – the specification and demonstration of reliability, availability, maintainability and safety (rams), 2017. Parts 1–2.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "European Committee for Electrotechnical Standardization [2017]"
+    },
+    {
+      "raw_text": "Everitt et al. [2018] Everitt, T., Lea, G., and Hutter, M. AGI safety literature review. In Lang, J. (ed.), Proceedings of the Twenty-Seventh International Joint Conference on Artificial Intelligence, IJCAI 2018, July 13-19, 2018, Stockholm, Sweden, pp. 5441–5449. ijcai.org, 2018. doi: 10.24963/ijcai.2018/768. URL https://doi.org/10.24963/ijcai.2018/768.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.24963/ijcai.2018/768",
+      "url": "https://doi.org/10.24963/ijcai.2018/768",
+      "citation_key": "Everitt et al. [2018]"
+    },
+    {
+      "raw_text": "Farquhar et al. [2024] Farquhar, S., Kossen, J., Kuhn, L., and Gal, Y. Detecting hallucinations in large language models using semantic entropy. Nature, 630(8017):625–630, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Farquhar et al. [2024]"
+    },
+    {
+      "raw_text": "Federal Aviation Administration [2011] Federal Aviation Administration. Advisory circular AC 21-16g: RTCA document DO-160 versions D, E, F, and G. Technical report, U.S. Department of Transportation, 2011. URL https://www.faa.gov/regulations_policies/advisory_circulars/index.cfm/go/document.information/documentid/1019280.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": "documentid/1019280",
+      "doi": null,
+      "url": "https://www.faa.gov/regulations_policies/advisory_circulars/index.cfm/go/document.information/documentid/1019280",
+      "citation_key": "Federal Aviation Administration [2011]"
+    },
+    {
+      "raw_text": "Federal Aviation Administration [2024] Federal Aviation Administration. Advisory circular AC 25.1309-1b: System design and analysis. Technical report, U.S. Department of Transportation, 2024. URL https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_25.1309-1B.pdf.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_25.1309-1B.pdf",
+      "citation_key": "Federal Aviation Administration [2024]"
+    },
+    {
+      "raw_text": "Foerster et al. [2026] Foerster, H., Mullins, R., Blanchard, T., Papernot, N., Nikolić, K., Tramèr, F., Shumailov, I., Zhang, C., and Zhao, Y. Camels can use computers too: System-level security for computer use agents. ArXiv preprint, abs/2601.09923, 2026. URL https://arxiv.org/abs/2601.09923.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2601.09923",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2601.09923",
+      "citation_key": "Foerster et al. [2026]"
+    },
+    {
+      "raw_text": "Fowler [2025] Fowler, G. A. I let ChatGPT’s new ‘agent’ manage my life. It spent $31 on a dozen eggs. The Washington Post, 2025. URL https://www.washingtonpost.com/technology/2025/02/07/openai-operator-ai-agent-chatgpt/.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.washingtonpost.com/technology/2025/02/07/openai-operator-ai-agent-chatgpt/",
+      "citation_key": "Fowler [2025]"
+    },
+    {
+      "raw_text": "Guo et al. [2017] Guo, C., Pleiss, G., Sun, Y., and Weinberger, K. Q. On calibration of modern neural networks. In Precup, D. and Teh, Y. W. (eds.), Proceedings of the 34th International Conference on Machine Learning, ICML 2017, Sydney, NSW, Australia, 6-11 August 2017, volume 70 of Proceedings of Machine Learning Research, pp. 1321–1330. PMLR, 2017. URL http://proceedings.mlr.press/v70/guo17a.html.",
+      "title": null,
+      "authors": [],
+      "year": "2017",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://proceedings.mlr.press/v70/guo17a.html",
+      "citation_key": "Guo et al. [2017]"
+    },
+    {
+      "raw_text": "He & Thinking Machines Lab [2025] He, H. and Thinking Machines Lab. Defeating nondeterminism in LLM inference. Thinking Machines Lab: Connectionism, 2025. doi: 10.64434/tml.20250910. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.64434/tml.20250910",
+      "url": "https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/",
+      "citation_key": "He & Thinking Machines Lab [2025]"
+    },
+    {
+      "raw_text": "Hendrycks et al. [2021] Hendrycks, D., Carlini, N., Schulman, J., and Steinhardt, J. Unsolved problems in ml safety. ArXiv preprint, abs/2109.13916, 2021. URL https://arxiv.org/abs/2109.13916.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": "2109.13916",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2109.13916",
+      "citation_key": "Hendrycks et al. [2021]"
+    },
+    {
+      "raw_text": "International Electrotechnical Commission [2010] International Electrotechnical Commission. IEC 61508: Functional safety of electrical/electronic/programmable electronic safety-related systems, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "International Electrotechnical Commission [2010]"
+    },
+    {
+      "raw_text": "International Electrotechnical Commission [2011] International Electrotechnical Commission. IEC 61513: Nuclear power plants – instrumentation and control important to safety – general requirements for systems, 2011. Edition 2.0.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "International Electrotechnical Commission [2011]"
+    },
+    {
+      "raw_text": "International Organization for Standardization [2018] International Organization for Standardization. ISO 26262: Road vehicles – functional safety, 2018. Second edition (Parts 1–12).",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "International Organization for Standardization [2018]"
+    },
+    {
+      "raw_text": "Jimenez et al. [2024] Jimenez, C. E., Yang, J., Wettig, A., Yao, S., Pei, K., Press, O., and Narasimhan, K. R. Swe-bench: Can language models resolve real-world github issues? In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=VTF8yNQM66.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=VTF8yNQM66",
+      "citation_key": "Jimenez et al. [2024]"
+    },
+    {
+      "raw_text": "Kadavath et al. [2022] Kadavath, S., Conerly, T., Askell, A., Henighan, T., Drain, D., Perez, E., Schiefer, N., Hatfield-Dodds, Z., DasSarma, N., Tran-Johnson, E., et al. Language models (mostly) know what they know. ArXiv preprint, abs/2207.05221, 2022. URL https://arxiv.org/abs/2207.05221.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2207.05221",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2207.05221",
+      "citation_key": "Kadavath et al. [2022]"
+    },
+    {
+      "raw_text": "Kalai et al. [2025] Kalai, A. T., Nachum, O., Vempala, S. S., and Zhang, E. Why language models hallucinate. ArXiv preprint, abs/2509.04664, 2025. URL https://arxiv.org/abs/2509.04664.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2509.04664",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2509.04664",
+      "citation_key": "Kalai et al. [2025]"
+    },
+    {
+      "raw_text": "Kaplan & Garrick [1981] Kaplan, S. and Garrick, B. J. On the quantitative definition of risk. Risk analysis, 1(1):11–27, 1981.",
+      "title": null,
+      "authors": [],
+      "year": "1981",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kaplan & Garrick [1981]"
+    },
+    {
+      "raw_text": "Kapoor et al. [2025] Kapoor, S., Stroebl, B., Kirgis, P., Nadgir, N., Siegel, Z. S., Wei, B., Xue, T., Chen, Z., Chen, F., Utpala, S., et al. Holistic agent leaderboard: The missing infrastructure for ai agent evaluation. ArXiv preprint, abs/2510.11977, 2025. URL https://arxiv.org/abs/2510.11977.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.11977",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2510.11977",
+      "citation_key": "Kapoor et al. [2025]"
+    },
+    {
+      "raw_text": "Kossen et al. [2024] Kossen, J., Han, J., Razzak, M., Schut, L., Malik, S., and Gal, Y. Semantic entropy probes: Robust and cheap hallucination detection in llms. ArXiv preprint, abs/2406.15927, 2024. URL https://arxiv.org/abs/2406.15927.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2406.15927",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2406.15927",
+      "citation_key": "Kossen et al. [2024]"
+    },
+    {
+      "raw_text": "Laprie [1992] Laprie, J.-C. Dependability: Basic concepts and terminology. In Dependability: Basic Concepts and Terminology: In English, French, German, Italian and Japanese, pp. 3–245. Springer, 1992.",
+      "title": null,
+      "authors": [],
+      "year": "1992",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Laprie [1992]"
+    },
+    {
+      "raw_text": "Lecher [2024] Lecher, C. NYC’s AI chatbot tells businesses to break the law. The Markup, 2024. URL https://themarkup.org/news/2024/03/29/nycs-ai-chatbot-tells-businesses-to-break-the-law. Co-published with The City and Documented.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://themarkup.org/news/2024/03/29/nycs-ai-chatbot-tells-businesses-to-break-the-law",
+      "citation_key": "Lecher [2024]"
+    },
+    {
+      "raw_text": "Lee et al. [2024] Lee, H., Phatale, S., Mansoor, H., Mesnard, T., Ferret, J., Lu, K., Bishop, C., Hall, E., Carbune, V., Rastogi, A., and Prakash, S. RLAIF vs. RLHF: scaling reinforcement learning from human feedback with AI feedback. In Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=uydQ2W41KO.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=uydQ2W41KO",
+      "citation_key": "Lee et al. [2024]"
+    },
+    {
+      "raw_text": "Li et al. [2023] Li, J., Cheng, X., Zhao, X., Nie, J.-Y., and Wen, J.-R. HaluEval: A large-scale hallucination evaluation benchmark for large language models. In Bouamor, H., Pino, J., and Bali, K. (eds.), Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, pp. 6449–6464, Singapore, 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.emnlp-main.397. URL https://aclanthology.org/2023.emnlp-main.397.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.18653/v1/2023.emnlp-main.397",
+      "url": "https://aclanthology.org/2023.emnlp-main.397",
+      "citation_key": "Li et al. [2023]"
+    },
+    {
+      "raw_text": "Liang et al. [2022] Liang, P., Bommasani, R., Lee, T., Tsipras, D., Soylu, D., Yasunaga, M., Zhang, Y., Narayanan, D., Wu, Y., Kumar, A., et al. Holistic evaluation of language models. ArXiv preprint, abs/2211.09110, 2022. URL https://arxiv.org/abs/2211.09110.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2211.09110",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2211.09110",
+      "citation_key": "Liang et al. [2022]"
+    },
+    {
+      "raw_text": "Lightman et al. [2024] Lightman, H., Kosaraju, V., Burda, Y., Edwards, H., Baker, B., Lee, T., Leike, J., Schulman, J., Sutskever, I., and Cobbe, K. Let’s verify step by step. In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=v8L0pN6EOi.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=v8L0pN6EOi",
+      "citation_key": "Lightman et al. [2024]"
+    },
+    {
+      "raw_text": "Lin et al. [2022] Lin, S., Hilton, J., and Evans, O. TruthfulQA: Measuring how models mimic human falsehoods. In Muresan, S., Nakov, P., and Villavicencio, A. (eds.), Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 3214–3252, Dublin, Ireland, 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-long.229. URL https://aclanthology.org/2022.acl-long.229.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": "10.18653/v1/2022.acl-long.229",
+      "url": "https://aclanthology.org/2022.acl-long.229",
+      "citation_key": "Lin et al. [2022]"
+    },
+    {
+      "raw_text": "Liu et al. [2024] Liu, X., Yu, H., Zhang, H., Xu, Y., Lei, X., Lai, H., Gu, Y., Ding, H., Men, K., Yang, K., Zhang, S., Deng, X., Zeng, A., Du, Z., Zhang, C., Shen, S., Zhang, T., Su, Y., Sun, H., Huang, M., Dong, Y., and Tang, J. Agentbench: Evaluating llms as agents. In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=zAdUB0aCTQ.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=zAdUB0aCTQ",
+      "citation_key": "Liu et al. [2024]"
+    },
+    {
+      "raw_text": "Mialon et al. [2024] Mialon, G., Fourrier, C., Wolf, T., LeCun, Y., and Scialom, T. GAIA: a benchmark for general AI assistants. In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=fibxvahvs3.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=fibxvahvs3",
+      "citation_key": "Mialon et al. [2024]"
+    },
+    {
+      "raw_text": "Mohammadi et al. [2025] Mohammadi, M., Li, Y., Lo, J., and Yip, W. Evaluation and benchmarking of llm agents: A survey. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2, pp. 6129–6139, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Mohammadi et al. [2025]"
+    },
+    {
+      "raw_text": "NASA Engineering and Safety Center [2011] NASA Engineering and Safety Center. Technical support to the national highway traffic safety administration (NHTSA) on the reported Toyota motor corporation (TMC) unintended acceleration (UA) investigation. Technical Report NESC-TN-10-00618, National Aeronautics and Space Administration, 2011. URL https://www.nhtsa.gov/staticfiles/nvs/pdf/NASA-UA_report.pdf.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.nhtsa.gov/staticfiles/nvs/pdf/NASA-UA_report.pdf",
+      "citation_key": "NASA Engineering and Safety Center [2011]"
+    },
+    {
+      "raw_text": "Nasr et al. [2025] Nasr, M., Carlini, N., Sitawarin, C., Schulhoff, S. V., Hayes, J., Ilie, M., Pluto, J., Song, S., Chaudhari, H., Shumailov, I., Thakurta, A., Xiao, K. Y., Terzis, A., and Tramèr, F. The attacker moves second: Stronger adaptive attacks bypass defenses against LLM jailbreaks and prompt injections. ArXiv preprint, abs/2510.09023, 2025. URL https://arxiv.org/abs/2510.09023.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.09023",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2510.09023",
+      "citation_key": "Nasr et al. [2025]"
+    },
+    {
+      "raw_text": "Newman [2023] Newman, J. A taxonomy of trustworthiness for artificial intelligence. CLTC: North Charleston, SC, USA, 1, 2023.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Newman [2023]"
+    },
+    {
+      "raw_text": "OpenAI [2025] OpenAI. Computer-using agent. OpenAI Research, 2025. URL https://openai.com/index/computer-using-agent/.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openai.com/index/computer-using-agent/",
+      "citation_key": "OpenAI [2025]"
+    },
+    {
+      "raw_text": "Paech [2025] Paech, S. J. Spiral-bench. https://github.com/sam-paech/spiral-bench, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://github.com/sam-paech/spiral-bench",
+      "citation_key": "Paech [2025]"
+    },
+    {
+      "raw_text": "Pan et al. [2025] Pan, M. Z., Arabzadeh, N., Cogo, R., Zhu, Y., Xiong, A., Agrawal, L. A., Mao, H., Shen, E., Pallerla, S., Patel, L., et al. Measuring agents in production. ArXiv preprint, abs/2512.04123, 2025. URL https://arxiv.org/abs/2512.04123.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.04123",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2512.04123",
+      "citation_key": "Pan et al. [2025]"
+    },
+    {
+      "raw_text": "Rabanser & Papernot [2025] Rabanser, S. and Papernot, N. What does it take to build a performant selective classifier? ArXiv preprint, abs/2510.20242, 2025. URL https://arxiv.org/abs/2510.20242.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.20242",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2510.20242",
+      "citation_key": "Rabanser & Papernot [2025]"
+    },
+    {
+      "raw_text": "Radio Technical Commission for Aeronautics [2012] Radio Technical Commission for Aeronautics. DO-178C: Software considerations in airborne systems and equipment certification, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Radio Technical Commission for Aeronautics [2012]"
+    },
+    {
+      "raw_text": "Raji & Dobbe [2024] Raji, I. D. and Dobbe, R. Concrete problems in ai safety, revisited. ArXiv preprint, abs/2401.10899, 2024. URL https://arxiv.org/abs/2401.10899.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2401.10899",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2401.10899",
+      "citation_key": "Raji & Dobbe [2024]"
+    },
+    {
+      "raw_text": "Razavi et al. [2025] Razavi, A., Soltangheis, M., Arabzadeh, N., Salamat, S., Zihayat, M., and Bagheri, E. Benchmarking prompt sensitivity in large language models. In Advances in Information Retrieval: 47th European Conference on Information Retrieval, ECIR 2025, Lucca, Italy, 2025. Springer.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Razavi et al. [2025]"
+    },
+    {
+      "raw_text": "Roose [2023] Roose, K. Microsoft puts limits on bing ai chats after its chatbot went off the rails. The New York Times, 2023. URL https://www.nytimes.com/2023/02/17/technology/bing-chatbot-limits.html. Documents hallucinations, emotional manipulation, and unstable behavior during long conversations.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.nytimes.com/2023/02/17/technology/bing-chatbot-limits.html",
+      "citation_key": "Roose [2023]"
+    },
+    {
+      "raw_text": "SAE International [1996] SAE International. SAE arp4761: Guidelines and methods for conducting the safety assessment process on civil airborne systems and equipment, 1996.",
+      "title": null,
+      "authors": [],
+      "year": "1996",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "SAE International [1996]"
+    },
+    {
+      "raw_text": "SAE International [2010] SAE International. ARP4754A: Guidelines for development of civil aircraft and systems. Technical report, SAE International, Warrendale, PA, 2010.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "SAE International [2010]"
+    },
+    {
+      "raw_text": "Stations [2018] Stations, N. P. G. Ieee standard criteria for class 1e power systems for nuclear power generating stations. 2018.",
+      "title": null,
+      "authors": [],
+      "year": "2018",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Stations [2018]"
+    },
+    {
+      "raw_text": "The Guardian [2024] The Guardian. Air canada ordered to pay customer misled by chatbot. The Guardian, 2024. URL https://www.theguardian.com/world/2024/feb/16/air-canada-chatbot-lawsuit. Canadian tribunal ruled Air Canada liable for incorrect bereavement fare information provided by its chatbot.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.theguardian.com/world/2024/feb/16/air-canada-chatbot-lawsuit",
+      "citation_key": "The Guardian [2024]"
+    },
+    {
+      "raw_text": "Tom’s Hardware [2025] Tom’s Hardware. Ai coding platform goes rogue and deletes entire company database. Tom’s Hardware, 2025. URL https://www.tomshardware.com/tech-industry/artificial-intelligence/ai-coding-platform-goes-rogue-during-code-freeze-and-deletes-entire-company-database-replit-ceo-apologizes-after-ai-engine-says-it-made-a-catastrophic-error-in-judgment-and-destroyed-all-production-data.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.tomshardware.com/tech-industry/artificial-intelligence/ai-coding-platform-goes-rogue-during-code-freeze-and-deletes-entire-company-database-replit-ceo-apologizes-after-ai-engine-says-it-made-a-catastrophic-error-in-judgment-and-destroyed-all-production-data",
+      "citation_key": "Tom’s Hardware [2025]"
+    },
+    {
+      "raw_text": "Uesato et al. [2022] Uesato, J., Kushman, N., Kumar, R., Song, F., Siegel, N., Wang, L., Creswell, A., Irving, G., and Higgins, I. Solving math word problems with process-and outcome-based feedback. ArXiv preprint, abs/2211.14275, 2022. URL https://arxiv.org/abs/2211.14275.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": "2211.14275",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2211.14275",
+      "citation_key": "Uesato et al. [2022]"
+    },
+    {
+      "raw_text": "U.S. Nuclear Regulatory Commission [1990] U.S. Nuclear Regulatory Commission. Severe accident risks: An assessment for five U.S. nuclear power plants. Technical Report NUREG-1150, U.S. Nuclear Regulatory Commission, 1990. URL https://www.nrc.gov/reading-rm/doc-collections/nuregs/staff/sr1150/.",
+      "title": null,
+      "authors": [],
+      "year": "1990",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.nrc.gov/reading-rm/doc-collections/nuregs/staff/sr1150/",
+      "citation_key": "U.S. Nuclear Regulatory Commission [1990]"
+    },
+    {
+      "raw_text": "U.S. Nuclear Regulatory Commission [2016] U.S. Nuclear Regulatory Commission. BTP 7-21: Guidance on digital computer real-time performance. Technical Report NUREG-0800, Chapter 7, U.S. Nuclear Regulatory Commission, 2016. URL https://www.nrc.gov/docs/ML1602/ML16020A036.pdf. Revision 6.",
+      "title": null,
+      "authors": [],
+      "year": "2016",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.nrc.gov/docs/ML1602/ML16020A036.pdf",
+      "citation_key": "U.S. Nuclear Regulatory Commission [2016]"
+    },
+    {
+      "raw_text": "Wang et al. [2025] Wang, B., Ren, C., Yang, J., Liang, X., Bai, J., Chai, L., Yan, Z., Zhang, Q.-W., Yin, D., Sun, X., et al. Mac-sql: A multi-agent collaborative framework for text-to-sql. In Proceedings of the 31st International Conference on Computational Linguistics, pp. 540–557, 2025.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. [2025]"
+    },
+    {
+      "raw_text": "Wang et al. [2024] Wang, P., Li, L., Shao, Z., Xu, R., Dai, D., Li, Y., Chen, D., Wu, Y., and Sui, Z. Math-shepherd: Verify and reinforce llms step-by-step without human annotations. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 9426–9439, 2024.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Wang et al. [2024]"
+    },
+    {
+      "raw_text": "Wang & Wang [2025] Wang, Y. and Wang, Y. Assessing consistency and reproducibility in the outputs of large language models. ArXiv preprint, abs/2503.16974, 2025. URL https://arxiv.org/abs/2503.16974.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2503.16974",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2503.16974",
+      "citation_key": "Wang & Wang [2025]"
+    },
+    {
+      "raw_text": "Wang & Zhao [2024] Wang, Y. and Zhao, Y. RUPBench: Benchmarking reasoning under perturbations for robustness evaluation in large language models. ArXiv preprint, abs/2406.11020, 2024. URL https://arxiv.org/abs/2406.11020.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2406.11020",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2406.11020",
+      "citation_key": "Wang & Zhao [2024]"
+    },
+    {
+      "raw_text": "Warren [2023] Warren, T. Microsoft limits bing ai chat to 5 replies per session. The Verge, 2023. URL https://www.theverge.com/2023/2/17/23604906/microsoft-bing-ai-chat-limits-conversations.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://www.theverge.com/2023/2/17/23604906/microsoft-bing-ai-chat-limits-conversations",
+      "citation_key": "Warren [2023]"
+    },
+    {
+      "raw_text": "Weidinger et al. [2022] Weidinger, L., Uesato, J., Rauh, M., Griffin, C., Huang, P.-S., Mellor, J., Glaese, A., Cheng, M., Balle, B., Kasirzadeh, A., et al. Taxonomy of risks posed by language models. In Proceedings of the 2022 ACM conference on fairness, accountability, and transparency, pp. 214–229, 2022.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Weidinger et al. [2022]"
+    },
+    {
+      "raw_text": "Weidinger et al. [2023] Weidinger, L., Rauh, M., Marchal, N., Manzini, A., Hendricks, L. A., Mateos-Garcia, J., Bergman, S., Kay, J., Griffin, C., Bariach, B., et al. Sociotechnical safety evaluation of generative ai systems. ArXiv preprint, abs/2310.11986, 2023. URL https://arxiv.org/abs/2310.11986.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2310.11986",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2310.11986",
+      "citation_key": "Weidinger et al. [2023]"
+    },
+    {
+      "raw_text": "Yang et al. [2024] Yang, J., Jimenez, C. E., Wettig, A., Lieret, K., Yao, S., Narasimhan, K., and Press, O. Swe-agent: Agent-computer interfaces enable automated software engineering. In Globersons, A., Mackey, L., Belgrave, D., Fan, A., Paquet, U., Tomczak, J. M., and Zhang, C. (eds.), Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024, 2024. URL http://papers.nips.cc/paper_files/paper/2024/hash/5a7c947568c1b1328ccc5230172e1e7c-Abstract-Conference.html.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://papers.nips.cc/paper_files/paper/2024/hash/5a7c947568c1b1328ccc5230172e1e7c-Abstract-Conference.html",
+      "citation_key": "Yang et al. [2024]"
+    },
+    {
+      "raw_text": "Yao et al. [2023] Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K. R., and Cao, Y. React: Synergizing reasoning and acting in language models. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023. OpenReview.net, 2023. URL https://openreview.net/pdf?id=WE_vluYUL-X.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/pdf?id=WE_vluYUL-X",
+      "citation_key": "Yao et al. [2023]"
+    },
+    {
+      "raw_text": "Yao et al. [2024] Yao, S., Shinn, N., Razavi, P., and Narasimhan, K. τ\\tau-bench: A benchmark for tool-agent-user interaction in real-world domains. ArXiv preprint, abs/2406.12045, 2024. URL https://arxiv.org/abs/2406.12045.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2406.12045",
+      "doi": null,
+      "url": "https://arxiv.org/abs/2406.12045",
+      "citation_key": "Yao et al. [2024]"
+    },
+    {
+      "raw_text": "Yuan et al. [2024] Yuan, W., Pang, R. Y., Cho, K., Li, X., Sukhbaatar, S., Xu, J., and Weston, J. Self-rewarding language models. In Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024. OpenReview.net, 2024. URL https://openreview.net/forum?id=0NphYCmgua.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=0NphYCmgua",
+      "citation_key": "Yuan et al. [2024]"
+    },
+    {
+      "raw_text": "Zhao et al. [2021] Zhao, Z., Wallace, E., Feng, S., Klein, D., and Singh, S. Calibrate before use: Improving few-shot performance of language models. In Meila, M. and Zhang, T. (eds.), Proceedings of the 38th International Conference on Machine Learning, ICML 2021, 18-24 July 2021, Virtual Event, volume 139 of Proceedings of Machine Learning Research, pp. 12697–12706. PMLR, 2021. URL http://proceedings.mlr.press/v139/zhao21c.html.",
+      "title": null,
+      "authors": [],
+      "year": "2021",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://proceedings.mlr.press/v139/zhao21c.html",
+      "citation_key": "Zhao et al. [2021]"
+    },
+    {
+      "raw_text": "Zheng et al. [2023] Zheng, L., Chiang, W., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E. P., Zhang, H., Gonzalez, J. E., and Stoica, I. Judging llm-as-a-judge with mt-bench and chatbot arena. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023, 2023. URL http://papers.nips.cc/paper_files/paper/2023/hash/91f18a1287b398d378ef22505bf41832-Abstract-Datasets_and_Benchmarks.html.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://papers.nips.cc/paper_files/paper/2023/hash/91f18a1287b398d378ef22505bf41832-Abstract-Datasets_and_Benchmarks.html",
+      "citation_key": "Zheng et al. [2023]"
+    },
+    {
+      "raw_text": "Zhou et al. [2024a] Zhou, L., Schellaert, W., Martínez-Plumed, F., Moros-Daval, Y., Ferri, C., and Hernández-Orallo, J. Larger and more instructable language models become less reliable. Nature, 634(8032):61–68, 2024a.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Zhou et al. [2024a]"
+    },
+    {
+      "raw_text": "Zhou et al. [2024b] Zhou, S., Xu, F. F., Zhu, H., Zhou, X., Lo, R., Sridhar, A., Cheng, X., Ou, T., Bisk, Y., Fried, D., Alon, U., and Neubig, G. Webarena: A realistic web environment for building autonomous agents. In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024. OpenReview.net, 2024b. URL https://openreview.net/forum?id=oKn9c6ytLx.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://openreview.net/forum?id=oKn9c6ytLx",
+      "citation_key": "Zhou et al. [2024b]"
+    }
+  ],
+  "full_text": "## 1 Introduction\n\nAI agents are rapidly transitioning from research prototypes to deployed systems that perform increasingly consequential tasks autonomously: modifying code [69], managing databases [62], browsing the web [11], and orchestrating complex multi-step workflows [70].\nThe promise of such agents is substantial and widely recognized. If they performed reliably, they could automate significant fractions of routine work and augment human capability across domains.\nYet the same autonomy that makes these agents useful also makes their failures costly. While many standard evaluations suggest these systems are ready for such responsibilities, recent high-profile incidents have exposed a troubling gap between benchmark performance and real-world outcomes [48].\n\nIn July 2025, Replit’s AI coding assistant deleted an entire production database despite explicit instructions forbidding such changes [8, 58]. Months earlier, Washington Post columnist Geoffrey Fowler asked OpenAI’s Operator to find “cheap eggs” for delivery, only to find that the agent made an unauthorized $31.43 purchase from Instacart, violating the company’s user confirmation safeguard before purchases [20, 46]. In 2024, the New York City government launched a chatbot for business assistance which consistently provided illegal advice and gave different (incorrect) answers to ten journalists asking the same question [34]. In each case, agents were judged to be reasonably capable by internal assessments, but displayed unreliable performance in real-world deployment, leading to costly failures.\nThis raises a fundamental question:\n\nHow should we define and evaluate agent reliability?\n\nThe dominant paradigm for agent evaluation offers little help in answering this question.\nDespite recent efforts of providing a more holistic evaluation of agents [31] and the language models that drive them [37], standard evaluation practice centers on reporting mean task success rates [76, 27, 40, 42]: the percentage of benchmark tasks an agent completes correctly.\nThis approach has clear advantages: it is simple to compute, easy to compare across systems, and provides a clean optimization target. But it obscures the behavioral properties that matter most for deployment. Accuracy cannot distinguish an agent that fails on a fixed, identifiable subset of tasks from one that fails unpredictably with the same rate. Yet the former permits a partitioning of tasks between humans and agents, while the latter does not.\nAccuracy also cannot distinguish benign failures (incomplete outputs, formatting errors) from catastrophic ones (deleted files, unauthorized actions), even though no practitioner would view them as interchangeable.\nStandard benchmarks do not report sensitivity to input perturbations, nor do they assess whether agents can recognize when they are likely to fail and abstain from returning bad predictions.\n\nThis evaluation gap stands in stark contrast to safety-critical engineering.\nIn aviation [54, 50], nuclear power [25], automotive [26], and railway systems [14], reliability has long been understood as a critical, multi-dimensional property [24, 4, 33], and recent work has argued for applying these system safety principles to AI [12, 51].\nCertification requires not only that systems perform correctly on average, but that they behave consistently across executions, bound the severity of failures, and degrade predictably under stress.\nThese domains assess failure probability and failure consequence separately: a component that fails rarely but catastrophically when it does may be less acceptable than one that fails more often but always benignly.\nThey quantify tail risks explicitly, asking not just “what is the average outcome?” but “how bad can the worst outcomes be, and how often do they occur?”.\nFinally, they test systems under structured perturbations, such as varying inputs, environmental conditions, and component behaviors, to characterize how performance degrades outside nominal operating conditions.\n\nWe adapt the safety-critical perspective to agent evaluations, decomposing reliability into four dimensions (see Table 1): consistency (repeatable behavior across runs), robustness (stability under input and environmental perturbations), predictability (calibrated confidence and discrimination of correct/incorrect predictions), and safety (bounded severity when failures occur).\nEach dimension captures a property that matters for deployment but cannot be measured by accuracy alone.\nAcross these dimensions, we propose a total of twelve concrete metrics that are independent of raw accuracy (see Section 3), enabling comparison of reliability across agents with different capability levels.\n\nApplying these metrics to 14 models across two benchmarks, we find that reliability gains lag noticeably behind capability progress (see Figure 1): despite steady accuracy improvements over 18 months of model releases, reliability only shows modest overall improvement. To analyze this widening gap, our paper provides two key contributions:\n\nA formal taxonomy and suite of metrics: We translate qualitative safety-critical principles into computable metrics, enabling evaluation of agent reliability independently of task success.\n\nA comprehensive reliability profile of modern agents: A detailed mapping of where state-of-the-art models succeed and fail, isolating consistency and predictability as the dimensions requiring immediate research focus.\n\n## 2 A Cross-Domain Perspective of Reliability\n\nBefore defining reliability metrics for AI agents, we take a step back to ask the foundational question: what is reliability, and how have engineering disciplines with long traditions of building dependable systems approached it?\nThis section synthesizes decades of practice from safety-critical engineering into a unified decomposition, connecting each dimension to existing work in machine learning.\n\nTo that end, we survey reliability practices across safety-critical industries—aviation, nuclear power, automotive systems, and industrial process control—to identify recurring evaluation dimensions (see Appendix B.2 for details). Despite substantial differences in technology, regulation, and risk tolerance, four dimensions emerge, summarized in Table 1. This convergence across independent fields suggests these dimensions capture fundamental aspects of reliability rather than domain-specific concerns.\n\nAcross safety-critical domains, variance itself is treated as a liability: flight-critical software must behave deterministically, reactor protection systems must respond identically each time conditions warrant shutdown, and process control systems flag unexpected variance before it cascades into larger problems. The principle is that even acceptable average performance becomes problematic when high variance makes outcomes unpredictable.\nWhile ML research has documented numerous instances of this problem—including prompt sensitivity [52], floating-point non-determinism [22], and a growing disconnect between capability and consistency [64]— these are typically treated as isolated phenomena rather than symptoms of a unified reliability deficit. Recent efforts have begun to formalize these individual concerns; for instance, evaluating consistency by prioritizing pass$\\wedge k$ [71] over traditional pass$@k$. 11pass$@k$ measures best-case capability by requiring at least one success in $k$ attempts, whereas pass$\\wedge k$ measures strict consistency by demanding success across all $k$ attempts. However, a comprehensive framework connecting these ad-hoc observations to safety-critical engineering practice remains largely absent.\n\nReal-world systems rarely operate under ideal conditions. Automotive safety testing evaluates responses to sensor failures and adverse weather; aviation qualification tests hardware against temperature extremes, vibration, and electromagnetic interference; chemical plants analyze how process deviations propagate through interconnected systems. The common thread is that robust systems degrade gracefully rather than failing abruptly.\nWhile ML research has identified various specific failure modes, such as sensitivity to input variations [65, 6] and susceptibility to prompt injection [44], these are often treated as disparate phenomena instead of components of a broader, unified account of robustness.\n\nA system that fails in known, expected ways is often preferable to one that fails rarely but unpredictably. Nuclear risk assessment explicitly models failure modes and quantifies their probabilities; aviation certification categorizes failures by severity and assigns probability targets; many safety systems employ “safe modes” with reduced functionality but guaranteed safety when uncertainty exceeds thresholds. The key insight: systems should know what they do not know.\nML research on calibration [21, 39, 36] and selective prediction [13, 29, 3, 49] addresses related concerns, though often without connecting to the broader notion of predictable failure behavior that safety-critical domains emphasize.\n\nEvery safety-critical field ties reliability to consequence-aware risk assessment. Nuclear safety computes not just failure frequencies but expected consequences: health effects, economic impacts, environmental damage. Process industry standards tie development rigor to the failure severity. Aviation targets catastrophic failure probabilities below one in a billion per flight hour. The unifying principle is that not all failures are equal. ML evaluation of safety has largely focused on compliance with harmful requests [2] or specific harmful behaviors like sycophancy [47]. These are important concerns for model deployment and governance, but distinct from consequence-aware assessment of how agents fail at legitimate tasks.\n\n## 3 Operationalizing Reliability for AI Agents\n\nBuilding on the reliability dimensions identified across disciplines from Section 2, we now operationalize these concepts for AI agents. Table 2 provides formal definitions of our full metric suite. Here, we offer intuition for why each dimension and its constituent metrics matter for agent deployments.\n\n### Consistency (RCon\\mathcal{R}_{\\text{Con}})\n\nA reliable agent should produce similar results when faced with identical conditions. Unlike traditional software, where deterministic execution is the norm, language model-based agents exhibit inherent stochasticity. This variability becomes problematic when users cannot predict whether re-running a task will yield the same outcome, follow the same solution approach, or incur similar costs at deployment time.\n\nWe decompose consistency into three complementary aspects. Outcome consistency ($C_{\\text{out}}$) measures whether the agent succeeds or fails consistently on repeated attempts at the same task. An insurance claims agent that approves a claim on one run but denies the identical claim on the next creates liability concerns and erodes user trust. Trajectory consistency captures whether the agent takes similar paths to its solutions, measured both distributionally ($C_{\\text{traj}}^{d}$, comparing action type frequencies) and sequentially ($C_{\\text{traj}}^{s}$, comparing action orderings). To illustrate, consider an order fulfillment agent: even if it successfully completes two identical orders, following different action sequences (e.g., sometimes charging the credit card before checking inventory, other times checking inventory first) creates different failure modes if the agent is interrupted mid-execution and complicates auditing for compliance. Finally, resource consistency ($C_{\\text{res}}$) quantifies variability in computational and monetary costs. An agent whose latency, task completion duration, or API costs fluctuate by an order of magnitude across identical requests poses budgeting challenges for deployment.\n\n### Robustness (RRob\\mathcal{R}_{\\text{Rob}})\n\nReal-world deployments expose agents to conditions that deviate from their training and evaluation environments/distributions. Robust agents should maintain comparable performance despite such perturbations. We identify the following three categories of perturbations that agents commonly encounter.\n\nFault robustness ($R_{\\text{fault}}$) measures resilience to infrastructure failures: API timeouts, malformed responses, or temporary service unavailability. A robust agent should gracefully handle a web search tool returning an error rather than abandoning the task entirely or entering inconsistent states, for example by retrying or providing a fallback response. Environment robustness ($R_{\\text{env}}$) captures sensitivity to changes in the agent’s operating environment that preserve semantic content—reordering JSON fields, changing date formats, renaming API parameters, or altering tool interfaces. More broadly, this dimension reflects the reality that deployed agents face environments that shift over time as APIs are updated, data schemas evolve, and tool interfaces change in production systems. Agents that fail when a database returns columns in a different order exhibit brittleness that limits their practical utility. Prompt robustness ($R_{\\text{prompt}}$) measures invariance to semantically equivalent reformulations of instructions, whether rephrasings within a language or translations across languages. If a customer asking “I want to cancel my subscription” gets reliably helped but “please end my plan” causes the agent to fail, the system cannot be trusted to handle real user traffic where phrasing varies across users and contexts.\n\n### Predictability (RPred\\mathcal{R}_{\\text{Pred}})\n\nEven agents that perform well on average provide limited value if users cannot anticipate when they will succeed or fail. In many deployment settings, users must decide whether to act on an output, seek verification, or defer to a human expert. Predictability captures whether an agent’s expressed confidence reliably indicates its actual performance and can therefore support such decisions.\n\nCalibration ($P_{\\text{cal}}$) measures whether stated confidence levels match empirical success rates: an agent claiming 80% confidence should succeed roughly 80% of the time. Poor calibration, such as consistent overconfidence, leads users to trust outputs they should instead verify, while under-confidence can result in unnecessary deferral. Discrimination ($P_{\\text{AUROC}}$) assesses whether confidence scores successfully separate successes from failures. An agent that assigns 90% confidence to all outputs might be poorly calibrated, but if correct answers consistently receive higher scores than incorrect ones, the agent still discriminates well. Good discrimination enables users to set a confidence threshold above which outputs are accepted and below which they are deferred. The Brier score ($P_{\\text{brier}}$) provides a proper scoring rule22A proper scoring rule incentivizes reporting true beliefs; deviation from the true probability worsens the expected score. that jointly measures calibration and discrimination, offering a holistic view of predictive quality.\n\n### Safety (RSaf\\mathcal{R}_{\\text{Saf}})\n\nAgents that take actions in the world can cause harm beyond simply failing at their assigned tasks. Unlike pure prediction systems, action-taking agents may interact with external tools, modify data, or trigger irreversible side effects. Safety quantifies both the severity and the frequency of such harmful behaviors.\n\nCompliance ($S_{\\text{comp}}$) tracks adherence to predefined constraints—avoiding exposure of personally identifiable information, refraining from unauthorized actions, or staying within designated system boundaries. Compliance evaluates whether the agent respects operational boundaries regardless of whether violations lead to immediately observable harm. On the other hand, harm severity ($S_{\\text{harm}}$) measures, among tasks that do violate constraints, how severe the consequences are. Consider a database management agent: returning query results in the wrong sort order is benign, but executing an unintended DELETE statement represents severe harm. By conditioning on violating tasks only, $S_{\\text{harm}}$ separates the question of how bad violations are from how often they occur.\n\n### Aggregation\n\nTo enable upstream comparisons across agents, we aggregate reliability metrics within each dimension and compute an overall reliability score as follows:\n\nThe following aggregation choices merit explanation:\n\n##### Disentangling Reliability & Capability\n\nA fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior.\n\nOur metrics captures these distinctions through:\n\nNormalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability.\n\nRatio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance.\n\n#### Disentangling Reliability & Capability\n\nA fundamental principle guides all of our metric definitions: reliability should be disentangled from capability.\nRaw task accuracy measures whether an agent succeeds; reliability measures how it succeeds and fails, i.e., the stability, predictability, robustness, and safety of its behavior.\n\nOur metrics captures these distinctions through:\n\nNormalization: For example, outcome consistency normalizes variance by $p(1-p)$, the maximum possible variance for a given success rate, isolating consistency from capability.\n\nRatio-based comparisons: Robustness metrics compute accuracy ratios between perturbed and nominal conditions, measuring relative degradation rather than absolute performance.\n\n## 4 Experiments\n\nWe evaluate reliability on two established benchmarks that pose complementary challenges. Our goal is to understand the current state of agent reliability, both in aggregate and across individual sub-metrics, and how it has evolved over recent model generations.\n\n### Setup\n\n### Main Results\n\n### Connection to Real-World Failures\n\nWe further revisit the real-world failures from Section 1 (Replit agent, OpenAI Operator, NYC chatbot) to examine whether our metrics would have provided early warning signals. Our analysis in Table 3 concludes that each of the vulnerabilities could have been identified prior to deployment through systematic evaluation using our reliability metrics.\n\n## 5 Recommendations\n\nWe have argued that agent reliability is a multi-dimensional property that cannot be inferred from mean task success alone. Treating reliability as an independent axis of progress has implications for how agents are evaluated, designed, and governed.\n\nOur results suggest that benchmark design must fundamentally evolve. Current agent benchmarks typically report a single accuracy number from a single run in a fixed environment—such as a static database schema, a frozen set of API endpoints, or a fixed file system layout. This static, single-shot approach provides a misleadingly narrow view of capability. It reveals nothing about whether an agent would succeed on the same task tomorrow, how it handles a slightly rephrased instruction, or how it adapts when its underlying infrastructure shifts. Deployed agents operate in a fundamentally different reality: databases are migrated, API response formats change, tool libraries are updated, and the documents an agent must reason over are continuously revised. Measuring true reliability therefore requires a multifaceted approach. First, we need multi-run protocols that re-execute identical tasks to assess variance, alongside multi-condition protocols that systematically perturb user inputs. Second, benchmarks must become generative and parameterized rather than relying on fixed test sets. This allows experimenters to systematically alter the environment: renaming fields, reordering response structures, introducing new API versions, or injecting specific fault probabilities to mirror real-world distribution shifts. Generative test sets could also mitigate the risk of agents taking shortcuts such as looking up answers online rather than solving tasks genuinely [31]. Finally, temporal re-evaluation is critical. Re-running agents on these evolving benchmarks at regular intervals is essential to reveal whether reliability is robustly maintained or if it silently degrades as the world drifts away from the conditions under which the agent was originally tested.\n\nAgent design should be explicitly guided by our reliability dimensions. Our empirical results reveal that reliability dimensions do not improve uniformly across model generations. Calibration and safety have improved noticeably in recent models, suggesting intentional optimization during training; though the proprietary nature of frontier pipelines prevents us from confirming this directly. By contrast, consistency and discrimination have improved little, suggesting that these dimensions are either harder to optimize or not yet the focus of current training pipelines. Systematic reliability evaluation makes this uneven progress visible: it identifies which dimensions are already on a positive trajectory and, more importantly, which are not. Where reliability gains are already occurring, our metrics help quantify and track them; where they are absent, they provide targets for future optimization. Whether or not current training pipelines already target our reliability dimensions, making these dimensions explicit and measurable enables more systematic progress than capability-oriented evaluation alone would.\n\nReliability metrics and incident analyses should feed into deployment decisions, change management, and regulatory compliance. For example, an organization could require minimum consistency and safety thresholds before promoting an agent from a sandboxed pilot to production, much as aviation systems must meet certification requirements before entering service. Analogous to safety-critical industries, a culture of incident reporting, post-mortem analysis, and continuous improvement will likely be crucial for agentic AI. Treating reliability as multi-dimensional also opens space for diverse research contributions: metric design, benchmark development, algorithmic methods, interface design, and governance mechanisms can all be evaluated through the lens of specific reliability dimensions rather than overall accuracy.\n\nBeyond which reliability dimensions matter, a key determinant of how much reliability matters is whether an agent operates autonomously or augments a human collaborator. In augmentation settings (coding assistants, search copilots, brainstorming tools) a human reviews, edits, and approves the agent’s output before it takes effect. The human serves as a reliability backstop: an inconsistent suggestion is merely annoying, not dangerous, because it must pass through a human judgment filter. This has enabled AI coding assistants to reach widespread adoption despite imperfect reliability. Conversely, in automation settings (customer service chatbots, autonomous database management, unattended workflow execution) the agent’s output is the final action with no human buffer. Here, unreliability translates directly into real-world failures. This distinction suggests that the urgency of reliability improvements is not uniform across applications. For augmentation tools, moderate reliability may suffice because human oversight compensates for agent shortcomings. For automation, reliability is a hard prerequisite for deployment: an agent that succeeds on 90% of tasks but fails unpredictably on the remaining 10% may be a useful assistant yet an unacceptable autonomous system. As the field pushes toward greater agent autonomy, the reliability bar rises accordingly, making our reliability metrics increasingly essential.\n\n## 6 Limitations\n\nWe acknowledge the following limitations of our work:\n\nBenchmark coverage. Our empirical analysis covers two benchmarks ($\\tau$-bench and GAIA), which, while complementary in structure and scope, represent a narrow slice of the diverse tasks agents will face in real-world practice.\n\nScaffold diversity. We evaluate each benchmark using a single scaffold that performs well on the respective benchmark; other scaffolds could yield qualitatively different reliability profiles. We plan to extend our evaluation to state-of-the-art agentic scaffolds such as Claude Code and OpenAI Codex as part of future work.\n\nSafety judging. Our safety evaluation relies on LLM-based judging to achieve scalability, which introduces its own reliability concerns. Extending to judge-free and human-validated safety metrics is another important direction for future work.\n\nMetric choices. The choice of specific metrics within each reliability dimension involves subjective decisions. Alternate decompositions are possible, and practitioners may reasonably disagree on which metrics best capture reliability for their specific application scenarios.\n\nSafety aggregation. We report safety separately rather than incorporating it into the overall reliability score. This avoids masking tail risks through averaging but means the aggregate $\\mathcal{R}$ does not capture the full reliability picture. We plan to explore principled approaches to integrating safety into the overall score in future work.\n\nCapability disentanglement. Our approach to disentangling reliability from capability through normalization and conditioning is one of several possible strategies, and its adequacy may vary across deployment settings and task domains.\n\nChoice of temperature. Where applicable, we set the temperature to zero in all our experiments. This limits one major source of stochasticity in model outputs. When attempting to maximize the accuracy of an agent, a nonzero temperature might be required, and our experiments might overestimate the reliability that is achievable in such circumstances.\n\nWe view our framework as a starting point and encourage the community to build on it by proposing alternative metrics and decompositions suited to different deployment contexts.\nWe also stress that reliability evaluation should complement, not replace, careful deployment practices including human oversight, sandboxed testing, monitoring, and ongoing performance assessment.\n\n## 7 Conclusion\n\nWe introduced a decomposition of agent reliability grounded in safety-critical engineering and evaluated 14 models across two complementary benchmarks. Our results show that 18 months of rapid capability gains have produced only small improvements in reliability: models that are substantially more accurate remain inconsistent across runs, brittle to prompt rephrasings, and often fail to understand when they are likely to succeed.\nAs agents are deployed in high-stakes settings, treating reliability as a key evaluation concern becomes essential.\nWe have proposed one way to do so: a four-dimensional decomposition with 14 distinct sub-metrics grounded in safety-critical engineering. While our specific decomposition is one of many possible framings, the core shift in perspective matters most: from asking “How often does the agent succeed?” to asking “How predictably, consistently, robustly, and safely does it behave?”.\n",
+  "extracted_at": "2026-04-13T14:58:07.246945"
+}

@@ -1,0 +1,2006 @@
+{
+  "paper_id": "1412.3555",
+  "title": "Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling",
+  "authors": [
+    "Junyoung Chung Caglar Gulcehre KyungHyun Cho Université de Montréal &Yoshua Bengio Université de Montréal CIFAR Senior Fellow"
+  ],
+  "affiliations": [],
+  "abstract": "In this paper we compare different types of recurrent units in recurrent neural networks (RNNs). Especially, we focus on more sophisticated units that implement a gating mechanism, such as a long short-term memory (LSTM) unit and a recently proposed gated recurrent unit (GRU). We evaluate these recurrent units on the tasks of polyphonic music modeling and speech signal modeling. Our experiments revealed that these advanced recurrent units are indeed better than more traditional recurrent units such as tanh\\tanh units. Also, we found GRU to be comparable to LSTM.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Recurrent neural networks have recently shown promising results in many machine\nlearning tasks, especially when input and/or output are of variable\nlength (see, e.g., Graves, 2012). More recently, Sutskever et al. (2014)\nand Bahdanau et al. (2014) reported that recurrent neural networks are\nable to perform as well as the existing, well-developed systems on a challenging\ntask of machine translation.",
+        "One interesting observation, we make from these recent successes is that almost\nnone of these successes were achieved with a vanilla recurrent neural network. Rather, it was a\nrecurrent neural network with sophisticated recurrent hidden units, such as long\nshort-term memory units (Hochreiter and Schmidhuber, 1997), that was used in\nthose successful applications.",
+        "Among those sophisticated recurrent units, in this paper, we are interested in\nevaluating two closely related variants. One is a long short-term memory (LSTM)\nunit, and the other is a gated recurrent unit (GRU) proposed more recently by\nCho et al. (2014). It is well established in the field that the LSTM\nunit works well on sequence-based tasks with long-term dependencies, but the\nlatter has only recently been introduced and used in the context of machine\ntranslation.",
+        "In this paper, we evaluate these two units and a more traditional\n$\\tanh$ unit on the task of sequence modeling. We consider three\npolyphonic music datasets (see, e.g., Boulanger-Lewandowski et al., 2012) as well as two\ninternal datasets provided by Ubisoft in which each sample is a raw speech\nrepresentation.",
+        "Based on our experiments, we concluded that by using fixed number of parameters for all models\non some datasets GRU, can outperform LSTM units both in terms of convergence in CPU time and\nin terms of parameter updates and generalization."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Recurrent neural networks have recently shown promising results in many machine\nlearning tasks, especially when input and/or output are of variable\nlength (see, e.g., Graves, 2012). More recently, Sutskever et al. (2014)\nand Bahdanau et al. (2014) reported that recurrent neural networks are\nable to perform as well as the existing, well-developed systems on a challenging\ntask of machine translation."
+        },
+        {
+          "type": "para",
+          "data": "One interesting observation, we make from these recent successes is that almost\nnone of these successes were achieved with a vanilla recurrent neural network. Rather, it was a\nrecurrent neural network with sophisticated recurrent hidden units, such as long\nshort-term memory units (Hochreiter and Schmidhuber, 1997), that was used in\nthose successful applications."
+        },
+        {
+          "type": "para",
+          "data": "Among those sophisticated recurrent units, in this paper, we are interested in\nevaluating two closely related variants. One is a long short-term memory (LSTM)\nunit, and the other is a gated recurrent unit (GRU) proposed more recently by\nCho et al. (2014). It is well established in the field that the LSTM\nunit works well on sequence-based tasks with long-term dependencies, but the\nlatter has only recently been introduced and used in the context of machine\ntranslation."
+        },
+        {
+          "type": "para",
+          "data": "In this paper, we evaluate these two units and a more traditional\n$\\tanh$ unit on the task of sequence modeling. We consider three\npolyphonic music datasets (see, e.g., Boulanger-Lewandowski et al., 2012) as well as two\ninternal datasets provided by Ubisoft in which each sample is a raw speech\nrepresentation."
+        },
+        {
+          "type": "para",
+          "data": "Based on our experiments, we concluded that by using fixed number of parameters for all models\non some datasets GRU, can outperform LSTM units both in terms of convergence in CPU time and\nin terms of parameter updates and generalization."
+        }
+      ]
+    },
+    {
+      "title": "Background: Recurrent Neural Network",
+      "level": 2,
+      "paragraphs": [
+        "A recurrent neural network (RNN) is an extension of a conventional feedforward neural\nnetwork, which is able to handle a variable-length sequence input. The RNN\nhandles the variable-length sequence by having a recurrent hidden state whose\nactivation at each time is dependent on that of the previous time.",
+        "More formally, given a sequence $\\mathbf{x}=\\left(\\mathbf{x}_{1},\\mathbf{x}_{2},\\cdots,\\mathbf{x}_{\\scriptscriptstyle{T}}\\right)$, the\nRNN updates its recurrent hidden state $h_{t}$ by",
+        "where $\\phi$ is a nonlinear function such as composition of a logistic sigmoid with an affine transformation.\nOptionally, the RNN may have an output $\\mathbf{y}=\\left(y_{1},y_{2},\\dots,y_{\\scriptscriptstyle{T}}\\right)$ which\nmay again be of variable length.",
+        "Traditionally, the update of the recurrent hidden state in Eq. (1) is implemented as",
+        "where $g$ is a smooth, bounded function such as a logistic sigmoid function or a\nhyperbolic tangent function.",
+        "A generative RNN outputs a probability distribution over the next element of the sequence,\ngiven its current state $\\mathbf{h}_{t}$, and this generative model can capture a distribution\nover sequences of variable length by using a special output symbol to represent\nthe end of the sequence. The sequence probability can be decomposed into",
+        "where the last element is a special end-of-sequence value. We model each conditional probability distribution with",
+        "where $h_{t}$ is from Eq. (1). Such generative RNNs are the subject\nof this paper.",
+        "Unfortunately, it has been observed by, e.g., Bengio et al. (1994) that it is\ndifficult to train RNNs to capture long-term dependencies because the gradients\ntend to either vanish (most of the time) or explode (rarely, but with severe effects).\nThis makes gradient-based optimization method struggle, not just because of the\nvariations in gradient magnitudes but because of the effect of long-term dependencies\nis hidden (being exponentially smaller with respect to sequence length) by the\neffect of short-term dependencies.\nThere have been two dominant approaches by which many researchers have tried to reduce the negative\nimpacts of this issue. One such approach is to devise a better learning algorithm\nthan a simple stochastic gradient descent (see, e.g., Bengio et al., 2013; Pascanu et al., 2013; Martens and Sutskever, 2011),\nfor example using the very simple clipped gradient, by which the norm of the\ngradient vector is clipped, or using second-order methods which may be less sensitive\nto the issue if the second derivatives follow the same growth pattern as the first derivatives\n(which is not guaranteed to be the case).",
+        "The other approach, in which we are more interested in this paper, is to design\na more sophisticated activation function than a usual activation function,\nconsisting of affine transformation followed by a simple element-wise\nnonlinearity by using gating units. The earliest attempt in this direction\nresulted in an activation function, or a recurrent unit, called a long short-term memory (LSTM)\nunit (Hochreiter and Schmidhuber, 1997). More recently, another type of\nrecurrent unit, to which we refer as a gated recurrent unit (GRU), was proposed\nby Cho et al. (2014). RNNs employing either of these recurrent units\nhave been shown to perform well in tasks that require capturing long-term\ndependencies. Those tasks include, but are not limited to, speech\nrecognition (see, e.g., Graves et al., 2013) and machine\ntranslation (see, e.g., Sutskever et al., 2014; Bahdanau et al., 2014)."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "A recurrent neural network (RNN) is an extension of a conventional feedforward neural\nnetwork, which is able to handle a variable-length sequence input. The RNN\nhandles the variable-length sequence by having a recurrent hidden state whose\nactivation at each time is dependent on that of the previous time."
+        },
+        {
+          "type": "para",
+          "data": "More formally, given a sequence $\\mathbf{x}=\\left(\\mathbf{x}_{1},\\mathbf{x}_{2},\\cdots,\\mathbf{x}_{\\scriptscriptstyle{T}}\\right)$, the\nRNN updates its recurrent hidden state $h_{t}$ by"
+        },
+        {
+          "type": "para",
+          "data": "where $\\phi$ is a nonlinear function such as composition of a logistic sigmoid with an affine transformation.\nOptionally, the RNN may have an output $\\mathbf{y}=\\left(y_{1},y_{2},\\dots,y_{\\scriptscriptstyle{T}}\\right)$ which\nmay again be of variable length."
+        },
+        {
+          "type": "para",
+          "data": "Traditionally, the update of the recurrent hidden state in Eq. (1) is implemented as"
+        },
+        {
+          "type": "para",
+          "data": "where $g$ is a smooth, bounded function such as a logistic sigmoid function or a\nhyperbolic tangent function."
+        },
+        {
+          "type": "para",
+          "data": "A generative RNN outputs a probability distribution over the next element of the sequence,\ngiven its current state $\\mathbf{h}_{t}$, and this generative model can capture a distribution\nover sequences of variable length by using a special output symbol to represent\nthe end of the sequence. The sequence probability can be decomposed into"
+        },
+        {
+          "type": "para",
+          "data": "where the last element is a special end-of-sequence value. We model each conditional probability distribution with"
+        },
+        {
+          "type": "para",
+          "data": "where $h_{t}$ is from Eq. (1). Such generative RNNs are the subject\nof this paper."
+        },
+        {
+          "type": "para",
+          "data": "Unfortunately, it has been observed by, e.g., Bengio et al. (1994) that it is\ndifficult to train RNNs to capture long-term dependencies because the gradients\ntend to either vanish (most of the time) or explode (rarely, but with severe effects).\nThis makes gradient-based optimization method struggle, not just because of the\nvariations in gradient magnitudes but because of the effect of long-term dependencies\nis hidden (being exponentially smaller with respect to sequence length) by the\neffect of short-term dependencies.\nThere have been two dominant approaches by which many researchers have tried to reduce the negative\nimpacts of this issue. One such approach is to devise a better learning algorithm\nthan a simple stochastic gradient descent (see, e.g., Bengio et al., 2013; Pascanu et al., 2013; Martens and Sutskever, 2011),\nfor example using the very simple clipped gradient, by which the norm of the\ngradient vector is clipped, or using second-order methods which may be less sensitive\nto the issue if the second derivatives follow the same growth pattern as the first derivatives\n(which is not guaranteed to be the case)."
+        },
+        {
+          "type": "para",
+          "data": "The other approach, in which we are more interested in this paper, is to design\na more sophisticated activation function than a usual activation function,\nconsisting of affine transformation followed by a simple element-wise\nnonlinearity by using gating units. The earliest attempt in this direction\nresulted in an activation function, or a recurrent unit, called a long short-term memory (LSTM)\nunit (Hochreiter and Schmidhuber, 1997). More recently, another type of\nrecurrent unit, to which we refer as a gated recurrent unit (GRU), was proposed\nby Cho et al. (2014). RNNs employing either of these recurrent units\nhave been shown to perform well in tasks that require capturing long-term\ndependencies. Those tasks include, but are not limited to, speech\nrecognition (see, e.g., Graves et al., 2013) and machine\ntranslation (see, e.g., Sutskever et al., 2014; Bahdanau et al., 2014)."
+        }
+      ]
+    },
+    {
+      "title": "Gated Recurrent Neural Networks",
+      "level": 2,
+      "paragraphs": [
+        "In this paper, we are interested in evaluating the performance of those recently\nproposed recurrent units (LSTM unit and GRU) on sequence modeling.\nBefore the empirical evaluation, we first describe each of those recurrent units\nin this section."
+      ],
+      "subsections": [
+        {
+          "title": "Long Short-Term Memory Unit",
+          "level": 3,
+          "paragraphs": [
+            "The Long Short-Term Memory (LSTM) unit was initially proposed by\nHochreiter and Schmidhuber (1997). Since then, a number of minor modifications\nto the original LSTM unit have been made. We follow the implementation of LSTM as used in\nGraves (2013).",
+            "Unlike to the recurrent unit which simply computes a weighted sum of the input signal and\napplies a nonlinear function, each $j$-th LSTM unit maintains a memory $c_{t}^{j}$ at\ntime $t$. The output $h_{t}^{j}$, or the activation, of the LSTM unit is then",
+            "where $o_{t}^{j}$ is an output gate that modulates the amount of memory content\nexposure. The output gate is computed by",
+            "where $\\sigma$ is a logistic sigmoid function. $V_{o}$ is a diagonal matrix.",
+            "The memory cell $c_{t}^{j}$ is updated by partially forgetting the existing memory and adding\na new memory content $\\tilde{c}_{t}^{j}$ :",
+            "where the new memory content is",
+            "The extent to which the existing memory is forgotten is modulated by a forget gate $f_{t}^{j}$, and the degree to which the new memory content is added to\nthe memory cell is modulated by an input gate $i_{t}^{j}$. Gates are computed by",
+            "Note that $V_{f}$ and $V_{i}$ are diagonal matrices.",
+            "Unlike to the traditional recurrent unit which overwrites its content at each\ntime-step (see Eq. (2)), an LSTM unit is able to decide whether\nto keep the existing memory via the introduced gates. Intuitively, if the LSTM\nunit detects an important feature from an input sequence at early stage, it\neasily carries this information (the existence of the feature) over a long\ndistance, hence, capturing potential long-distance dependencies.",
+            "See Fig. 1 (a) for the graphical illustration."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The Long Short-Term Memory (LSTM) unit was initially proposed by\nHochreiter and Schmidhuber (1997). Since then, a number of minor modifications\nto the original LSTM unit have been made. We follow the implementation of LSTM as used in\nGraves (2013)."
+            },
+            {
+              "type": "para",
+              "data": "Unlike to the recurrent unit which simply computes a weighted sum of the input signal and\napplies a nonlinear function, each $j$-th LSTM unit maintains a memory $c_{t}^{j}$ at\ntime $t$. The output $h_{t}^{j}$, or the activation, of the LSTM unit is then"
+            },
+            {
+              "type": "para",
+              "data": "where $o_{t}^{j}$ is an output gate that modulates the amount of memory content\nexposure. The output gate is computed by"
+            },
+            {
+              "type": "para",
+              "data": "where $\\sigma$ is a logistic sigmoid function. $V_{o}$ is a diagonal matrix."
+            },
+            {
+              "type": "para",
+              "data": "The memory cell $c_{t}^{j}$ is updated by partially forgetting the existing memory and adding\na new memory content $\\tilde{c}_{t}^{j}$ :"
+            },
+            {
+              "type": "para",
+              "data": "where the new memory content is"
+            },
+            {
+              "type": "para",
+              "data": "The extent to which the existing memory is forgotten is modulated by a forget gate $f_{t}^{j}$, and the degree to which the new memory content is added to\nthe memory cell is modulated by an input gate $i_{t}^{j}$. Gates are computed by"
+            },
+            {
+              "type": "para",
+              "data": "Note that $V_{f}$ and $V_{i}$ are diagonal matrices."
+            },
+            {
+              "type": "para",
+              "data": "Unlike to the traditional recurrent unit which overwrites its content at each\ntime-step (see Eq. (2)), an LSTM unit is able to decide whether\nto keep the existing memory via the introduced gates. Intuitively, if the LSTM\nunit detects an important feature from an input sequence at early stage, it\neasily carries this information (the existence of the feature) over a long\ndistance, hence, capturing potential long-distance dependencies."
+            },
+            {
+              "type": "para",
+              "data": "See Fig. 1 (a) for the graphical illustration."
+            }
+          ]
+        },
+        {
+          "title": "Gated Recurrent Unit",
+          "level": 3,
+          "paragraphs": [
+            "A gated recurrent unit (GRU) was proposed by Cho et al. (2014) to make\neach recurrent unit to adaptively capture dependencies of different time scales.\nSimilarly to the LSTM unit, the GRU has gating units that modulate the flow of information\ninside the unit, however, without having a separate memory cells.",
+            "The activation $h_{t}^{j}$ of the GRU at time $t$ is a linear interpolation between\nthe previous activation $h_{t-1}^{j}$ and the candidate activation $\\tilde{h}_{t}^{j}$:",
+            "where an update gate $z_{t}^{j}$ decides how much the unit updates its activation,\nor content. The update gate is computed by",
+            "This procedure of taking a linear sum between the existing state and the newly\ncomputed state is similar to the LSTM unit. The GRU, however, does not have any\nmechanism to control the degree to which its state is exposed, but exposes the\nwhole state each time.",
+            "The candidate activation $\\tilde{h}_{t}^{j}$ is computed similarly to that of the traditional\nrecurrent unit (see Eq. (2)) and as in (Bahdanau et al., 2014),",
+            "where $\\mathbf{r}_{t}$ is a set of reset gates and $\\odot$ is an element-wise\nmultiplication.\n11\nNote that we use the reset gate in a slightly different way from the\noriginal GRU proposed in Cho et al. (2014). Originally, the\ncandidate activation was computed by\n\n$\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+\\mathbf{r}_{t}\\odot\\left(U\\mathbf{h}_{t-1}\\right)\\right)^{j},$\nwhere $r_{t}^{j}$ is a reset gate.\nWe found in our preliminary experiments that both of these\nformulations performed as well as each other.\nWhen off ($r_{t}^{j}$ close to $0$), the reset gate effectively makes the\nunit act as if it is reading the first symbol of an input sequence, allowing it\nto forget the previously computed state.",
+            "The reset gate $r_{t}^{j}$ is computed similarly to the update gate:",
+            "See Fig. 1 (b) for the graphical illustration of the GRU."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "A gated recurrent unit (GRU) was proposed by Cho et al. (2014) to make\neach recurrent unit to adaptively capture dependencies of different time scales.\nSimilarly to the LSTM unit, the GRU has gating units that modulate the flow of information\ninside the unit, however, without having a separate memory cells."
+            },
+            {
+              "type": "para",
+              "data": "The activation $h_{t}^{j}$ of the GRU at time $t$ is a linear interpolation between\nthe previous activation $h_{t-1}^{j}$ and the candidate activation $\\tilde{h}_{t}^{j}$:"
+            },
+            {
+              "type": "para",
+              "data": "where an update gate $z_{t}^{j}$ decides how much the unit updates its activation,\nor content. The update gate is computed by"
+            },
+            {
+              "type": "para",
+              "data": "This procedure of taking a linear sum between the existing state and the newly\ncomputed state is similar to the LSTM unit. The GRU, however, does not have any\nmechanism to control the degree to which its state is exposed, but exposes the\nwhole state each time."
+            },
+            {
+              "type": "para",
+              "data": "The candidate activation $\\tilde{h}_{t}^{j}$ is computed similarly to that of the traditional\nrecurrent unit (see Eq. (2)) and as in (Bahdanau et al., 2014),"
+            },
+            {
+              "type": "para",
+              "data": "where $\\mathbf{r}_{t}$ is a set of reset gates and $\\odot$ is an element-wise\nmultiplication.\n11\nNote that we use the reset gate in a slightly different way from the\noriginal GRU proposed in Cho et al. (2014). Originally, the\ncandidate activation was computed by\n\n$\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+\\mathbf{r}_{t}\\odot\\left(U\\mathbf{h}_{t-1}\\right)\\right)^{j},$\nwhere $r_{t}^{j}$ is a reset gate.\nWe found in our preliminary experiments that both of these\nformulations performed as well as each other.\nWhen off ($r_{t}^{j}$ close to $0$), the reset gate effectively makes the\nunit act as if it is reading the first symbol of an input sequence, allowing it\nto forget the previously computed state."
+            },
+            {
+              "type": "para",
+              "data": "The reset gate $r_{t}^{j}$ is computed similarly to the update gate:"
+            },
+            {
+              "type": "para",
+              "data": "See Fig. 1 (b) for the graphical illustration of the GRU."
+            }
+          ]
+        },
+        {
+          "title": "Discussion",
+          "level": 3,
+          "paragraphs": [
+            "It is easy to notice similarities between the LSTM unit and the GRU\nfrom Fig. 1.",
+            "The most prominent feature shared between these units is the additive component of their\nupdate from $t$ to $t+1$, which is lacking in the traditional recurrent unit. The traditional recurrent\nunit always replaces the activation, or the content of a unit with a new value\ncomputed from the current input and the previous hidden state. On the other\nhand, both LSTM unit and GRU keep the existing content and add the new content\non top of it (see Eqs. (4) and (5)).",
+            "This additive nature has two advantages. First, it is easy for each unit to\nremember the existence of a specific feature in the input stream for a long series of steps.\nAny important feature, decided by either the forget gate of the LSTM unit or the\nupdate gate of the GRU, will not be overwritten but be maintained as it is.",
+            "Second, and perhaps more importantly, this addition effectively creates shortcut\npaths that bypass multiple temporal steps. These shortcuts allow the error to be\nback-propagated easily without too quickly vanishing (if the gating unit is nearly\nsaturated at $1$) as a result of passing through multiple, bounded nonlinearities,\nthus reducing the difficulty due to vanishing gradients (Hochreiter, 1991; Bengio et al., 1994).",
+            "These two units however have a number of differences as well. One feature of the\nLSTM unit that is missing from the GRU is the controlled exposure of the memory\ncontent. In the LSTM unit, the amount of the memory content that is seen, or\nused by other units in the network is controlled by the output gate. On\nthe other hand the GRU exposes its full content without any control.",
+            "Another difference is in the location of the input gate, or the corresponding\nreset gate. The LSTM unit computes the new memory content without any separate\ncontrol of the amount of information flowing from the previous time step.\nRather, the LSTM unit controls the amount of the new memory content being added\nto the memory cell independently from the forget gate. On the other hand,\nthe GRU controls the information flow from the previous activation when\ncomputing the new, candidate activation, but does not independently control the\namount of the candidate activation being added (the control is tied via the\nupdate gate).",
+            "From these similarities and differences alone, it is difficult to conclude which\ntypes of gating units would perform better in general. Although Bahdanau et al. (2014)\nreported that these two units performed comparably to each other according to\ntheir preliminary experiments on machine translation, it is unclear whether this\napplies as well to tasks other than machine translation. This motivates us to\nconduct more thorough empirical comparison between the LSTM unit and the GRU in\nthis paper."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "It is easy to notice similarities between the LSTM unit and the GRU\nfrom Fig. 1."
+            },
+            {
+              "type": "para",
+              "data": "The most prominent feature shared between these units is the additive component of their\nupdate from $t$ to $t+1$, which is lacking in the traditional recurrent unit. The traditional recurrent\nunit always replaces the activation, or the content of a unit with a new value\ncomputed from the current input and the previous hidden state. On the other\nhand, both LSTM unit and GRU keep the existing content and add the new content\non top of it (see Eqs. (4) and (5))."
+            },
+            {
+              "type": "para",
+              "data": "This additive nature has two advantages. First, it is easy for each unit to\nremember the existence of a specific feature in the input stream for a long series of steps.\nAny important feature, decided by either the forget gate of the LSTM unit or the\nupdate gate of the GRU, will not be overwritten but be maintained as it is."
+            },
+            {
+              "type": "para",
+              "data": "Second, and perhaps more importantly, this addition effectively creates shortcut\npaths that bypass multiple temporal steps. These shortcuts allow the error to be\nback-propagated easily without too quickly vanishing (if the gating unit is nearly\nsaturated at $1$) as a result of passing through multiple, bounded nonlinearities,\nthus reducing the difficulty due to vanishing gradients (Hochreiter, 1991; Bengio et al., 1994)."
+            },
+            {
+              "type": "para",
+              "data": "These two units however have a number of differences as well. One feature of the\nLSTM unit that is missing from the GRU is the controlled exposure of the memory\ncontent. In the LSTM unit, the amount of the memory content that is seen, or\nused by other units in the network is controlled by the output gate. On\nthe other hand the GRU exposes its full content without any control."
+            },
+            {
+              "type": "para",
+              "data": "Another difference is in the location of the input gate, or the corresponding\nreset gate. The LSTM unit computes the new memory content without any separate\ncontrol of the amount of information flowing from the previous time step.\nRather, the LSTM unit controls the amount of the new memory content being added\nto the memory cell independently from the forget gate. On the other hand,\nthe GRU controls the information flow from the previous activation when\ncomputing the new, candidate activation, but does not independently control the\namount of the candidate activation being added (the control is tied via the\nupdate gate)."
+            },
+            {
+              "type": "para",
+              "data": "From these similarities and differences alone, it is difficult to conclude which\ntypes of gating units would perform better in general. Although Bahdanau et al. (2014)\nreported that these two units performed comparably to each other according to\ntheir preliminary experiments on machine translation, it is unclear whether this\napplies as well to tasks other than machine translation. This motivates us to\nconduct more thorough empirical comparison between the LSTM unit and the GRU in\nthis paper."
+            }
+          ]
+        }
+      ],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x1.png",
+          "alt": "Refer to caption",
+          "caption": "Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+          "label": "S3.F1"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this paper, we are interested in evaluating the performance of those recently\nproposed recurrent units (LSTM unit and GRU) on sequence modeling.\nBefore the empirical evaluation, we first describe each of those recurrent units\nin this section."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x1.png",
+            "alt": "Refer to caption",
+            "caption": "Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+            "label": "S3.F1"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Experiments Setting",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Tasks and Datasets",
+          "level": 3,
+          "paragraphs": [
+            "We compare the LSTM unit, GRU and $\\tanh$ unit in the task of sequence modeling.\nSequence modeling aims at learning a probability distribution over sequences, as\nin Eq. (3), by maximizing the log-likelihood of a model given a\nset of training sequences:",
+            "where $\\boldsymbol{\\theta}$ is a set of model parameters. More specifically, we evaluate these\nunits in the tasks of polyphonic music modeling and speech signal modeling.",
+            "For the polyphonic music modeling, we use three polyphonic music\ndatasets from (Boulanger-Lewandowski et al., 2012): Nottingham, JSB\nChorales, MuseData and Piano-midi. These datasets contain\nsequences of which each symbol is respectively a $93$-, $96$-, $105$-, and\n$108$-dimensional binary vector. We use logistic sigmoid function\nas output units.",
+            "We use two internal datasets provided by Ubisoft22\nhttp://www.ubi.com/ for speech signal modeling. Each sequence is an one-dimensional\nraw audio signal, and at each time step, we design a recurrent\nneural network to look at $20$ consecutive samples to predict the\nfollowing $10$ consecutive samples. We have used two different\nversions of the dataset: One with sequences of length $500$\n(Ubisoft A) and the other with sequences of length $8,000$ (Ubisoft B).\nUbisoft A and Ubisoft B have $7,230$ and $800$ sequences each.\nWe use mixture of Gaussians with 20 components as output layer.\n33Our implementation is available at https://github.com/jych/librnn.git"
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We compare the LSTM unit, GRU and $\\tanh$ unit in the task of sequence modeling.\nSequence modeling aims at learning a probability distribution over sequences, as\nin Eq. (3), by maximizing the log-likelihood of a model given a\nset of training sequences:"
+            },
+            {
+              "type": "para",
+              "data": "where $\\boldsymbol{\\theta}$ is a set of model parameters. More specifically, we evaluate these\nunits in the tasks of polyphonic music modeling and speech signal modeling."
+            },
+            {
+              "type": "para",
+              "data": "For the polyphonic music modeling, we use three polyphonic music\ndatasets from (Boulanger-Lewandowski et al., 2012): Nottingham, JSB\nChorales, MuseData and Piano-midi. These datasets contain\nsequences of which each symbol is respectively a $93$-, $96$-, $105$-, and\n$108$-dimensional binary vector. We use logistic sigmoid function\nas output units."
+            },
+            {
+              "type": "para",
+              "data": "We use two internal datasets provided by Ubisoft22\nhttp://www.ubi.com/ for speech signal modeling. Each sequence is an one-dimensional\nraw audio signal, and at each time step, we design a recurrent\nneural network to look at $20$ consecutive samples to predict the\nfollowing $10$ consecutive samples. We have used two different\nversions of the dataset: One with sequences of length $500$\n(Ubisoft A) and the other with sequences of length $8,000$ (Ubisoft B).\nUbisoft A and Ubisoft B have $7,230$ and $800$ sequences each.\nWe use mixture of Gaussians with 20 components as output layer.\n33Our implementation is available at https://github.com/jych/librnn.git"
+            }
+          ]
+        },
+        {
+          "title": "Models",
+          "level": 3,
+          "paragraphs": [
+            "For each task, we train three different recurrent neural\nnetworks, each having either LSTM units (LSTM-RNN, see\nSec. 3.1), GRUs (GRU-RNN, see Sec. 3.2) or $\\tanh$\nunits ($\\tanh$-RNN, see Eq. (2)). As the primary objective of\nthese experiments is to compare all three units fairly, we choose\nthe size of each model so that each model has approximately the\nsame number of parameters. We intentionally made the models to be\nsmall enough in order to avoid overfitting which can easily\ndistract the comparison. This approach of comparing different\ntypes of hidden units in neural networks has been done before,\nfor instance, by Gulcehre et al. (2014). See\nTable 1 for the details of the model\nsizes.",
+            "We train each model with RMSProp (see,\ne.g., Hinton, 2012) and use weight noise with standard\ndeviation fixed to $0.075$ (Graves, 2011). At every\nupdate, we rescale the norm of the gradient to $1$, if it is\nlarger than $1$ (Pascanu et al., 2013) to prevent\nexploding gradients. We select a learning rate (scalar\nmultiplier in RMSProp) to maximize the validation performance,\nout of $10$ randomly chosen log-uniform candidates sampled from\n$\\mathcal{U}(-12,-6)~{}$(Bergstra and Bengio, 2012).\nThe validation set is used for early-stop training as well."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Figure 1: Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+              "headers": [],
+              "rows": [
+                [
+                  "# of Units",
+                  "# of Parameters"
+                ],
+                [
+                  "36",
+                  "≈19.8×103absent19.8superscript103\\approx 19.8\\times 10^{3}"
+                ],
+                [
+                  "46",
+                  "≈20.2×103absent20.2superscript103\\approx 20.2\\times 10^{3}"
+                ],
+                [
+                  "100",
+                  "≈20.1×103absent20.1superscript103\\approx 20.1\\times 10^{3}"
+                ],
+                [
+                  "195",
+                  "≈169.1×103absent169.1superscript103\\approx 169.1\\times 10^{3}"
+                ],
+                [
+                  "227",
+                  "≈168.9×103absent168.9superscript103\\approx 168.9\\times 10^{3}"
+                ],
+                [
+                  "400",
+                  "≈168.4×103absent168.4superscript103\\approx 168.4\\times 10^{3}"
+                ]
+              ],
+              "label": null
+            },
+            {
+              "caption": "The sizes of the models tested in the experiments.",
+              "headers": [
+                "",
+                "tanh\\tanh",
+                "GRU",
+                "LSTM"
+              ],
+              "rows": [
+                [
+                  "train",
+                  "test",
+                  "3.22 3.13",
+                  "3.22",
+                  "3.13",
+                  "2.79 3.23",
+                  "2.79",
+                  "3.23",
+                  "3.08 3.20",
+                  "3.08",
+                  "3.20"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "3.22"
+                ],
+                [
+                  "3.13"
+                ],
+                [
+                  "2.79"
+                ],
+                [
+                  "3.23"
+                ],
+                [
+                  "3.08"
+                ],
+                [
+                  "3.20"
+                ],
+                [
+                  "train",
+                  "test",
+                  "8.82 9.10",
+                  "8.82",
+                  "9.10",
+                  "6.94 8.54",
+                  "6.94",
+                  "8.54",
+                  "8.15 8.67",
+                  "8.15",
+                  "8.67"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "8.82"
+                ],
+                [
+                  "9.10"
+                ],
+                [
+                  "6.94"
+                ],
+                [
+                  "8.54"
+                ],
+                [
+                  "8.15"
+                ],
+                [
+                  "8.67"
+                ],
+                [
+                  "train",
+                  "test",
+                  "5.64 6.23",
+                  "5.64",
+                  "6.23",
+                  "5.06 5.99",
+                  "5.06",
+                  "5.99",
+                  "5.18 6.23",
+                  "5.18",
+                  "6.23"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "5.64"
+                ],
+                [
+                  "6.23"
+                ],
+                [
+                  "5.06"
+                ],
+                [
+                  "5.99"
+                ],
+                [
+                  "5.18"
+                ],
+                [
+                  "6.23"
+                ],
+                [
+                  "train",
+                  "test",
+                  "5.64 9.03",
+                  "5.64",
+                  "9.03",
+                  "4.93 8.82",
+                  "4.93",
+                  "8.82",
+                  "6.49 9.03",
+                  "6.49",
+                  "9.03"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "5.64"
+                ],
+                [
+                  "9.03"
+                ],
+                [
+                  "4.93"
+                ],
+                [
+                  "8.82"
+                ],
+                [
+                  "6.49"
+                ],
+                [
+                  "9.03"
+                ],
+                [
+                  "train",
+                  "test",
+                  "6.29 6.44",
+                  "6.29",
+                  "6.44",
+                  "2.31 3.59",
+                  "2.31",
+                  "3.59",
+                  "1.44 2.70",
+                  "1.44",
+                  "2.70"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "6.29"
+                ],
+                [
+                  "6.44"
+                ],
+                [
+                  "2.31"
+                ],
+                [
+                  "3.59"
+                ],
+                [
+                  "1.44"
+                ],
+                [
+                  "2.70"
+                ],
+                [
+                  "train",
+                  "test",
+                  "7.61 7.62",
+                  "7.61",
+                  "7.62",
+                  "0.38 0.88",
+                  "0.38",
+                  "0.88",
+                  "0.80 1.26",
+                  "0.80",
+                  "1.26"
+                ],
+                [
+                  "train"
+                ],
+                [
+                  "test"
+                ],
+                [
+                  "7.61"
+                ],
+                [
+                  "7.62"
+                ],
+                [
+                  "0.38"
+                ],
+                [
+                  "0.88"
+                ],
+                [
+                  "0.80"
+                ],
+                [
+                  "1.26"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "For each task, we train three different recurrent neural\nnetworks, each having either LSTM units (LSTM-RNN, see\nSec. 3.1), GRUs (GRU-RNN, see Sec. 3.2) or $\\tanh$\nunits ($\\tanh$-RNN, see Eq. (2)). As the primary objective of\nthese experiments is to compare all three units fairly, we choose\nthe size of each model so that each model has approximately the\nsame number of parameters. We intentionally made the models to be\nsmall enough in order to avoid overfitting which can easily\ndistract the comparison. This approach of comparing different\ntypes of hidden units in neural networks has been done before,\nfor instance, by Gulcehre et al. (2014). See\nTable 1 for the details of the model\nsizes."
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Figure 1: Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+                "headers": [],
+                "rows": [
+                  [
+                    "# of Units",
+                    "# of Parameters"
+                  ],
+                  [
+                    "36",
+                    "≈19.8×103absent19.8superscript103\\approx 19.8\\times 10^{3}"
+                  ],
+                  [
+                    "46",
+                    "≈20.2×103absent20.2superscript103\\approx 20.2\\times 10^{3}"
+                  ],
+                  [
+                    "100",
+                    "≈20.1×103absent20.1superscript103\\approx 20.1\\times 10^{3}"
+                  ],
+                  [
+                    "195",
+                    "≈169.1×103absent169.1superscript103\\approx 169.1\\times 10^{3}"
+                  ],
+                  [
+                    "227",
+                    "≈168.9×103absent168.9superscript103\\approx 168.9\\times 10^{3}"
+                  ],
+                  [
+                    "400",
+                    "≈168.4×103absent168.4superscript103\\approx 168.4\\times 10^{3}"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "The sizes of the models tested in the experiments.",
+                "headers": [
+                  "",
+                  "tanh\\tanh",
+                  "GRU",
+                  "LSTM"
+                ],
+                "rows": [
+                  [
+                    "train",
+                    "test",
+                    "3.22 3.13",
+                    "3.22",
+                    "3.13",
+                    "2.79 3.23",
+                    "2.79",
+                    "3.23",
+                    "3.08 3.20",
+                    "3.08",
+                    "3.20"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "3.22"
+                  ],
+                  [
+                    "3.13"
+                  ],
+                  [
+                    "2.79"
+                  ],
+                  [
+                    "3.23"
+                  ],
+                  [
+                    "3.08"
+                  ],
+                  [
+                    "3.20"
+                  ],
+                  [
+                    "train",
+                    "test",
+                    "8.82 9.10",
+                    "8.82",
+                    "9.10",
+                    "6.94 8.54",
+                    "6.94",
+                    "8.54",
+                    "8.15 8.67",
+                    "8.15",
+                    "8.67"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "8.82"
+                  ],
+                  [
+                    "9.10"
+                  ],
+                  [
+                    "6.94"
+                  ],
+                  [
+                    "8.54"
+                  ],
+                  [
+                    "8.15"
+                  ],
+                  [
+                    "8.67"
+                  ],
+                  [
+                    "train",
+                    "test",
+                    "5.64 6.23",
+                    "5.64",
+                    "6.23",
+                    "5.06 5.99",
+                    "5.06",
+                    "5.99",
+                    "5.18 6.23",
+                    "5.18",
+                    "6.23"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "5.64"
+                  ],
+                  [
+                    "6.23"
+                  ],
+                  [
+                    "5.06"
+                  ],
+                  [
+                    "5.99"
+                  ],
+                  [
+                    "5.18"
+                  ],
+                  [
+                    "6.23"
+                  ],
+                  [
+                    "train",
+                    "test",
+                    "5.64 9.03",
+                    "5.64",
+                    "9.03",
+                    "4.93 8.82",
+                    "4.93",
+                    "8.82",
+                    "6.49 9.03",
+                    "6.49",
+                    "9.03"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "5.64"
+                  ],
+                  [
+                    "9.03"
+                  ],
+                  [
+                    "4.93"
+                  ],
+                  [
+                    "8.82"
+                  ],
+                  [
+                    "6.49"
+                  ],
+                  [
+                    "9.03"
+                  ],
+                  [
+                    "train",
+                    "test",
+                    "6.29 6.44",
+                    "6.29",
+                    "6.44",
+                    "2.31 3.59",
+                    "2.31",
+                    "3.59",
+                    "1.44 2.70",
+                    "1.44",
+                    "2.70"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "6.29"
+                  ],
+                  [
+                    "6.44"
+                  ],
+                  [
+                    "2.31"
+                  ],
+                  [
+                    "3.59"
+                  ],
+                  [
+                    "1.44"
+                  ],
+                  [
+                    "2.70"
+                  ],
+                  [
+                    "train",
+                    "test",
+                    "7.61 7.62",
+                    "7.61",
+                    "7.62",
+                    "0.38 0.88",
+                    "0.38",
+                    "0.88",
+                    "0.80 1.26",
+                    "0.80",
+                    "1.26"
+                  ],
+                  [
+                    "train"
+                  ],
+                  [
+                    "test"
+                  ],
+                  [
+                    "7.61"
+                  ],
+                  [
+                    "7.62"
+                  ],
+                  [
+                    "0.38"
+                  ],
+                  [
+                    "0.88"
+                  ],
+                  [
+                    "0.80"
+                  ],
+                  [
+                    "1.26"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "We train each model with RMSProp (see,\ne.g., Hinton, 2012) and use weight noise with standard\ndeviation fixed to $0.075$ (Graves, 2011). At every\nupdate, we rescale the norm of the gradient to $1$, if it is\nlarger than $1$ (Pascanu et al., 2013) to prevent\nexploding gradients. We select a learning rate (scalar\nmultiplier in RMSProp) to maximize the validation performance,\nout of $10$ randomly chosen log-uniform candidates sampled from\n$\\mathcal{U}(-12,-6)~{}$(Bergstra and Bengio, 2012).\nThe validation set is used for early-stop training as well."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Results and Analysis",
+      "level": 2,
+      "paragraphs": [
+        "Table 2 lists all the results from our\nexperiments.\nIn the case of the polyphonic music datasets, the GRU-RNN\noutperformed all the others (LSTM-RNN and $\\tanh$-RNN) on all the\ndatasets except for the Nottingham. However, we can see that on\nthese music datasets, all the three models performed closely to\neach other.",
+        "On the other hand, the RNNs with the gating units (GRU-RNN and\nLSTM-RNN) clearly outperformed the more traditional $\\tanh$-RNN\non both of the Ubisoft datasets. The LSTM-RNN was best with the\nUbisoft A, and with the Ubisoft B, the GRU-RNN performed best.",
+        "In Figs. 2–3, we show\nthe learning curves of the best validation runs. In the case of\nthe music datasets (Fig. 2), we see that\nthe GRU-RNN makes faster progress in terms of both the number of\nupdates and actual CPU time. If we consider the Ubisoft datasets\n(Fig. 3), it is clear that although the\ncomputational requirement for each update in the $\\tanh$-RNN is\nmuch smaller than the other models, it did not make much\nprogress each update and eventually stopped making any progress\nat much worse level.",
+        "These results clearly indicate the advantages of the gating units\nover the more traditional recurrent units. Convergence is often\nfaster, and the final solutions tend to be better. However, our\nresults are not conclusive in comparing the LSTM and the GRU,\nwhich suggests that the choice of the type of gated recurrent\nunit may depend heavily on the dataset and corresponding task."
+      ],
+      "subsections": [],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x3.png",
+          "alt": "Refer to caption",
+          "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+          "label": "S5.F2"
+        },
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x7.png",
+          "alt": "Refer to caption",
+          "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. x-axis is the number of epochs and y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+          "label": "S5.F3"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Table 2 lists all the results from our\nexperiments.\nIn the case of the polyphonic music datasets, the GRU-RNN\noutperformed all the others (LSTM-RNN and $\\tanh$-RNN) on all the\ndatasets except for the Nottingham. However, we can see that on\nthese music datasets, all the three models performed closely to\neach other."
+        },
+        {
+          "type": "para",
+          "data": "On the other hand, the RNNs with the gating units (GRU-RNN and\nLSTM-RNN) clearly outperformed the more traditional $\\tanh$-RNN\non both of the Ubisoft datasets. The LSTM-RNN was best with the\nUbisoft A, and with the Ubisoft B, the GRU-RNN performed best."
+        },
+        {
+          "type": "para",
+          "data": "In Figs. 2–3, we show\nthe learning curves of the best validation runs. In the case of\nthe music datasets (Fig. 2), we see that\nthe GRU-RNN makes faster progress in terms of both the number of\nupdates and actual CPU time. If we consider the Ubisoft datasets\n(Fig. 3), it is clear that although the\ncomputational requirement for each update in the $\\tanh$-RNN is\nmuch smaller than the other models, it did not make much\nprogress each update and eventually stopped making any progress\nat much worse level."
+        },
+        {
+          "type": "para",
+          "data": "These results clearly indicate the advantages of the gating units\nover the more traditional recurrent units. Convergence is often\nfaster, and the final solutions tend to be better. However, our\nresults are not conclusive in comparing the LSTM and the GRU,\nwhich suggests that the choice of the type of gated recurrent\nunit may depend heavily on the dataset and corresponding task."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x3.png",
+            "alt": "Refer to caption",
+            "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+            "label": "S5.F2"
+          }
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x7.png",
+            "alt": "Refer to caption",
+            "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. x-axis is the number of epochs and y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+            "label": "S5.F3"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "In this paper we empirically evaluated recurrent neural networks\n(RNN) with three widely used recurrent units; (1) a traditional\n$\\tanh$ unit, (2) a long short-term memory (LSTM) unit and (3) a\nrecently proposed gated recurrent unit (GRU). Our evaluation\nfocused on the task of sequence modeling on a number of datasets\nincluding polyphonic music data and raw speech signal data.",
+        "The evaluation clearly demonstrated the superiority of the gated\nunits; both the LSTM unit and GRU, over the traditional $\\tanh$\nunit. This was more evident with the more challenging task of raw\nspeech signal modeling. However, we could not make concrete\nconclusion on which of the two gating units was better.",
+        "We consider the experiments in this paper as preliminary. In\norder to understand better how a gated unit helps learning and to\nseparate out the contribution of each component, for instance\ngating units in the LSTM unit or the GRU, of the gating units,\nmore thorough experiments will be required in the future."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this paper we empirically evaluated recurrent neural networks\n(RNN) with three widely used recurrent units; (1) a traditional\n$\\tanh$ unit, (2) a long short-term memory (LSTM) unit and (3) a\nrecently proposed gated recurrent unit (GRU). Our evaluation\nfocused on the task of sequence modeling on a number of datasets\nincluding polyphonic music data and raw speech signal data."
+        },
+        {
+          "type": "para",
+          "data": "The evaluation clearly demonstrated the superiority of the gated\nunits; both the LSTM unit and GRU, over the traditional $\\tanh$\nunit. This was more evident with the more challenging task of raw\nspeech signal modeling. However, we could not make concrete\nconclusion on which of the two gating units was better."
+        },
+        {
+          "type": "para",
+          "data": "We consider the experiments in this paper as preliminary. In\norder to understand better how a gated unit helps learning and to\nseparate out the contribution of each component, for instance\ngating units in the LSTM unit or the GRU, of the gating units,\nmore thorough experiments will be required in the future."
+        }
+      ]
+    },
+    {
+      "title": "Acknowledgments",
+      "level": 2,
+      "paragraphs": [
+        "The authors would like to thank Ubisoft for providing the\ndatasets and for the support. The authors would like to thank\nthe developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012) and\nPylearn2 (Goodfellow et al., 2013). We acknowledge the support\nof the following agencies for research funding and computing\nsupport: NSERC, Calcul Québec, Compute Canada, the Canada\nResearch Chairs and CIFAR."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The authors would like to thank Ubisoft for providing the\ndatasets and for the support. The authors would like to thank\nthe developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012) and\nPylearn2 (Goodfellow et al., 2013). We acknowledge the support\nof the following agencies for research funding and computing\nsupport: NSERC, Calcul Québec, Compute Canada, the Canada\nResearch Chairs and CIFAR."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+      "label": "S3.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+      "label": "S5.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1412.3555/assets/x7.png",
+      "alt": "Refer to caption",
+      "caption": "Learning curves for training and validation sets of different types of units with respect to (top) the number of iterations and (bottom) the wall clock time. x-axis is the number of epochs and y-axis corresponds to the negative-log likelihood of the model shown in log-scale.",
+      "label": "S5.F3"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 1: Illustration of (a) LSTM and (b) gated recurrent units. (a) iii, fff and ooo are the input, forget and output gates, respectively. ccc and c~~c\\tilde{c} denote the memory cell and the new memory cell content. (b) rrr and zzz are the reset and update gates, and hhh and h~~h\\tilde{h} are the activation and the candidate activation.",
+      "headers": [],
+      "rows": [
+        [
+          "# of Units",
+          "# of Parameters"
+        ],
+        [
+          "36",
+          "≈19.8×103absent19.8superscript103\\approx 19.8\\times 10^{3}"
+        ],
+        [
+          "46",
+          "≈20.2×103absent20.2superscript103\\approx 20.2\\times 10^{3}"
+        ],
+        [
+          "100",
+          "≈20.1×103absent20.1superscript103\\approx 20.1\\times 10^{3}"
+        ],
+        [
+          "195",
+          "≈169.1×103absent169.1superscript103\\approx 169.1\\times 10^{3}"
+        ],
+        [
+          "227",
+          "≈168.9×103absent168.9superscript103\\approx 168.9\\times 10^{3}"
+        ],
+        [
+          "400",
+          "≈168.4×103absent168.4superscript103\\approx 168.4\\times 10^{3}"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [
+        "",
+        "tanh\\tanh",
+        "GRU",
+        "LSTM"
+      ],
+      "rows": [
+        [
+          "train",
+          "test",
+          "3.22 3.13",
+          "3.22",
+          "3.13",
+          "2.79 3.23",
+          "2.79",
+          "3.23",
+          "3.08 3.20",
+          "3.08",
+          "3.20"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "3.22"
+        ],
+        [
+          "3.13"
+        ],
+        [
+          "2.79"
+        ],
+        [
+          "3.23"
+        ],
+        [
+          "3.08"
+        ],
+        [
+          "3.20"
+        ],
+        [
+          "train",
+          "test",
+          "8.82 9.10",
+          "8.82",
+          "9.10",
+          "6.94 8.54",
+          "6.94",
+          "8.54",
+          "8.15 8.67",
+          "8.15",
+          "8.67"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "8.82"
+        ],
+        [
+          "9.10"
+        ],
+        [
+          "6.94"
+        ],
+        [
+          "8.54"
+        ],
+        [
+          "8.15"
+        ],
+        [
+          "8.67"
+        ],
+        [
+          "train",
+          "test",
+          "5.64 6.23",
+          "5.64",
+          "6.23",
+          "5.06 5.99",
+          "5.06",
+          "5.99",
+          "5.18 6.23",
+          "5.18",
+          "6.23"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "5.64"
+        ],
+        [
+          "6.23"
+        ],
+        [
+          "5.06"
+        ],
+        [
+          "5.99"
+        ],
+        [
+          "5.18"
+        ],
+        [
+          "6.23"
+        ],
+        [
+          "train",
+          "test",
+          "5.64 9.03",
+          "5.64",
+          "9.03",
+          "4.93 8.82",
+          "4.93",
+          "8.82",
+          "6.49 9.03",
+          "6.49",
+          "9.03"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "5.64"
+        ],
+        [
+          "9.03"
+        ],
+        [
+          "4.93"
+        ],
+        [
+          "8.82"
+        ],
+        [
+          "6.49"
+        ],
+        [
+          "9.03"
+        ],
+        [
+          "train",
+          "test",
+          "6.29 6.44",
+          "6.29",
+          "6.44",
+          "2.31 3.59",
+          "2.31",
+          "3.59",
+          "1.44 2.70",
+          "1.44",
+          "2.70"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "6.29"
+        ],
+        [
+          "6.44"
+        ],
+        [
+          "2.31"
+        ],
+        [
+          "3.59"
+        ],
+        [
+          "1.44"
+        ],
+        [
+          "2.70"
+        ],
+        [
+          "train",
+          "test",
+          "7.61 7.62",
+          "7.61",
+          "7.62",
+          "0.38 0.88",
+          "0.38",
+          "0.88",
+          "0.80 1.26",
+          "0.80",
+          "1.26"
+        ],
+        [
+          "train"
+        ],
+        [
+          "test"
+        ],
+        [
+          "7.61"
+        ],
+        [
+          "7.62"
+        ],
+        [
+          "0.38"
+        ],
+        [
+          "0.88"
+        ],
+        [
+          "0.80"
+        ],
+        [
+          "1.26"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "3.22"
+        ],
+        [
+          "3.13"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "2.79"
+        ],
+        [
+          "3.23"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "3.08"
+        ],
+        [
+          "3.20"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "8.82"
+        ],
+        [
+          "9.10"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "6.94"
+        ],
+        [
+          "8.54"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "8.15"
+        ],
+        [
+          "8.67"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "5.64"
+        ],
+        [
+          "6.23"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "5.06"
+        ],
+        [
+          "5.99"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "5.18"
+        ],
+        [
+          "6.23"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "5.64"
+        ],
+        [
+          "9.03"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "4.93"
+        ],
+        [
+          "8.82"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "6.49"
+        ],
+        [
+          "9.03"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "6.29"
+        ],
+        [
+          "6.44"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "2.31"
+        ],
+        [
+          "3.59"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "1.44"
+        ],
+        [
+          "2.70"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "train"
+        ],
+        [
+          "test"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "7.61"
+        ],
+        [
+          "7.62"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "0.38"
+        ],
+        [
+          "0.88"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "The sizes of the models tested in the experiments.",
+      "headers": [],
+      "rows": [
+        [
+          "0.80"
+        ],
+        [
+          "1.26"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\displaystyle\\mathbf{h}_{t}=",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbf{h}_{t}=",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbf{h}_{t}=g\\left(W\\mathbf{x}_{t}+U\\mathbf{h}_{t-1}\\right),",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\mathbf{h}_{t}=g\\left(W\\mathbf{x}_{t}+U\\mathbf{h}_{t-1}\\right),",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(x_{1},\\dots,x_{\\scriptscriptstyle{T}})=p(x_{1})p(x_{2}\\mid x_{1})p(x_{3}\\mid x_{1},x_{2})\\cdots p(x_{\\scriptscriptstyle{T}}\\mid x_{1},\\dots,x_{\\scriptscriptstyle{T-1}}),",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(x_{1},\\dots,x_{\\scriptscriptstyle{T}})=p(x_{1})p(x_{2}\\mid x_{1})p(x_{3}\\mid x_{1},x_{2})\\cdots p(x_{\\scriptscriptstyle{T}}\\mid x_{1},\\dots,x_{\\scriptscriptstyle{T-1}}),",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(x_{t}\\mid x_{1},\\dots,x_{t-1})=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(x_{t}\\mid x_{1},\\dots,x_{t-1})=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{t}^{j}=o_{t}^{j}\\tanh\\left(c_{t}^{j}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{t}^{j}=o_{t}^{j}\\tanh\\left(c_{t}^{j}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle o_{t}^{j}=\\sigma\\left(W_{o}\\mathbf{x}_{t}+U_{o}\\mathbf{h}_{t-1}+V_{o}\\mathbf{c}_{t}\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle o_{t}^{j}=\\sigma\\left(W_{o}\\mathbf{x}_{t}+U_{o}\\mathbf{h}_{t-1}+V_{o}\\mathbf{c}_{t}\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{t}^{j}=f_{t}^{j}c_{t-1}^{j}+i_{t}^{j}\\tilde{c}_{t}^{j},",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{t}^{j}=f_{t}^{j}c_{t-1}^{j}+i_{t}^{j}\\tilde{c}_{t}^{j},",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{c}_{t}^{j}=\\tanh\\left(W_{c}\\mathbf{x}_{t}+U_{c}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{c}_{t}^{j}=\\tanh\\left(W_{c}\\mathbf{x}_{t}+U_{c}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle f_{t}^{j}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle f_{t}^{j}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle i_{t}^{j}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{t}^{j}=(1-z_{t}^{j})h_{t-1}^{j}+z_{t}^{j}\\tilde{h}_{t}^{j},",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{t}^{j}=(1-z_{t}^{j})h_{t-1}^{j}+z_{t}^{j}\\tilde{h}_{t}^{j},",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle z_{t}^{j}=\\sigma\\left(W_{z}\\mathbf{x}_{t}+U_{z}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle z_{t}^{j}=\\sigma\\left(W_{z}\\mathbf{x}_{t}+U_{z}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+U\\left(\\mathbf{r}_{t}\\odot\\mathbf{h}_{t-1}\\right)\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+U\\left(\\mathbf{r}_{t}\\odot\\mathbf{h}_{t-1}\\right)\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+\\mathbf{r}_{t}\\odot\\left(U\\mathbf{h}_{t-1}\\right)\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+\\mathbf{r}_{t}\\odot\\left(U\\mathbf{h}_{t-1}\\right)\\right)^{j},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle r_{t}^{j}=\\sigma\\left(W_{r}\\mathbf{x}_{t}+U_{r}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle r_{t}^{j}=\\sigma\\left(W_{r}\\mathbf{x}_{t}+U_{r}\\mathbf{h}_{t-1}\\right)^{j}.",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\max_{\\boldsymbol{\\theta}}\\frac{1}{N}\\sum_{n=1}^{N}\\sum_{t=1}^{T_{n}}\\log p\\left(x_{t}^{n}\\mid x_{1}^{n},\\dots,x_{t-1}^{n};\\boldsymbol{\\theta}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\max_{\\boldsymbol{\\theta}}\\frac{1}{N}\\sum_{n=1}^{N}\\sum_{t=1}^{T_{n}}\\log p\\left(x_{t}^{n}\\mid x_{1}^{n},\\dots,x_{t-1}^{n};\\boldsymbol{\\theta}\\right),",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Bahdanau et al. (2014) D. Bahdanau, K. Cho, and Y. Bengio. Neural machine translation by jointly learning to align and translate. Technical report, arXiv preprint arXiv:1409.0473, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1409.0473",
+      "doi": null,
+      "url": null,
+      "citation_key": "Bahdanau et al. (2014)"
+    },
+    {
+      "raw_text": "Bastien et al. (2012) F. Bastien, P. Lamblin, R. Pascanu, J. Bergstra, I. J. Goodfellow, A. Bergeron, N. Bouchard, and Y. Bengio. Theano: new features and speed improvements. Deep Learning and Unsupervised Feature Learning NIPS 2012 Workshop, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bastien et al. (2012)"
+    },
+    {
+      "raw_text": "Bengio et al. (1994) Y. Bengio, P. Simard, and P. Frasconi. Learning long-term dependencies with gradient descent is difficult. IEEE Transactions on Neural Networks, 5(2):157–166, 1994.",
+      "title": null,
+      "authors": [],
+      "year": "1994",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bengio et al. (1994)"
+    },
+    {
+      "raw_text": "Bengio et al. (2013) Y. Bengio, N. Boulanger-Lewandowski, and R. Pascanu. Advances in optimizing recurrent networks. In Proc. ICASSP 38, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bengio et al. (2013)"
+    },
+    {
+      "raw_text": "Bergstra and Bengio (2012) J. Bergstra and Y. Bengio. Random search for hyper-parameter optimization. The Journal of Machine Learning Research, 13(1):281–305, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra and Bengio (2012)"
+    },
+    {
+      "raw_text": "Bergstra et al. (2010) J. Bergstra, O. Breuleux, F. Bastien, P. Lamblin, R. Pascanu, G. Desjardins, J. Turian, D. Warde-Farley, and Y. Bengio. Theano: a CPU and GPU math expression compiler. In Proceedings of the Python for Scientific Computing Conference (SciPy), June 2010. Oral Presentation.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra et al. (2010)"
+    },
+    {
+      "raw_text": "Boulanger-Lewandowski et al. (2012) N. Boulanger-Lewandowski, Y. Bengio, and P. Vincent. Modeling temporal dependencies in high-dimensional sequences: Application to polyphonic music generation and transcription. In Proceedings of the Twenty-nine International Conference on Machine Learning (ICML’12). ACM, 2012. URL http://icml.cc/discuss/2012/590.html.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://icml.cc/discuss/2012/590.html",
+      "citation_key": "Boulanger-Lewandowski et al. (2012)"
+    },
+    {
+      "raw_text": "Cho et al. (2014) K. Cho, B. van Merrienboer, D. Bahdanau, and Y. Bengio. On the properties of neural machine translation: Encoder-decoder approaches. arXiv preprint arXiv:1409.1259, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1409.1259",
+      "doi": null,
+      "url": null,
+      "citation_key": "Cho et al. (2014)"
+    },
+    {
+      "raw_text": "Goodfellow et al. (2013) I. J. Goodfellow, D. Warde-Farley, P. Lamblin, V. Dumoulin, M. Mirza, R. Pascanu, J. Bergstra, F. Bastien, and Y. Bengio. Pylearn2: a machine learning research library. arXiv preprint arXiv:1308.4214, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1308.4214",
+      "doi": null,
+      "url": null,
+      "citation_key": "Goodfellow et al. (2013)"
+    },
+    {
+      "raw_text": "Graves (2012) A. Graves. Supervised Sequence Labelling with Recurrent Neural Networks. Studies in Computational Intelligence. Springer, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves (2012)"
+    },
+    {
+      "raw_text": "Graves (2011) A. Graves. Practical variational inference for neural networks. In Advances in Neural Information Processing Systems, pages 2348–2356, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves (2011)"
+    },
+    {
+      "raw_text": "Graves (2013) A. Graves. Generating sequences with recurrent neural networks. arXiv preprint arXiv:1308.0850, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1308.0850",
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves (2013)"
+    },
+    {
+      "raw_text": "Graves et al. (2013) A. Graves, A.-r. Mohamed, and G. Hinton. Speech recognition with deep recurrent neural networks. In ICASSP’2013, pages 6645–6649. IEEE, 2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves et al. (2013)"
+    },
+    {
+      "raw_text": "Gulcehre et al. (2014) C. Gulcehre, K. Cho, R. Pascanu, and Y. Bengio. Learned-norm pooling for deep feedforward and recurrent neural networks. In Machine Learning and Knowledge Discovery in Databases, pages 530–546. Springer, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Gulcehre et al. (2014)"
+    },
+    {
+      "raw_text": "Hinton (2012) G. Hinton. Neural networks for machine learning. Coursera, video lectures, 2012.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hinton (2012)"
+    },
+    {
+      "raw_text": "Hochreiter (1991) S. Hochreiter. Untersuchungen zu dynamischen neuronalen Netzen. Diploma thesis, Institut für Informatik, Lehrstuhl Prof. Brauer, Technische Universität München, 1991. URL http://www7.informatik.tu-muenchen.de/~Ehochreit.",
+      "title": null,
+      "authors": [],
+      "year": "1991",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://www7.informatik.tu-muenchen.de/~Ehochreit",
+      "citation_key": "Hochreiter (1991)"
+    },
+    {
+      "raw_text": "Hochreiter and Schmidhuber (1997) S. Hochreiter and J. Schmidhuber. Long short-term memory. Neural Computation, 9(8):1735–1780, 1997.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hochreiter and Schmidhuber (1997)"
+    },
+    {
+      "raw_text": "Martens and Sutskever (2011) J. Martens and I. Sutskever. Learning recurrent neural networks with Hessian-free optimization. In Proc. ICML’2011. ACM, 2011.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Martens and Sutskever (2011)"
+    },
+    {
+      "raw_text": "Pascanu et al. (2013) R. Pascanu, T. Mikolov, and Y. Bengio. On the difficulty of training recurrent neural networks. In Proceedings of the 30th International Conference on Machine Learning (ICML’13). ACM, 2013. URL http://icml.cc/2013/.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "http://icml.cc/2013/",
+      "citation_key": "Pascanu et al. (2013)"
+    },
+    {
+      "raw_text": "Sutskever et al. (2014) I. Sutskever, O. Vinyals, and Q. V. Le. Sequence to sequence learning with neural networks. Technical report, arXiv preprint arXiv:1409.3215, 2014.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": "1409.3215",
+      "doi": null,
+      "url": null,
+      "citation_key": "Sutskever et al. (2014)"
+    }
+  ],
+  "full_text": "## Introduction\n\nRecurrent neural networks have recently shown promising results in many machine\nlearning tasks, especially when input and/or output are of variable\nlength (see, e.g., Graves, 2012). More recently, Sutskever et al. (2014)\nand Bahdanau et al. (2014) reported that recurrent neural networks are\nable to perform as well as the existing, well-developed systems on a challenging\ntask of machine translation.\n\nOne interesting observation, we make from these recent successes is that almost\nnone of these successes were achieved with a vanilla recurrent neural network. Rather, it was a\nrecurrent neural network with sophisticated recurrent hidden units, such as long\nshort-term memory units (Hochreiter and Schmidhuber, 1997), that was used in\nthose successful applications.\n\nAmong those sophisticated recurrent units, in this paper, we are interested in\nevaluating two closely related variants. One is a long short-term memory (LSTM)\nunit, and the other is a gated recurrent unit (GRU) proposed more recently by\nCho et al. (2014). It is well established in the field that the LSTM\nunit works well on sequence-based tasks with long-term dependencies, but the\nlatter has only recently been introduced and used in the context of machine\ntranslation.\n\nIn this paper, we evaluate these two units and a more traditional\n$\\tanh$ unit on the task of sequence modeling. We consider three\npolyphonic music datasets (see, e.g., Boulanger-Lewandowski et al., 2012) as well as two\ninternal datasets provided by Ubisoft in which each sample is a raw speech\nrepresentation.\n\nBased on our experiments, we concluded that by using fixed number of parameters for all models\non some datasets GRU, can outperform LSTM units both in terms of convergence in CPU time and\nin terms of parameter updates and generalization.\n\n## Background: Recurrent Neural Network\n\nA recurrent neural network (RNN) is an extension of a conventional feedforward neural\nnetwork, which is able to handle a variable-length sequence input. The RNN\nhandles the variable-length sequence by having a recurrent hidden state whose\nactivation at each time is dependent on that of the previous time.\n\nMore formally, given a sequence $\\mathbf{x}=\\left(\\mathbf{x}_{1},\\mathbf{x}_{2},\\cdots,\\mathbf{x}_{\\scriptscriptstyle{T}}\\right)$, the\nRNN updates its recurrent hidden state $h_{t}$ by\n\nwhere $\\phi$ is a nonlinear function such as composition of a logistic sigmoid with an affine transformation.\nOptionally, the RNN may have an output $\\mathbf{y}=\\left(y_{1},y_{2},\\dots,y_{\\scriptscriptstyle{T}}\\right)$ which\nmay again be of variable length.\n\nTraditionally, the update of the recurrent hidden state in Eq. (1) is implemented as\n\nwhere $g$ is a smooth, bounded function such as a logistic sigmoid function or a\nhyperbolic tangent function.\n\nA generative RNN outputs a probability distribution over the next element of the sequence,\ngiven its current state $\\mathbf{h}_{t}$, and this generative model can capture a distribution\nover sequences of variable length by using a special output symbol to represent\nthe end of the sequence. The sequence probability can be decomposed into\n\nwhere the last element is a special end-of-sequence value. We model each conditional probability distribution with\n\nwhere $h_{t}$ is from Eq. (1). Such generative RNNs are the subject\nof this paper.\n\nUnfortunately, it has been observed by, e.g., Bengio et al. (1994) that it is\ndifficult to train RNNs to capture long-term dependencies because the gradients\ntend to either vanish (most of the time) or explode (rarely, but with severe effects).\nThis makes gradient-based optimization method struggle, not just because of the\nvariations in gradient magnitudes but because of the effect of long-term dependencies\nis hidden (being exponentially smaller with respect to sequence length) by the\neffect of short-term dependencies.\nThere have been two dominant approaches by which many researchers have tried to reduce the negative\nimpacts of this issue. One such approach is to devise a better learning algorithm\nthan a simple stochastic gradient descent (see, e.g., Bengio et al., 2013; Pascanu et al., 2013; Martens and Sutskever, 2011),\nfor example using the very simple clipped gradient, by which the norm of the\ngradient vector is clipped, or using second-order methods which may be less sensitive\nto the issue if the second derivatives follow the same growth pattern as the first derivatives\n(which is not guaranteed to be the case).\n\nThe other approach, in which we are more interested in this paper, is to design\na more sophisticated activation function than a usual activation function,\nconsisting of affine transformation followed by a simple element-wise\nnonlinearity by using gating units. The earliest attempt in this direction\nresulted in an activation function, or a recurrent unit, called a long short-term memory (LSTM)\nunit (Hochreiter and Schmidhuber, 1997). More recently, another type of\nrecurrent unit, to which we refer as a gated recurrent unit (GRU), was proposed\nby Cho et al. (2014). RNNs employing either of these recurrent units\nhave been shown to perform well in tasks that require capturing long-term\ndependencies. Those tasks include, but are not limited to, speech\nrecognition (see, e.g., Graves et al., 2013) and machine\ntranslation (see, e.g., Sutskever et al., 2014; Bahdanau et al., 2014).\n\n## Gated Recurrent Neural Networks\n\nIn this paper, we are interested in evaluating the performance of those recently\nproposed recurrent units (LSTM unit and GRU) on sequence modeling.\nBefore the empirical evaluation, we first describe each of those recurrent units\nin this section.\n\n### Long Short-Term Memory Unit\n\nThe Long Short-Term Memory (LSTM) unit was initially proposed by\nHochreiter and Schmidhuber (1997). Since then, a number of minor modifications\nto the original LSTM unit have been made. We follow the implementation of LSTM as used in\nGraves (2013).\n\nUnlike to the recurrent unit which simply computes a weighted sum of the input signal and\napplies a nonlinear function, each $j$-th LSTM unit maintains a memory $c_{t}^{j}$ at\ntime $t$. The output $h_{t}^{j}$, or the activation, of the LSTM unit is then\n\nwhere $o_{t}^{j}$ is an output gate that modulates the amount of memory content\nexposure. The output gate is computed by\n\nwhere $\\sigma$ is a logistic sigmoid function. $V_{o}$ is a diagonal matrix.\n\nThe memory cell $c_{t}^{j}$ is updated by partially forgetting the existing memory and adding\na new memory content $\\tilde{c}_{t}^{j}$ :\n\nwhere the new memory content is\n\nThe extent to which the existing memory is forgotten is modulated by a forget gate $f_{t}^{j}$, and the degree to which the new memory content is added to\nthe memory cell is modulated by an input gate $i_{t}^{j}$. Gates are computed by\n\nNote that $V_{f}$ and $V_{i}$ are diagonal matrices.\n\nUnlike to the traditional recurrent unit which overwrites its content at each\ntime-step (see Eq. (2)), an LSTM unit is able to decide whether\nto keep the existing memory via the introduced gates. Intuitively, if the LSTM\nunit detects an important feature from an input sequence at early stage, it\neasily carries this information (the existence of the feature) over a long\ndistance, hence, capturing potential long-distance dependencies.\n\nSee Fig. 1 (a) for the graphical illustration.\n\n### Gated Recurrent Unit\n\nA gated recurrent unit (GRU) was proposed by Cho et al. (2014) to make\neach recurrent unit to adaptively capture dependencies of different time scales.\nSimilarly to the LSTM unit, the GRU has gating units that modulate the flow of information\ninside the unit, however, without having a separate memory cells.\n\nThe activation $h_{t}^{j}$ of the GRU at time $t$ is a linear interpolation between\nthe previous activation $h_{t-1}^{j}$ and the candidate activation $\\tilde{h}_{t}^{j}$:\n\nwhere an update gate $z_{t}^{j}$ decides how much the unit updates its activation,\nor content. The update gate is computed by\n\nThis procedure of taking a linear sum between the existing state and the newly\ncomputed state is similar to the LSTM unit. The GRU, however, does not have any\nmechanism to control the degree to which its state is exposed, but exposes the\nwhole state each time.\n\nThe candidate activation $\\tilde{h}_{t}^{j}$ is computed similarly to that of the traditional\nrecurrent unit (see Eq. (2)) and as in (Bahdanau et al., 2014),\n\nwhere $\\mathbf{r}_{t}$ is a set of reset gates and $\\odot$ is an element-wise\nmultiplication.\n11\nNote that we use the reset gate in a slightly different way from the\noriginal GRU proposed in Cho et al. (2014). Originally, the\ncandidate activation was computed by\n\n$\\displaystyle\\tilde{h}_{t}^{j}=\\tanh\\left(W\\mathbf{x}_{t}+\\mathbf{r}_{t}\\odot\\left(U\\mathbf{h}_{t-1}\\right)\\right)^{j},$\nwhere $r_{t}^{j}$ is a reset gate.\nWe found in our preliminary experiments that both of these\nformulations performed as well as each other.\nWhen off ($r_{t}^{j}$ close to $0$), the reset gate effectively makes the\nunit act as if it is reading the first symbol of an input sequence, allowing it\nto forget the previously computed state.\n\nThe reset gate $r_{t}^{j}$ is computed similarly to the update gate:\n\nSee Fig. 1 (b) for the graphical illustration of the GRU.\n\n### Discussion\n\nIt is easy to notice similarities between the LSTM unit and the GRU\nfrom Fig. 1.\n\nThe most prominent feature shared between these units is the additive component of their\nupdate from $t$ to $t+1$, which is lacking in the traditional recurrent unit. The traditional recurrent\nunit always replaces the activation, or the content of a unit with a new value\ncomputed from the current input and the previous hidden state. On the other\nhand, both LSTM unit and GRU keep the existing content and add the new content\non top of it (see Eqs. (4) and (5)).\n\nThis additive nature has two advantages. First, it is easy for each unit to\nremember the existence of a specific feature in the input stream for a long series of steps.\nAny important feature, decided by either the forget gate of the LSTM unit or the\nupdate gate of the GRU, will not be overwritten but be maintained as it is.\n\nSecond, and perhaps more importantly, this addition effectively creates shortcut\npaths that bypass multiple temporal steps. These shortcuts allow the error to be\nback-propagated easily without too quickly vanishing (if the gating unit is nearly\nsaturated at $1$) as a result of passing through multiple, bounded nonlinearities,\nthus reducing the difficulty due to vanishing gradients (Hochreiter, 1991; Bengio et al., 1994).\n\nThese two units however have a number of differences as well. One feature of the\nLSTM unit that is missing from the GRU is the controlled exposure of the memory\ncontent. In the LSTM unit, the amount of the memory content that is seen, or\nused by other units in the network is controlled by the output gate. On\nthe other hand the GRU exposes its full content without any control.\n\nAnother difference is in the location of the input gate, or the corresponding\nreset gate. The LSTM unit computes the new memory content without any separate\ncontrol of the amount of information flowing from the previous time step.\nRather, the LSTM unit controls the amount of the new memory content being added\nto the memory cell independently from the forget gate. On the other hand,\nthe GRU controls the information flow from the previous activation when\ncomputing the new, candidate activation, but does not independently control the\namount of the candidate activation being added (the control is tied via the\nupdate gate).\n\nFrom these similarities and differences alone, it is difficult to conclude which\ntypes of gating units would perform better in general. Although Bahdanau et al. (2014)\nreported that these two units performed comparably to each other according to\ntheir preliminary experiments on machine translation, it is unclear whether this\napplies as well to tasks other than machine translation. This motivates us to\nconduct more thorough empirical comparison between the LSTM unit and the GRU in\nthis paper.\n\n## Experiments Setting\n\n### Tasks and Datasets\n\nWe compare the LSTM unit, GRU and $\\tanh$ unit in the task of sequence modeling.\nSequence modeling aims at learning a probability distribution over sequences, as\nin Eq. (3), by maximizing the log-likelihood of a model given a\nset of training sequences:\n\nwhere $\\boldsymbol{\\theta}$ is a set of model parameters. More specifically, we evaluate these\nunits in the tasks of polyphonic music modeling and speech signal modeling.\n\nFor the polyphonic music modeling, we use three polyphonic music\ndatasets from (Boulanger-Lewandowski et al., 2012): Nottingham, JSB\nChorales, MuseData and Piano-midi. These datasets contain\nsequences of which each symbol is respectively a $93$-, $96$-, $105$-, and\n$108$-dimensional binary vector. We use logistic sigmoid function\nas output units.\n\nWe use two internal datasets provided by Ubisoft22\nhttp://www.ubi.com/ for speech signal modeling. Each sequence is an one-dimensional\nraw audio signal, and at each time step, we design a recurrent\nneural network to look at $20$ consecutive samples to predict the\nfollowing $10$ consecutive samples. We have used two different\nversions of the dataset: One with sequences of length $500$\n(Ubisoft A) and the other with sequences of length $8,000$ (Ubisoft B).\nUbisoft A and Ubisoft B have $7,230$ and $800$ sequences each.\nWe use mixture of Gaussians with 20 components as output layer.\n33Our implementation is available at https://github.com/jych/librnn.git\n\n### Models\n\nFor each task, we train three different recurrent neural\nnetworks, each having either LSTM units (LSTM-RNN, see\nSec. 3.1), GRUs (GRU-RNN, see Sec. 3.2) or $\\tanh$\nunits ($\\tanh$-RNN, see Eq. (2)). As the primary objective of\nthese experiments is to compare all three units fairly, we choose\nthe size of each model so that each model has approximately the\nsame number of parameters. We intentionally made the models to be\nsmall enough in order to avoid overfitting which can easily\ndistract the comparison. This approach of comparing different\ntypes of hidden units in neural networks has been done before,\nfor instance, by Gulcehre et al. (2014). See\nTable 1 for the details of the model\nsizes.\n\nWe train each model with RMSProp (see,\ne.g., Hinton, 2012) and use weight noise with standard\ndeviation fixed to $0.075$ (Graves, 2011). At every\nupdate, we rescale the norm of the gradient to $1$, if it is\nlarger than $1$ (Pascanu et al., 2013) to prevent\nexploding gradients. We select a learning rate (scalar\nmultiplier in RMSProp) to maximize the validation performance,\nout of $10$ randomly chosen log-uniform candidates sampled from\n$\\mathcal{U}(-12,-6)~{}$(Bergstra and Bengio, 2012).\nThe validation set is used for early-stop training as well.\n\n## Results and Analysis\n\nTable 2 lists all the results from our\nexperiments.\nIn the case of the polyphonic music datasets, the GRU-RNN\noutperformed all the others (LSTM-RNN and $\\tanh$-RNN) on all the\ndatasets except for the Nottingham. However, we can see that on\nthese music datasets, all the three models performed closely to\neach other.\n\nOn the other hand, the RNNs with the gating units (GRU-RNN and\nLSTM-RNN) clearly outperformed the more traditional $\\tanh$-RNN\non both of the Ubisoft datasets. The LSTM-RNN was best with the\nUbisoft A, and with the Ubisoft B, the GRU-RNN performed best.\n\nIn Figs. 2–3, we show\nthe learning curves of the best validation runs. In the case of\nthe music datasets (Fig. 2), we see that\nthe GRU-RNN makes faster progress in terms of both the number of\nupdates and actual CPU time. If we consider the Ubisoft datasets\n(Fig. 3), it is clear that although the\ncomputational requirement for each update in the $\\tanh$-RNN is\nmuch smaller than the other models, it did not make much\nprogress each update and eventually stopped making any progress\nat much worse level.\n\nThese results clearly indicate the advantages of the gating units\nover the more traditional recurrent units. Convergence is often\nfaster, and the final solutions tend to be better. However, our\nresults are not conclusive in comparing the LSTM and the GRU,\nwhich suggests that the choice of the type of gated recurrent\nunit may depend heavily on the dataset and corresponding task.\n\n## Conclusion\n\nIn this paper we empirically evaluated recurrent neural networks\n(RNN) with three widely used recurrent units; (1) a traditional\n$\\tanh$ unit, (2) a long short-term memory (LSTM) unit and (3) a\nrecently proposed gated recurrent unit (GRU). Our evaluation\nfocused on the task of sequence modeling on a number of datasets\nincluding polyphonic music data and raw speech signal data.\n\nThe evaluation clearly demonstrated the superiority of the gated\nunits; both the LSTM unit and GRU, over the traditional $\\tanh$\nunit. This was more evident with the more challenging task of raw\nspeech signal modeling. However, we could not make concrete\nconclusion on which of the two gating units was better.\n\nWe consider the experiments in this paper as preliminary. In\norder to understand better how a gated unit helps learning and to\nseparate out the contribution of each component, for instance\ngating units in the LSTM unit or the GRU, of the gating units,\nmore thorough experiments will be required in the future.\n\n## Acknowledgments\n\nThe authors would like to thank Ubisoft for providing the\ndatasets and for the support. The authors would like to thank\nthe developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012) and\nPylearn2 (Goodfellow et al., 2013). We acknowledge the support\nof the following agencies for research funding and computing\nsupport: NSERC, Calcul Québec, Compute Canada, the Canada\nResearch Chairs and CIFAR.\n",
+  "extracted_at": "2026-04-13T15:30:22.728641"
+}

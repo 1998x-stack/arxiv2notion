@@ -1,0 +1,24 @@
+{
+  "arxiv_id": "2310.15065v2",
+  "title": "Synergizing Human-AI Agency: A Guide of 23 Heuristics for Service Co-Creation with LLM-Based Agents",
+  "authors": [
+    "Qingxiao Zheng",
+    "Zhongwei Xu",
+    "Abhinav Choudhry",
+    "Yuting Chen",
+    "Yongming Li",
+    "Yun Huang"
+  ],
+  "abstract": "This empirical study serves as a primer for interested service providers to determine if and how Large Language Models (LLMs) technology will be integrated for their practitioners and the broader community. We investigate the mutual learning journey of non-AI experts and AI through CoAGent, a service co-creation tool with LLM-based agents. Engaging in a three-stage participatory design processes, we work with with 23 domain experts from public libraries across the U.S., uncovering their fundamental challenges of integrating AI into human workflows. Our findings provide 23 actionable \"heuristics for service co-creation with AI\", highlighting the nuanced shared responsibilities between humans and AI. We further exemplar 9 foundational agency aspects for AI, emphasizing essentials like ownership, fair treatment, and freedom of expression. Our innovative approach enriches the participatory design model by incorporating AI as crucial stakeholders and utilizing AI-AI interaction to identify blind spots. Collectively, these insights pave the way for synergistic and ethical human-AI co-creation in service contexts, preparing for workforce ecosystems where AI coexists.",
+  "categories": [
+    "cs.HC",
+    "cs.AI"
+  ],
+  "primary_category": "cs.HC",
+  "published": "2023-10-23T16:11:48+00:00",
+  "updated": "2023-11-29T22:37:21+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "V1.0 on Oct 25th, 2023",
+  "pdf_url": "https://arxiv.org/pdf/2310.15065v2.pdf"
+}

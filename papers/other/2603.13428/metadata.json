@@ -1,0 +1,32 @@
+{
+  "arxiv_id": "2603.13428v1",
+  "title": "EvoClaw: Evaluating AI Agents on Continuous Software Evolution",
+  "authors": [
+    "Gangda Deng",
+    "Zhaoling Chen",
+    "Zhongming Yu",
+    "Haoyang Fan",
+    "Yuhong Liu",
+    "Yuxin Yang",
+    "Dhruv Parikh",
+    "Rajgopal Kannan",
+    "Le Cong",
+    "Mengdi Wang",
+    "Qian Zhang",
+    "Viktor Prasanna",
+    "Xiangru Tang",
+    "Xingyao Wang"
+  ],
+  "abstract": "With AI agents increasingly deployed as long-running systems, it becomes essential to autonomously construct and continuously evolve customized software to enable interaction within dynamic environments. Yet, existing benchmarks evaluate agents on isolated, one-off coding tasks, neglecting the temporal dependencies and technical debt inherent in real-world software evolution. To bridge this gap, we introduce DeepCommit, an agentic pipeline that reconstructs verifiable Milestone DAGs from noisy commit logs, where milestones are defined as semantically cohesive development goals. These executable sequences enable EvoClaw, a novel benchmark that requires agents to sustain system integrity and limit error accumulation, dimensions of long-term software evolution largely missing from current benchmarks. Our evaluation of 12 frontier models across 4 agent frameworks reveals a critical vulnerability: overall performance scores drop significantly from $>$80% on isolated tasks to at most 38% in continuous settings, exposing agents' profound struggle with long-term maintenance and error propagation.",
+  "categories": [
+    "cs.SE",
+    "cs.AI"
+  ],
+  "primary_category": "cs.SE",
+  "published": "2026-03-13T03:20:40+00:00",
+  "updated": "2026-03-13T03:20:40+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2603.13428v1.pdf"
+}

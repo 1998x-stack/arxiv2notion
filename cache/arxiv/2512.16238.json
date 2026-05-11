@@ -1,0 +1,25 @@
+{
+  "arxiv_id": "2512.16238v2",
+  "title": "Trustworthy and Controllable Professional Knowledge Utilization in Large Language Models with TEE-GPU Execution",
+  "authors": [
+    "Yifeng Cai",
+    "Zhida An",
+    "Yuhan Meng",
+    "Houqian Liu",
+    "Pengli Wang",
+    "Hanwen Lei",
+    "Yao Guo",
+    "Ding Li"
+  ],
+  "abstract": "Future improvements in large language model (LLM) services increasingly hinge on access to high-value professional knowledge rather than more generic web data. However, the data providers of this knowledge face a skewed tradeoff between income and risk: they receive little share of downstream value yet retain copyright and privacy liability, making them reluctant to contribute their assets to LLM services. Existing techniques do not offer a trustworthy and controllable way to use professional knowledge, because they keep providers in the dark and combine knowledge parameters with the underlying LLM backbone. In this paper, we present PKUS, the Professional Knowledge Utilization System, which treats professional knowledge as a first-class, separable artifact. PKUS keeps the backbone model on GPUs and encodes each provider's contribution as a compact adapter that executes only inside an attested Trusted Execution Environment (TEE). A hardware-rooted lifecycle protocol, adapter pruning, multi-provider aggregation, and split-execution scheduling together make this design practical at serving time. On SST-2, MNLI, and SQuAD with GPT-2 Large and Llama-3.2-1B, PKUS preserves model utility, matching the accuracy and F1 of full fine-tuning and plain LoRA, while achieving the lowest per-request latency with 8.1-11.9x speedup over CPU-only TEE inference and naive CPU-GPU co-execution.",
+  "categories": [
+    "cs.OS"
+  ],
+  "primary_category": "cs.OS",
+  "published": "2025-12-18T06:33:24+00:00",
+  "updated": "2025-12-19T09:05:37+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2512.16238v2.pdf"
+}

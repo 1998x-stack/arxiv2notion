@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2404.00029v2",
+  "title": "Complementarity in Human-AI Collaboration: Concept, Sources, and Evidence",
+  "authors": [
+    "Patrick Hemmer",
+    "Max Schemmer",
+    "Niklas Kühl",
+    "Michael Vössing",
+    "Gerhard Satzger"
+  ],
+  "abstract": "Artificial intelligence (AI) has the potential to significantly enhance human performance across various domains. Ideally, collaboration between humans and AI should result in complementary team performance (CTP) -- a level of performance that neither of them can attain individually. So far, however, CTP has rarely been observed, suggesting an insufficient understanding of the principle and the application of complementarity. Therefore, we develop a general concept of complementarity and formalize its theoretical potential as well as the actual realized effect in decision-making situations. Moreover, we identify information and capability asymmetry as the two key sources of complementarity. Finally, we illustrate the impact of each source on complementarity potential and effect in two empirical studies. Our work provides researchers with a comprehensive theoretical foundation of human-AI complementarity in decision-making and demonstrates that leveraging these sources constitutes a viable pathway towards designing effective human-AI collaboration, i.e., the realization of CTP.",
+  "categories": [
+    "cs.HC",
+    "cs.AI"
+  ],
+  "primary_category": "cs.HC",
+  "published": "2024-03-21T07:27:17+00:00",
+  "updated": "2024-11-25T22:04:11+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2404.00029v2.pdf"
+}

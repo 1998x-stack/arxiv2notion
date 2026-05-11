@@ -1,0 +1,1652 @@
+{
+  "paper_id": "1409.0473",
+  "title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+  "authors": [
+    "Dzmitry Bahdanau Jacobs University Bremen, Germany &KyungHyun Cho Yoshua Bengio Université de Montréal"
+  ],
+  "affiliations": [],
+  "abstract": "Neural machine translation is a recently proposed approach to machine translation. Unlike the traditional statistical machine translation, the neural machine translation aims at building a single neural network that can be jointly tuned to maximize the translation performance. The models proposed recently for neural machine translation often belong to a family of encoder–decoders and encode a source sentence into a fixed-length vector from which a decoder generates a translation. In this paper, we conjecture that the use of a fixed-length vector is a bottleneck in improving the performance of this basic encoder–decoder architecture, and propose to extend this by allowing a model to automatically (soft-)search for parts of a source sentence that are relevant to predicting a target word, without having to form these parts as a hard segment explicitly. With this new approach, we achieve a translation performance comparable to the existing state-of-the-art phrase-based system on the task of English-to-French translation. Furthermore, qualitative analysis reveals that the (soft-)alignments found by the model agree well with our intuition.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Neural machine translation is a newly emerging approach to machine\ntranslation, recently proposed by Kalchbrenner and Blunsom (2013),\nSutskever et al. (2014) and Cho et al. (2014b). Unlike the traditional phrase-based\ntranslation system (see, e.g., Koehn et al., 2003) which consists of many small\nsub-components that are tuned separately, neural machine translation attempts\nto build and train a single, large neural network that reads a sentence and\noutputs a correct translation.",
+        "Most of the proposed neural machine translation models belong to a family of\nencoder–decoders (Sutskever et al., 2014; Cho et al., 2014a), with an encoder and a\ndecoder for each language, or involve a language-specific encoder applied to\neach sentence whose outputs are then compared (Hermann and Blunsom, 2014). An encoder\nneural network reads and encodes a source sentence into a fixed-length vector.\nA decoder then outputs a translation from the encoded vector. The whole\nencoder–decoder system, which consists of the encoder and the decoder for a\nlanguage pair, is jointly trained to maximize the probability of a correct\ntranslation given a source sentence.",
+        "A potential issue with this encoder–decoder approach is that a neural network\nneeds to be able to compress all the necessary information of a source sentence\ninto a fixed-length vector. This may make it difficult for the neural network\nto cope with long sentences, especially those that are longer than the\nsentences in the training corpus. Cho et al. (2014b) showed that indeed the\nperformance of a basic encoder–decoder deteriorates rapidly as the length of\nan input sentence increases.",
+        "In order to address this issue, we introduce an extension to the\nencoder–decoder model which learns to align and translate jointly. Each time\nthe proposed model generates a word in a translation, it (soft-)searches\nfor a set of positions in a source sentence where the most relevant information\nis concentrated. The model then predicts a target word based on the context\nvectors associated with these source positions and all the previous generated\ntarget words.",
+        "The most important distinguishing feature of this approach from the basic\nencoder–decoder is that it does not attempt to encode a whole input sentence\ninto a single fixed-length vector. Instead, it encodes the input sentence into\na sequence of vectors and chooses a subset of these vectors adaptively while\ndecoding the translation. This frees a neural translation model from having to\nsquash all the information of a source sentence, regardless of its length, into\na fixed-length vector. We show this allows a model to cope better with long\nsentences.",
+        "In this paper, we show that the proposed approach of jointly learning to align\nand translate achieves significantly improved translation performance over the\nbasic encoder–decoder approach. The improvement is more apparent with longer\nsentences, but can be observed with sentences of any length. On the task of\nEnglish-to-French translation, the proposed approach achieves, with a single\nmodel, a translation performance comparable, or close, to the conventional\nphrase-based system. Furthermore, qualitative analysis reveals that the\nproposed model finds a linguistically plausible (soft-)alignment between\na source sentence and the corresponding target sentence."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Neural machine translation is a newly emerging approach to machine\ntranslation, recently proposed by Kalchbrenner and Blunsom (2013),\nSutskever et al. (2014) and Cho et al. (2014b). Unlike the traditional phrase-based\ntranslation system (see, e.g., Koehn et al., 2003) which consists of many small\nsub-components that are tuned separately, neural machine translation attempts\nto build and train a single, large neural network that reads a sentence and\noutputs a correct translation."
+        },
+        {
+          "type": "para",
+          "data": "Most of the proposed neural machine translation models belong to a family of\nencoder–decoders (Sutskever et al., 2014; Cho et al., 2014a), with an encoder and a\ndecoder for each language, or involve a language-specific encoder applied to\neach sentence whose outputs are then compared (Hermann and Blunsom, 2014). An encoder\nneural network reads and encodes a source sentence into a fixed-length vector.\nA decoder then outputs a translation from the encoded vector. The whole\nencoder–decoder system, which consists of the encoder and the decoder for a\nlanguage pair, is jointly trained to maximize the probability of a correct\ntranslation given a source sentence."
+        },
+        {
+          "type": "para",
+          "data": "A potential issue with this encoder–decoder approach is that a neural network\nneeds to be able to compress all the necessary information of a source sentence\ninto a fixed-length vector. This may make it difficult for the neural network\nto cope with long sentences, especially those that are longer than the\nsentences in the training corpus. Cho et al. (2014b) showed that indeed the\nperformance of a basic encoder–decoder deteriorates rapidly as the length of\nan input sentence increases."
+        },
+        {
+          "type": "para",
+          "data": "In order to address this issue, we introduce an extension to the\nencoder–decoder model which learns to align and translate jointly. Each time\nthe proposed model generates a word in a translation, it (soft-)searches\nfor a set of positions in a source sentence where the most relevant information\nis concentrated. The model then predicts a target word based on the context\nvectors associated with these source positions and all the previous generated\ntarget words."
+        },
+        {
+          "type": "para",
+          "data": "The most important distinguishing feature of this approach from the basic\nencoder–decoder is that it does not attempt to encode a whole input sentence\ninto a single fixed-length vector. Instead, it encodes the input sentence into\na sequence of vectors and chooses a subset of these vectors adaptively while\ndecoding the translation. This frees a neural translation model from having to\nsquash all the information of a source sentence, regardless of its length, into\na fixed-length vector. We show this allows a model to cope better with long\nsentences."
+        },
+        {
+          "type": "para",
+          "data": "In this paper, we show that the proposed approach of jointly learning to align\nand translate achieves significantly improved translation performance over the\nbasic encoder–decoder approach. The improvement is more apparent with longer\nsentences, but can be observed with sentences of any length. On the task of\nEnglish-to-French translation, the proposed approach achieves, with a single\nmodel, a translation performance comparable, or close, to the conventional\nphrase-based system. Furthermore, qualitative analysis reveals that the\nproposed model finds a linguistically plausible (soft-)alignment between\na source sentence and the corresponding target sentence."
+        }
+      ]
+    },
+    {
+      "title": "Background: Neural Machine Translation",
+      "level": 2,
+      "paragraphs": [
+        "From a probabilistic perspective, translation is equivalent to finding a target\nsentence $\\mathbf{y}$ that maximizes the conditional probability of $\\mathbf{y}$ given a\nsource sentence $\\mathbf{x}$, i.e., $\\operatorname*{\\arg\\max}_{\\mathbf{y}}p(\\mathbf{y}\\mid\\mathbf{x})$. In neural\nmachine translation, we fit a parameterized model to maximize the conditional\nprobability of sentence pairs using a parallel training corpus. Once the\nconditional distribution is learned by a translation model, given a source\nsentence a corresponding translation can be generated by searching for the\nsentence that maximizes the conditional probability.",
+        "Recently, a number of papers have proposed the use of neural networks to\ndirectly learn this conditional distribution (see,\ne.g., Kalchbrenner and Blunsom, 2013; Cho et al., 2014a; Sutskever et al., 2014; Cho et al., 2014b; Forcada and Ñeco, 1997). This\nneural machine translation approach typically consists of two components, the\nfirst of which encodes a source sentence $\\mathbf{x}$ and the second decodes to a\ntarget sentence $\\mathbf{y}$. For instance, two recurrent neural networks (RNN) were\nused by (Cho et al., 2014a) and (Sutskever et al., 2014) to encode a variable-length\nsource sentence into a fixed-length vector and to decode the vector into a\nvariable-length target sentence.",
+        "Despite being a quite new approach, neural machine translation has already\nshown promising results. Sutskever et al. (2014) reported that the neural machine\ntranslation based on RNNs with long short-term memory (LSTM) units achieves\nclose to the state-of-the-art performance of the conventional phrase-based\nmachine translation system on an English-to-French translation task.11\nWe mean by the state-of-the-art performance, the performance of the\nconventional phrase-based system without using any neural network-based\ncomponent.\nAdding neural components to existing translation systems, for instance,\nto score the phrase pairs in the phrase table (Cho et al., 2014a) or to re-rank\ncandidate translations (Sutskever et al., 2014), has allowed to\nsurpass the previous state-of-the-art performance level."
+      ],
+      "subsections": [
+        {
+          "title": "RNN Encoder–Decoder",
+          "level": 3,
+          "paragraphs": [
+            "Here, we describe briefly the underlying framework, called RNN\nEncoder–Decoder, proposed by Cho et al. (2014a) and Sutskever et al. (2014) upon\nwhich we build a novel architecture that learns to align and translate\nsimultaneously.",
+            "In the Encoder–Decoder framework, an encoder reads the input sentence, a\nsequence of vectors $\\mathbf{x}=\\left(x_{1},\\cdots,x_{T_{x}}\\right)$, into a vector\n$c$.22\nAlthough most of the previous works (see,\ne.g., Cho et al., 2014a; Sutskever et al., 2014; Kalchbrenner and Blunsom, 2013) used to encode a\nvariable-length input sentence into a fixed-length vector, it is not\nnecessary, and even it may be beneficial to have a variable-length\nvector, as we will show later. The most common approach is to use an RNN such that",
+            "where $h_{t}\\in\\mathbb{R}^{n}$ is a hidden state at time $t$, and $c$ is a vector\ngenerated from the sequence of the hidden states. $f$ and $q$ are some\nnonlinear functions. Sutskever et al. (2014) used an LSTM as $f$ and\n$q\\left(\\left\\{h_{1},\\cdots,h_{T}\\right\\}\\right)=h_{T}$, for instance.",
+            "The decoder is often trained to predict the next word $y_{t^{\\prime}}$ given the context\nvector $c$ and all the previously predicted words $\\left\\{y_{1},\\cdots,y_{t^{\\prime}-1}\\right\\}$. In other words, the decoder defines a probability over the\ntranslation $\\mathbf{y}$ by decomposing the joint probability into the ordered\nconditionals:",
+            "where $\\mathbf{y}=\\left(y_{1},\\cdots,y_{T_{y}}\\right)$. With an RNN, each\nconditional probability is modeled as",
+            "where $g$ is a nonlinear, potentially multi-layered, function that outputs the\nprobability of $y_{t}$, and $s_{t}$ is the hidden state of the RNN. It should be\nnoted that other architectures such as a hybrid of an RNN and a\nde-convolutional neural network can be used (Kalchbrenner and Blunsom, 2013)."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Here, we describe briefly the underlying framework, called RNN\nEncoder–Decoder, proposed by Cho et al. (2014a) and Sutskever et al. (2014) upon\nwhich we build a novel architecture that learns to align and translate\nsimultaneously."
+            },
+            {
+              "type": "para",
+              "data": "In the Encoder–Decoder framework, an encoder reads the input sentence, a\nsequence of vectors $\\mathbf{x}=\\left(x_{1},\\cdots,x_{T_{x}}\\right)$, into a vector\n$c$.22\nAlthough most of the previous works (see,\ne.g., Cho et al., 2014a; Sutskever et al., 2014; Kalchbrenner and Blunsom, 2013) used to encode a\nvariable-length input sentence into a fixed-length vector, it is not\nnecessary, and even it may be beneficial to have a variable-length\nvector, as we will show later. The most common approach is to use an RNN such that"
+            },
+            {
+              "type": "para",
+              "data": "where $h_{t}\\in\\mathbb{R}^{n}$ is a hidden state at time $t$, and $c$ is a vector\ngenerated from the sequence of the hidden states. $f$ and $q$ are some\nnonlinear functions. Sutskever et al. (2014) used an LSTM as $f$ and\n$q\\left(\\left\\{h_{1},\\cdots,h_{T}\\right\\}\\right)=h_{T}$, for instance."
+            },
+            {
+              "type": "para",
+              "data": "The decoder is often trained to predict the next word $y_{t^{\\prime}}$ given the context\nvector $c$ and all the previously predicted words $\\left\\{y_{1},\\cdots,y_{t^{\\prime}-1}\\right\\}$. In other words, the decoder defines a probability over the\ntranslation $\\mathbf{y}$ by decomposing the joint probability into the ordered\nconditionals:"
+            },
+            {
+              "type": "para",
+              "data": "where $\\mathbf{y}=\\left(y_{1},\\cdots,y_{T_{y}}\\right)$. With an RNN, each\nconditional probability is modeled as"
+            },
+            {
+              "type": "para",
+              "data": "where $g$ is a nonlinear, potentially multi-layered, function that outputs the\nprobability of $y_{t}$, and $s_{t}$ is the hidden state of the RNN. It should be\nnoted that other architectures such as a hybrid of an RNN and a\nde-convolutional neural network can be used (Kalchbrenner and Blunsom, 2013)."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "From a probabilistic perspective, translation is equivalent to finding a target\nsentence $\\mathbf{y}$ that maximizes the conditional probability of $\\mathbf{y}$ given a\nsource sentence $\\mathbf{x}$, i.e., $\\operatorname*{\\arg\\max}_{\\mathbf{y}}p(\\mathbf{y}\\mid\\mathbf{x})$. In neural\nmachine translation, we fit a parameterized model to maximize the conditional\nprobability of sentence pairs using a parallel training corpus. Once the\nconditional distribution is learned by a translation model, given a source\nsentence a corresponding translation can be generated by searching for the\nsentence that maximizes the conditional probability."
+        },
+        {
+          "type": "para",
+          "data": "Recently, a number of papers have proposed the use of neural networks to\ndirectly learn this conditional distribution (see,\ne.g., Kalchbrenner and Blunsom, 2013; Cho et al., 2014a; Sutskever et al., 2014; Cho et al., 2014b; Forcada and Ñeco, 1997). This\nneural machine translation approach typically consists of two components, the\nfirst of which encodes a source sentence $\\mathbf{x}$ and the second decodes to a\ntarget sentence $\\mathbf{y}$. For instance, two recurrent neural networks (RNN) were\nused by (Cho et al., 2014a) and (Sutskever et al., 2014) to encode a variable-length\nsource sentence into a fixed-length vector and to decode the vector into a\nvariable-length target sentence."
+        },
+        {
+          "type": "para",
+          "data": "Despite being a quite new approach, neural machine translation has already\nshown promising results. Sutskever et al. (2014) reported that the neural machine\ntranslation based on RNNs with long short-term memory (LSTM) units achieves\nclose to the state-of-the-art performance of the conventional phrase-based\nmachine translation system on an English-to-French translation task.11\nWe mean by the state-of-the-art performance, the performance of the\nconventional phrase-based system without using any neural network-based\ncomponent.\nAdding neural components to existing translation systems, for instance,\nto score the phrase pairs in the phrase table (Cho et al., 2014a) or to re-rank\ncandidate translations (Sutskever et al., 2014), has allowed to\nsurpass the previous state-of-the-art performance level."
+        }
+      ]
+    },
+    {
+      "title": "Learning to Align and Translate",
+      "level": 2,
+      "paragraphs": [
+        "In this section, we propose a novel architecture for neural machine\ntranslation. The new architecture consists of a bidirectional RNN as an\nencoder (Sec. 3.2) and a decoder that emulates\nsearching through a source sentence during decoding a translation\n(Sec. 3.1)."
+      ],
+      "subsections": [
+        {
+          "title": "Decoder: General Description",
+          "level": 3,
+          "paragraphs": [
+            "In a new model architecture, we define each conditional probability in\nEq. (2) as:",
+            "where $s_{i}$ is an RNN hidden state for time $i$, computed by",
+            "It should be noted that unlike the existing encoder–decoder approach (see\nEq. (2)), here the probability is conditioned on a distinct\ncontext vector $c_{i}$ for each target word $y_{i}$.",
+            "The context vector $c_{i}$ depends on a sequence of annotations $(h_{1},\\cdots,h_{T_{x}})$ to which an encoder maps the input sentence. Each annotation\n$h_{i}$ contains information about the whole input sequence with a strong focus\non the parts surrounding the $i$-th word of the input sequence. We explain in\ndetail how the annotations are computed in the next section.",
+            "The context vector $c_{i}$ is, then, computed as a weighted sum of these\nannotations $h_{i}$:",
+            "The weight $\\alpha_{ij}$ of each annotation $h_{j}$ is computed by",
+            "is an alignment model which scores how well the inputs around\nposition $j$ and the output at position $i$ match. The score is based on\nthe RNN hidden state $s_{i-1}$ (just before emitting $y_{i}$,\nEq. (4)) and the $j$-th annotation $h_{j}$ of the input\nsentence.",
+            "We parametrize the alignment model $a$ as a feedforward neural network which is\njointly trained with all the other components of the proposed system. Note\nthat unlike in traditional machine translation, the alignment is not considered\nto be a latent variable. Instead, the alignment model directly computes a soft\nalignment, which allows the gradient of the cost function to be backpropagated\nthrough. This gradient can be used to train the alignment model as well as the\nwhole translation model jointly.",
+            "We can understand the approach of taking a weighted sum of all the annotations\nas computing an expected annotation, where the expectation is over\npossible alignments. Let $\\alpha_{ij}$ be a probability that the target word\n$y_{i}$ is aligned to, or translated from, a source word $x_{j}$. Then, the $i$-th\ncontext vector $c_{i}$ is the expected annotation over all the annotations with\nprobabilities $\\alpha_{ij}$.",
+            "The probability $\\alpha_{ij}$, or its associated energy $e_{ij}$, reflects the\nimportance of the annotation $h_{j}$ with respect to the previous hidden state\n$s_{i-1}$ in deciding the next state $s_{i}$ and generating $y_{i}$. Intuitively,\nthis implements a mechanism of attention in the decoder. The decoder decides\nparts of the source sentence to pay attention to. By letting the decoder have an\nattention mechanism, we relieve the encoder from the burden of having to encode\nall information in the source sentence into a fixed-length vector. With this new\napproach the information can be spread throughout the sequence of annotations,\nwhich can be selectively retrieved by the decoder accordingly."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x1.png",
+              "alt": "Refer to caption",
+              "caption": "The graphical illustration of the proposed model trying to generate the ttt-th target word ytsubscriptyty_{t} given a source sentence (x1,x2,...,xT)subscriptx1subscriptx2...subscriptxT(x_{1},x_{2},\\dots,x_{T}).",
+              "label": "S3.F1"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x1.png",
+                "alt": "Refer to caption",
+                "caption": "The graphical illustration of the proposed model trying to generate the ttt-th target word ytsubscriptyty_{t} given a source sentence (x1,x2,...,xT)subscriptx1subscriptx2...subscriptxT(x_{1},x_{2},\\dots,x_{T}).",
+                "label": "S3.F1"
+              }
+            },
+            {
+              "type": "para",
+              "data": "In a new model architecture, we define each conditional probability in\nEq. (2) as:"
+            },
+            {
+              "type": "para",
+              "data": "where $s_{i}$ is an RNN hidden state for time $i$, computed by"
+            },
+            {
+              "type": "para",
+              "data": "It should be noted that unlike the existing encoder–decoder approach (see\nEq. (2)), here the probability is conditioned on a distinct\ncontext vector $c_{i}$ for each target word $y_{i}$."
+            },
+            {
+              "type": "para",
+              "data": "The context vector $c_{i}$ depends on a sequence of annotations $(h_{1},\\cdots,h_{T_{x}})$ to which an encoder maps the input sentence. Each annotation\n$h_{i}$ contains information about the whole input sequence with a strong focus\non the parts surrounding the $i$-th word of the input sequence. We explain in\ndetail how the annotations are computed in the next section."
+            },
+            {
+              "type": "para",
+              "data": "The context vector $c_{i}$ is, then, computed as a weighted sum of these\nannotations $h_{i}$:"
+            },
+            {
+              "type": "para",
+              "data": "The weight $\\alpha_{ij}$ of each annotation $h_{j}$ is computed by"
+            },
+            {
+              "type": "para",
+              "data": "is an alignment model which scores how well the inputs around\nposition $j$ and the output at position $i$ match. The score is based on\nthe RNN hidden state $s_{i-1}$ (just before emitting $y_{i}$,\nEq. (4)) and the $j$-th annotation $h_{j}$ of the input\nsentence."
+            },
+            {
+              "type": "para",
+              "data": "We parametrize the alignment model $a$ as a feedforward neural network which is\njointly trained with all the other components of the proposed system. Note\nthat unlike in traditional machine translation, the alignment is not considered\nto be a latent variable. Instead, the alignment model directly computes a soft\nalignment, which allows the gradient of the cost function to be backpropagated\nthrough. This gradient can be used to train the alignment model as well as the\nwhole translation model jointly."
+            },
+            {
+              "type": "para",
+              "data": "We can understand the approach of taking a weighted sum of all the annotations\nas computing an expected annotation, where the expectation is over\npossible alignments. Let $\\alpha_{ij}$ be a probability that the target word\n$y_{i}$ is aligned to, or translated from, a source word $x_{j}$. Then, the $i$-th\ncontext vector $c_{i}$ is the expected annotation over all the annotations with\nprobabilities $\\alpha_{ij}$."
+            },
+            {
+              "type": "para",
+              "data": "The probability $\\alpha_{ij}$, or its associated energy $e_{ij}$, reflects the\nimportance of the annotation $h_{j}$ with respect to the previous hidden state\n$s_{i-1}$ in deciding the next state $s_{i}$ and generating $y_{i}$. Intuitively,\nthis implements a mechanism of attention in the decoder. The decoder decides\nparts of the source sentence to pay attention to. By letting the decoder have an\nattention mechanism, we relieve the encoder from the burden of having to encode\nall information in the source sentence into a fixed-length vector. With this new\napproach the information can be spread throughout the sequence of annotations,\nwhich can be selectively retrieved by the decoder accordingly."
+            }
+          ]
+        },
+        {
+          "title": "Encoder: Bidirectional RNN for Annotating Sequences",
+          "level": 3,
+          "paragraphs": [
+            "The usual RNN, described in Eq. (1), reads an input\nsequence $\\mathbf{x}$ in order starting from the first symbol $x_{1}$ to the last one\n$x_{T_{x}}$. However, in the proposed scheme, we would like the annotation of each\nword to summarize not only the preceding words, but also the following words.\nHence, we propose to use a bidirectional RNN (BiRNN, Schuster and Paliwal, 1997),\nwhich has been successfully used recently in speech recognition (see,\ne.g., Graves et al., 2013).",
+            "A BiRNN consists of forward and backward RNN’s. The forward RNN $\\overrightarrow{f}$ reads\nthe input sequence as it is ordered (from $x_{1}$ to $x_{T_{x}}$) and calculates a\nsequence of forward hidden states $(\\overrightarrow{h}_{1},\\cdots,\\overrightarrow{h}_{T_{x}})$.\nThe backward RNN $\\overleftarrow{f}$ reads the sequence in the reverse order (from\n$x_{T_{x}}$ to $x_{1}$), resulting in a sequence of backward hidden states $(\\overleftarrow{h}_{1},\\cdots,\\overleftarrow{h}_{T_{x}})$.",
+            "We obtain an annotation for each word $x_{j}$ by concatenating the forward hidden\nstate $\\overrightarrow{h}_{j}$ and the backward one $\\overleftarrow{h}_{j}$, i.e., $h_{j}=\\left[\\overrightarrow{h}_{j}^{\\top};\\overleftarrow{h}_{j}^{\\top}\\right]^{\\top}$. In this way, the annotation $h_{j}$\ncontains the summaries of both the preceding words and the following words. Due\nto the tendency of RNNs to better represent recent inputs, the annotation $h_{j}$\nwill be focused on the words around $x_{j}$. This sequence of annotations is used\nby the decoder and the alignment model later to compute the context vector\n(Eqs. (5)–(6)).",
+            "See Fig. 1 for the graphical illustration of the proposed\nmodel."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The usual RNN, described in Eq. (1), reads an input\nsequence $\\mathbf{x}$ in order starting from the first symbol $x_{1}$ to the last one\n$x_{T_{x}}$. However, in the proposed scheme, we would like the annotation of each\nword to summarize not only the preceding words, but also the following words.\nHence, we propose to use a bidirectional RNN (BiRNN, Schuster and Paliwal, 1997),\nwhich has been successfully used recently in speech recognition (see,\ne.g., Graves et al., 2013)."
+            },
+            {
+              "type": "para",
+              "data": "A BiRNN consists of forward and backward RNN’s. The forward RNN $\\overrightarrow{f}$ reads\nthe input sequence as it is ordered (from $x_{1}$ to $x_{T_{x}}$) and calculates a\nsequence of forward hidden states $(\\overrightarrow{h}_{1},\\cdots,\\overrightarrow{h}_{T_{x}})$.\nThe backward RNN $\\overleftarrow{f}$ reads the sequence in the reverse order (from\n$x_{T_{x}}$ to $x_{1}$), resulting in a sequence of backward hidden states $(\\overleftarrow{h}_{1},\\cdots,\\overleftarrow{h}_{T_{x}})$."
+            },
+            {
+              "type": "para",
+              "data": "We obtain an annotation for each word $x_{j}$ by concatenating the forward hidden\nstate $\\overrightarrow{h}_{j}$ and the backward one $\\overleftarrow{h}_{j}$, i.e., $h_{j}=\\left[\\overrightarrow{h}_{j}^{\\top};\\overleftarrow{h}_{j}^{\\top}\\right]^{\\top}$. In this way, the annotation $h_{j}$\ncontains the summaries of both the preceding words and the following words. Due\nto the tendency of RNNs to better represent recent inputs, the annotation $h_{j}$\nwill be focused on the words around $x_{j}$. This sequence of annotations is used\nby the decoder and the alignment model later to compute the context vector\n(Eqs. (5)–(6))."
+            },
+            {
+              "type": "para",
+              "data": "See Fig. 1 for the graphical illustration of the proposed\nmodel."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "In this section, we propose a novel architecture for neural machine\ntranslation. The new architecture consists of a bidirectional RNN as an\nencoder (Sec. 3.2) and a decoder that emulates\nsearching through a source sentence during decoding a translation\n(Sec. 3.1)."
+        }
+      ]
+    },
+    {
+      "title": "Experiment Settings",
+      "level": 2,
+      "paragraphs": [
+        "We evaluate the proposed approach on the task of English-to-French translation.\nWe use the bilingual, parallel corpora provided by ACL WMT ’14.33\nhttp://www.statmt.org/wmt14/translation-task.html As a comparison, we also report the performance of an RNN Encoder–Decoder\nwhich was proposed recently by Cho et al. (2014a). We use the same training\nprocedures and the same dataset for both models.44\nImplementations are available at https://github.com/lisa-groundhog/GroundHog."
+      ],
+      "subsections": [
+        {
+          "title": "Dataset",
+          "level": 3,
+          "paragraphs": [
+            "WMT ’14 contains the following English-French parallel corpora: Europarl (61M\nwords), news commentary (5.5M), UN (421M) and two crawled corpora of 90M and\n272.5M words respectively, totaling 850M words.\nFollowing the procedure described\nin Cho et al. (2014a), we reduce the size of the combined corpus to have 348M words\nusing the data selection method by Axelrod et al. (2011).55\nAvailable online at\nhttp://www-lium.univ-lemans.fr/~schwenk/cslm_joint_paper/. We do not use any monolingual data other than the mentioned parallel corpora,\nalthough it may be possible to use a much larger monolingual corpus to pretrain\nan encoder. We concatenate news-test-2012 and news-test-2013 to make a\ndevelopment (validation) set, and evaluate the models on the test set\n(news-test-2014) from WMT ’14, which consists of 3003 sentences not present in\nthe training data.",
+            "After a usual tokenization66\nWe used the tokenization script from the open-source machine translation\npackage, Moses.,\nwe use a shortlist of 30,000 most frequent words in each language to train our\nmodels. Any word not included in the shortlist is mapped to a special token\n($\\left[\\mbox{UNK}\\right]$). We do not apply any other special preprocessing,\nsuch as lowercasing or stemming, to the data."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x3.png",
+              "alt": "Refer to caption",
+              "caption": "Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+              "label": "S4.F3"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "WMT ’14 contains the following English-French parallel corpora: Europarl (61M\nwords), news commentary (5.5M), UN (421M) and two crawled corpora of 90M and\n272.5M words respectively, totaling 850M words.\nFollowing the procedure described\nin Cho et al. (2014a), we reduce the size of the combined corpus to have 348M words\nusing the data selection method by Axelrod et al. (2011).55\nAvailable online at\nhttp://www-lium.univ-lemans.fr/~schwenk/cslm_joint_paper/. We do not use any monolingual data other than the mentioned parallel corpora,\nalthough it may be possible to use a much larger monolingual corpus to pretrain\nan encoder. We concatenate news-test-2012 and news-test-2013 to make a\ndevelopment (validation) set, and evaluate the models on the test set\n(news-test-2014) from WMT ’14, which consists of 3003 sentences not present in\nthe training data."
+            },
+            {
+              "type": "para",
+              "data": "After a usual tokenization66\nWe used the tokenization script from the open-source machine translation\npackage, Moses.,\nwe use a shortlist of 30,000 most frequent words in each language to train our\nmodels. Any word not included in the shortlist is mapped to a special token\n($\\left[\\mbox{UNK}\\right]$). We do not apply any other special preprocessing,\nsuch as lowercasing or stemming, to the data."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x3.png",
+                "alt": "Refer to caption",
+                "caption": "Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+                "label": "S4.F3"
+              }
+            }
+          ]
+        },
+        {
+          "title": "Models",
+          "level": 3,
+          "paragraphs": [
+            "We train two types of models. The first one is an RNN\nEncoder–Decoder (RNNencdec, Cho et al., 2014a), and the other is the proposed\nmodel, to which we refer as RNNsearch. We train each model twice: first with the\nsentences of length up to 30 words (RNNencdec-30, RNNsearch-30) and then with the\nsentences of length up to 50 word (RNNencdec-50, RNNsearch-50).",
+            "The encoder and decoder of the RNNencdec have 1000 hidden units each.77\nIn this paper, by a ’hidden unit’, we always mean the gated hidden unit (see\nAppendix A.1.1). The encoder of the RNNsearch consists of forward and backward recurrent neural\nnetworks (RNN) each having 1000 hidden units. Its decoder has 1000 hidden units.\nIn both cases, we use a multilayer network with a single\nmaxout (Goodfellow et al., 2013) hidden layer to compute the conditional\nprobability of each target word (Pascanu et al., 2014).",
+            "We use a minibatch stochastic gradient descent (SGD) algorithm together with\nAdadelta (Zeiler, 2012) to train each model. Each SGD update direction is\ncomputed using a minibatch of 80 sentences. We trained each model for\napproximately 5 days.",
+            "Once a model is trained, we use a beam search to find a translation that\napproximately maximizes the conditional probability (see,\ne.g., Graves, 2012; Boulanger-Lewandowski et al., 2013). Sutskever et al. (2014) used this approach to\ngenerate translations from their neural machine translation model.",
+            "For more details on the architectures of the models and training procedure used\nin the experiments, see Appendices A and\nB."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We train two types of models. The first one is an RNN\nEncoder–Decoder (RNNencdec, Cho et al., 2014a), and the other is the proposed\nmodel, to which we refer as RNNsearch. We train each model twice: first with the\nsentences of length up to 30 words (RNNencdec-30, RNNsearch-30) and then with the\nsentences of length up to 50 word (RNNencdec-50, RNNsearch-50)."
+            },
+            {
+              "type": "para",
+              "data": "The encoder and decoder of the RNNencdec have 1000 hidden units each.77\nIn this paper, by a ’hidden unit’, we always mean the gated hidden unit (see\nAppendix A.1.1). The encoder of the RNNsearch consists of forward and backward recurrent neural\nnetworks (RNN) each having 1000 hidden units. Its decoder has 1000 hidden units.\nIn both cases, we use a multilayer network with a single\nmaxout (Goodfellow et al., 2013) hidden layer to compute the conditional\nprobability of each target word (Pascanu et al., 2014)."
+            },
+            {
+              "type": "para",
+              "data": "We use a minibatch stochastic gradient descent (SGD) algorithm together with\nAdadelta (Zeiler, 2012) to train each model. Each SGD update direction is\ncomputed using a minibatch of 80 sentences. We trained each model for\napproximately 5 days."
+            },
+            {
+              "type": "para",
+              "data": "Once a model is trained, we use a beam search to find a translation that\napproximately maximizes the conditional probability (see,\ne.g., Graves, 2012; Boulanger-Lewandowski et al., 2013). Sutskever et al. (2014) used this approach to\ngenerate translations from their neural machine translation model."
+            },
+            {
+              "type": "para",
+              "data": "For more details on the architectures of the models and training procedure used\nin the experiments, see Appendices A and\nB."
+            }
+          ]
+        }
+      ],
+      "figures": [
+        {
+          "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x2.png",
+          "alt": "Refer to caption",
+          "caption": "The BLEU scores of the generated translations on the test set with respect to the lengths of the sentences. The results are on the full test set which includes sentences having unknown words to the models.",
+          "label": "S4.F2.fig1"
+        }
+      ],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We evaluate the proposed approach on the task of English-to-French translation.\nWe use the bilingual, parallel corpora provided by ACL WMT ’14.33\nhttp://www.statmt.org/wmt14/translation-task.html As a comparison, we also report the performance of an RNN Encoder–Decoder\nwhich was proposed recently by Cho et al. (2014a). We use the same training\nprocedures and the same dataset for both models.44\nImplementations are available at https://github.com/lisa-groundhog/GroundHog."
+        },
+        {
+          "type": "figure",
+          "data": {
+            "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x2.png",
+            "alt": "Refer to caption",
+            "caption": "The BLEU scores of the generated translations on the test set with respect to the lengths of the sentences. The results are on the full test set which includes sentences having unknown words to the models.",
+            "label": "S4.F2.fig1"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Results",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Quantitative Results",
+          "level": 3,
+          "paragraphs": [
+            "In Table 1, we list the translation performances measured in BLEU\nscore. It is clear from the table that in all the cases, the proposed RNNsearch\noutperforms the conventional RNNencdec. More importantly, the performance of the\nRNNsearch is as high as that of the conventional phrase-based translation system\n(Moses), when only the sentences consisting of known words are considered. This\nis a significant achievement, considering that Moses uses a separate monolingual\ncorpus (418M words) in addition to the parallel corpora we used to train the\nRNNsearch and RNNencdec.",
+            "One of the motivations behind the proposed approach was the use of a\nfixed-length context vector in the basic encoder–decoder approach. We\nconjectured that this limitation may make the basic encoder–decoder approach to\nunderperform with long sentences. In Fig. 2, we see that the\nperformance of RNNencdec dramatically drops as the length of the sentences\nincreases. On the other hand, both RNNsearch-30 and RNNsearch-50 are more robust\nto the length of the sentences. RNNsearch-50, especially, shows no performance\ndeterioration even with sentences of length 50 or more. This superiority of the\nproposed model over the basic encoder–decoder is further confirmed by the fact\nthat the RNNsearch-30 even outperforms RNNencdec-50 (see Table 1)."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [
+            {
+              "caption": "Figure 3: Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+              "headers": [
+                "Model",
+                "All",
+                "No UNK∘"
+              ],
+              "rows": [
+                [
+                  "RNNencdec-30",
+                  "13.93",
+                  "24.19"
+                ],
+                [
+                  "RNNsearch-30",
+                  "21.50",
+                  "31.44"
+                ],
+                [
+                  "RNNencdec-50",
+                  "17.82",
+                  "26.71"
+                ],
+                [
+                  "RNNsearch-50",
+                  "26.75",
+                  "34.16"
+                ],
+                [
+                  "RNNsearch-50⋆",
+                  "28.45",
+                  "36.15"
+                ],
+                [
+                  "Moses",
+                  "33.30",
+                  "35.63"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "table",
+              "data": {
+                "caption": "Figure 3: Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+                "headers": [
+                  "Model",
+                  "All",
+                  "No UNK∘"
+                ],
+                "rows": [
+                  [
+                    "RNNencdec-30",
+                    "13.93",
+                    "24.19"
+                  ],
+                  [
+                    "RNNsearch-30",
+                    "21.50",
+                    "31.44"
+                  ],
+                  [
+                    "RNNencdec-50",
+                    "17.82",
+                    "26.71"
+                  ],
+                  [
+                    "RNNsearch-50",
+                    "26.75",
+                    "34.16"
+                  ],
+                  [
+                    "RNNsearch-50⋆",
+                    "28.45",
+                    "36.15"
+                  ],
+                  [
+                    "Moses",
+                    "33.30",
+                    "35.63"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "In Table 1, we list the translation performances measured in BLEU\nscore. It is clear from the table that in all the cases, the proposed RNNsearch\noutperforms the conventional RNNencdec. More importantly, the performance of the\nRNNsearch is as high as that of the conventional phrase-based translation system\n(Moses), when only the sentences consisting of known words are considered. This\nis a significant achievement, considering that Moses uses a separate monolingual\ncorpus (418M words) in addition to the parallel corpora we used to train the\nRNNsearch and RNNencdec."
+            },
+            {
+              "type": "para",
+              "data": "One of the motivations behind the proposed approach was the use of a\nfixed-length context vector in the basic encoder–decoder approach. We\nconjectured that this limitation may make the basic encoder–decoder approach to\nunderperform with long sentences. In Fig. 2, we see that the\nperformance of RNNencdec dramatically drops as the length of the sentences\nincreases. On the other hand, both RNNsearch-30 and RNNsearch-50 are more robust\nto the length of the sentences. RNNsearch-50, especially, shows no performance\ndeterioration even with sentences of length 50 or more. This superiority of the\nproposed model over the basic encoder–decoder is further confirmed by the fact\nthat the RNNsearch-30 even outperforms RNNencdec-50 (see Table 1)."
+            }
+          ]
+        },
+        {
+          "title": "Qualitative Analysis",
+          "level": 3,
+          "paragraphs": [],
+          "subsections": [
+            {
+              "title": "Alignment",
+              "level": 5,
+              "paragraphs": [
+                "The proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word.",
+                "We can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne].",
+                "The strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010)."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "The proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word."
+                },
+                {
+                  "type": "para",
+                  "data": "We can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne]."
+                },
+                {
+                  "type": "para",
+                  "data": "The strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010)."
+                }
+              ]
+            },
+            {
+              "title": "Long Sentences",
+              "level": 5,
+              "paragraphs": [
+                "As clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword.",
+                "As an example, consider this source sentence from the test set:",
+                "An admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital.",
+                "The RNNencdec-50 translated this sentence into:",
+                "Un privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé.",
+                "The RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”).",
+                "On the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:",
+                "Un privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital.",
+                "Let us consider another sentence from the test set:",
+                "This kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added.",
+                "The translation by the RNNencdec-50 is",
+                "Ce type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes.",
+                "As with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark.",
+                "Again, the RNNsearch-50 was able to translate this long sentence correctly:",
+                "Ce genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté.",
+                "In conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel.",
+                "In Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations."
+              ],
+              "subsections": [],
+              "figures": [],
+              "tables": [],
+              "equations": [],
+              "ordered_content": [
+                {
+                  "type": "para",
+                  "data": "As clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword."
+                },
+                {
+                  "type": "para",
+                  "data": "As an example, consider this source sentence from the test set:"
+                },
+                {
+                  "type": "para",
+                  "data": "An admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital."
+                },
+                {
+                  "type": "para",
+                  "data": "The RNNencdec-50 translated this sentence into:"
+                },
+                {
+                  "type": "para",
+                  "data": "Un privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé."
+                },
+                {
+                  "type": "para",
+                  "data": "The RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”)."
+                },
+                {
+                  "type": "para",
+                  "data": "On the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:"
+                },
+                {
+                  "type": "para",
+                  "data": "Un privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital."
+                },
+                {
+                  "type": "para",
+                  "data": "Let us consider another sentence from the test set:"
+                },
+                {
+                  "type": "para",
+                  "data": "This kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added."
+                },
+                {
+                  "type": "para",
+                  "data": "The translation by the RNNencdec-50 is"
+                },
+                {
+                  "type": "para",
+                  "data": "Ce type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes."
+                },
+                {
+                  "type": "para",
+                  "data": "As with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark."
+                },
+                {
+                  "type": "para",
+                  "data": "Again, the RNNsearch-50 was able to translate this long sentence correctly:"
+                },
+                {
+                  "type": "para",
+                  "data": "Ce genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté."
+                },
+                {
+                  "type": "para",
+                  "data": "In conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel."
+                },
+                {
+                  "type": "para",
+                  "data": "In Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations."
+                }
+              ]
+            }
+          ],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": []
+        },
+        {
+          "title": "Alignment",
+          "level": 4,
+          "paragraphs": [
+            "The proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word.",
+            "We can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne].",
+            "The strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010)."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word."
+            },
+            {
+              "type": "para",
+              "data": "We can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne]."
+            },
+            {
+              "type": "para",
+              "data": "The strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010)."
+            }
+          ]
+        },
+        {
+          "title": "Long Sentences",
+          "level": 4,
+          "paragraphs": [
+            "As clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword.",
+            "As an example, consider this source sentence from the test set:",
+            "An admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital.",
+            "The RNNencdec-50 translated this sentence into:",
+            "Un privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé.",
+            "The RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”).",
+            "On the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:",
+            "Un privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital.",
+            "Let us consider another sentence from the test set:",
+            "This kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added.",
+            "The translation by the RNNencdec-50 is",
+            "Ce type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes.",
+            "As with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark.",
+            "Again, the RNNsearch-50 was able to translate this long sentence correctly:",
+            "Ce genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté.",
+            "In conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel.",
+            "In Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "As clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword."
+            },
+            {
+              "type": "para",
+              "data": "As an example, consider this source sentence from the test set:"
+            },
+            {
+              "type": "para",
+              "data": "An admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital."
+            },
+            {
+              "type": "para",
+              "data": "The RNNencdec-50 translated this sentence into:"
+            },
+            {
+              "type": "para",
+              "data": "Un privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé."
+            },
+            {
+              "type": "para",
+              "data": "The RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”)."
+            },
+            {
+              "type": "para",
+              "data": "On the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:"
+            },
+            {
+              "type": "para",
+              "data": "Un privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital."
+            },
+            {
+              "type": "para",
+              "data": "Let us consider another sentence from the test set:"
+            },
+            {
+              "type": "para",
+              "data": "This kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added."
+            },
+            {
+              "type": "para",
+              "data": "The translation by the RNNencdec-50 is"
+            },
+            {
+              "type": "para",
+              "data": "Ce type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes."
+            },
+            {
+              "type": "para",
+              "data": "As with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark."
+            },
+            {
+              "type": "para",
+              "data": "Again, the RNNsearch-50 was able to translate this long sentence correctly:"
+            },
+            {
+              "type": "para",
+              "data": "Ce genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté."
+            },
+            {
+              "type": "para",
+              "data": "In conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel."
+            },
+            {
+              "type": "para",
+              "data": "In Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Related Work",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Learning to Align",
+          "level": 3,
+          "paragraphs": [
+            "A similar approach of aligning an output symbol with an input symbol was\nproposed recently by Graves (2013) in the context of handwriting synthesis.\nHandwriting synthesis is a task where the model is asked to generate handwriting\nof a given sequence of characters. In his work, he used a mixture of Gaussian\nkernels to compute the weights of the annotations, where the location, width and\nmixture coefficient of each kernel was predicted from an alignment model. More\nspecifically, his alignment was restricted to predict the location such that the\nlocation increases monotonically.",
+            "The main difference from our approach is that, in (Graves, 2013), the modes\nof the weights of the annotations only move in one direction. In the context of\nmachine translation, this is a severe limitation, as (long-distance) reordering\nis often needed to generate a grammatically correct translation (for instance,\nEnglish-to-German).",
+            "Our approach, on the other hand, requires computing the annotation weight of\nevery word in the source sentence for each word in the translation. This\ndrawback is not severe with the task of translation in which most of input and\noutput sentences are only 15–40 words. However, this may limit the\napplicability of the proposed scheme to other tasks."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "A similar approach of aligning an output symbol with an input symbol was\nproposed recently by Graves (2013) in the context of handwriting synthesis.\nHandwriting synthesis is a task where the model is asked to generate handwriting\nof a given sequence of characters. In his work, he used a mixture of Gaussian\nkernels to compute the weights of the annotations, where the location, width and\nmixture coefficient of each kernel was predicted from an alignment model. More\nspecifically, his alignment was restricted to predict the location such that the\nlocation increases monotonically."
+            },
+            {
+              "type": "para",
+              "data": "The main difference from our approach is that, in (Graves, 2013), the modes\nof the weights of the annotations only move in one direction. In the context of\nmachine translation, this is a severe limitation, as (long-distance) reordering\nis often needed to generate a grammatically correct translation (for instance,\nEnglish-to-German)."
+            },
+            {
+              "type": "para",
+              "data": "Our approach, on the other hand, requires computing the annotation weight of\nevery word in the source sentence for each word in the translation. This\ndrawback is not severe with the task of translation in which most of input and\noutput sentences are only 15–40 words. However, this may limit the\napplicability of the proposed scheme to other tasks."
+            }
+          ]
+        },
+        {
+          "title": "Neural Networks for Machine Translation",
+          "level": 3,
+          "paragraphs": [
+            "Since Bengio et al. (2003) introduced a neural probabilistic language model\nwhich uses a neural network to model the conditional probability of a word given\na fixed number of the preceding words, neural networks have widely been used in\nmachine translation. However, the role of neural networks has been largely\nlimited to simply providing a single feature to an existing statistical machine\ntranslation system or to re-rank a list of candidate translations provided by an\nexisting system.",
+            "For instance, Schwenk (2012) proposed using a feedforward neural network to\ncompute the score of a pair of source and target phrases and to use the score as\nan additional feature in the phrase-based statistical machine translation\nsystem. More recently, Kalchbrenner and Blunsom (2013) and Devlin et al. (2014) reported\nthe successful use of the neural networks as a sub-component of the existing\ntranslation system. Traditionally, a neural network trained as a target-side\nlanguage model has been used to rescore or rerank a list of candidate\ntranslations (see, e.g., Schwenk et al., 2006).",
+            "Although the above approaches were shown to improve the translation performance\nover the state-of-the-art machine translation systems, we are more interested in\na more ambitious objective of designing a completely new translation system\nbased on neural networks. The neural machine translation approach we consider in\nthis paper is therefore a radical departure from these earlier works. Rather\nthan using a neural network as a part of the existing system, our model works on\nits own and generates a translation from a source sentence directly."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Since Bengio et al. (2003) introduced a neural probabilistic language model\nwhich uses a neural network to model the conditional probability of a word given\na fixed number of the preceding words, neural networks have widely been used in\nmachine translation. However, the role of neural networks has been largely\nlimited to simply providing a single feature to an existing statistical machine\ntranslation system or to re-rank a list of candidate translations provided by an\nexisting system."
+            },
+            {
+              "type": "para",
+              "data": "For instance, Schwenk (2012) proposed using a feedforward neural network to\ncompute the score of a pair of source and target phrases and to use the score as\nan additional feature in the phrase-based statistical machine translation\nsystem. More recently, Kalchbrenner and Blunsom (2013) and Devlin et al. (2014) reported\nthe successful use of the neural networks as a sub-component of the existing\ntranslation system. Traditionally, a neural network trained as a target-side\nlanguage model has been used to rescore or rerank a list of candidate\ntranslations (see, e.g., Schwenk et al., 2006)."
+            },
+            {
+              "type": "para",
+              "data": "Although the above approaches were shown to improve the translation performance\nover the state-of-the-art machine translation systems, we are more interested in\na more ambitious objective of designing a completely new translation system\nbased on neural networks. The neural machine translation approach we consider in\nthis paper is therefore a radical departure from these earlier works. Rather\nthan using a neural network as a part of the existing system, our model works on\nits own and generates a translation from a source sentence directly."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Conclusion",
+      "level": 2,
+      "paragraphs": [
+        "The conventional approach to neural machine translation, called an\nencoder–decoder approach, encodes a whole input sentence into a fixed-length\nvector from which a translation will be decoded. We conjectured that the use of\na fixed-length context vector is problematic for translating long sentences,\nbased on a recent empirical study reported by Cho et al. (2014b) and\nPouget-Abadie et al. (2014).",
+        "In this paper, we proposed a novel architecture that addresses this issue. We\nextended the basic encoder–decoder by letting a model (soft-)search for\na set of input words, or their annotations computed by an encoder, when\ngenerating each target word. This frees the model from having to encode a whole\nsource sentence into a fixed-length vector, and also lets the model focus only\non information relevant to the generation of the next target word. This has a\nmajor positive impact on the ability of the neural machine translation system to\nyield good results on longer sentences. Unlike with the traditional machine\ntranslation systems, all of the pieces of the translation system, including the\nalignment mechanism, are jointly trained towards a better log-probability of\nproducing correct translations.",
+        "We tested the proposed model, called RNNsearch, on the task of English-to-French\ntranslation. The experiment revealed that the proposed RNNsearch outperforms the\nconventional encoder–decoder model (RNNencdec) significantly, regardless of the\nsentence length and that it is much more robust to the length of a source\nsentence. From the qualitative analysis where we investigated the\n(soft-)alignment generated by the RNNsearch, we were able to conclude\nthat the model can correctly align each target word with the relevant words, or\ntheir annotations, in the source sentence as it generated a correct translation.",
+        "Perhaps more importantly, the proposed approach achieved a translation\nperformance comparable to the existing phrase-based statistical machine\ntranslation. It is a striking result, considering that the proposed\narchitecture, or the whole family of neural machine translation, has only been\nproposed as recently as this year. We believe the architecture proposed here is\na promising step toward better machine translation and a better understanding of\nnatural languages in general.",
+        "One of challenges left for the future is to better handle unknown, or rare\nwords. This will be required for the model to be more widely used and to match\nthe performance of current state-of-the-art machine translation systems in all\ncontexts."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The conventional approach to neural machine translation, called an\nencoder–decoder approach, encodes a whole input sentence into a fixed-length\nvector from which a translation will be decoded. We conjectured that the use of\na fixed-length context vector is problematic for translating long sentences,\nbased on a recent empirical study reported by Cho et al. (2014b) and\nPouget-Abadie et al. (2014)."
+        },
+        {
+          "type": "para",
+          "data": "In this paper, we proposed a novel architecture that addresses this issue. We\nextended the basic encoder–decoder by letting a model (soft-)search for\na set of input words, or their annotations computed by an encoder, when\ngenerating each target word. This frees the model from having to encode a whole\nsource sentence into a fixed-length vector, and also lets the model focus only\non information relevant to the generation of the next target word. This has a\nmajor positive impact on the ability of the neural machine translation system to\nyield good results on longer sentences. Unlike with the traditional machine\ntranslation systems, all of the pieces of the translation system, including the\nalignment mechanism, are jointly trained towards a better log-probability of\nproducing correct translations."
+        },
+        {
+          "type": "para",
+          "data": "We tested the proposed model, called RNNsearch, on the task of English-to-French\ntranslation. The experiment revealed that the proposed RNNsearch outperforms the\nconventional encoder–decoder model (RNNencdec) significantly, regardless of the\nsentence length and that it is much more robust to the length of a source\nsentence. From the qualitative analysis where we investigated the\n(soft-)alignment generated by the RNNsearch, we were able to conclude\nthat the model can correctly align each target word with the relevant words, or\ntheir annotations, in the source sentence as it generated a correct translation."
+        },
+        {
+          "type": "para",
+          "data": "Perhaps more importantly, the proposed approach achieved a translation\nperformance comparable to the existing phrase-based statistical machine\ntranslation. It is a striking result, considering that the proposed\narchitecture, or the whole family of neural machine translation, has only been\nproposed as recently as this year. We believe the architecture proposed here is\na promising step toward better machine translation and a better understanding of\nnatural languages in general."
+        },
+        {
+          "type": "para",
+          "data": "One of challenges left for the future is to better handle unknown, or rare\nwords. This will be required for the model to be more widely used and to match\nthe performance of current state-of-the-art machine translation systems in all\ncontexts."
+        }
+      ]
+    },
+    {
+      "title": "Acknowledgments",
+      "level": 2,
+      "paragraphs": [
+        "The authors would like to thank the developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012). We acknowledge the\nsupport of the following agencies for research funding and computing support:\nNSERC, Calcul Québec, Compute Canada, the Canada Research Chairs and CIFAR.\nBahdanau thanks the support from Planet Intelligent Systems GmbH. We also thank\nFelix Hill, Bart van Merriénboer, Jean Pouget-Abadie, Coline Devin and\nTae-Ho Kim."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "The authors would like to thank the developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012). We acknowledge the\nsupport of the following agencies for research funding and computing support:\nNSERC, Calcul Québec, Compute Canada, the Canada Research Chairs and CIFAR.\nBahdanau thanks the support from Planet Intelligent Systems GmbH. We also thank\nFelix Hill, Bart van Merriénboer, Jean Pouget-Abadie, Coline Devin and\nTae-Ho Kim."
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "The graphical illustration of the proposed model trying to generate the ttt-th target word ytsubscriptyty_{t} given a source sentence (x1,x2,...,xT)subscriptx1subscriptx2...subscriptxT(x_{1},x_{2},\\dots,x_{T}).",
+      "label": "S3.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x2.png",
+      "alt": "Refer to caption",
+      "caption": "The BLEU scores of the generated translations on the test set with respect to the lengths of the sentences. The results are on the full test set which includes sentences having unknown words to the models.",
+      "label": "S4.F2.fig1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/1409.0473/assets/x3.png",
+      "alt": "Refer to caption",
+      "caption": "Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+      "label": "S4.F3"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Figure 3: Four sample alignments found by RNNsearch-50. The x-axis and y-axis of each plot correspond to the words in the source sentence (English) and the generated translation (French), respectively. Each pixel shows the weight αi​jsubscriptαij\\alpha_{ij} of the annotation of the jjj-th source word for the iii-th target word (see Eq. (6)), in grayscale (00: black, 111: white). (a) an arbitrary sentence. (b–d) three randomly selected samples among the sentences without any unknown words and of length between 10 and 20 words from the test set.",
+      "headers": [
+        "Model",
+        "All",
+        "No UNK∘"
+      ],
+      "rows": [
+        [
+          "RNNencdec-30",
+          "13.93",
+          "24.19"
+        ],
+        [
+          "RNNsearch-30",
+          "21.50",
+          "31.44"
+        ],
+        [
+          "RNNencdec-50",
+          "17.82",
+          "26.71"
+        ],
+        [
+          "RNNsearch-50",
+          "26.75",
+          "34.16"
+        ],
+        [
+          "RNNsearch-50⋆",
+          "28.45",
+          "36.15"
+        ],
+        [
+          "Moses",
+          "33.30",
+          "35.63"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "BLEU scores of the trained models computed on the test set. The second and third columns show respectively the scores on all the sentences and, on the sentences without any unknown word in themselves and in the reference translations. Note that RNNsearch-50⋆ was trained much longer until the performance on the development set stopped improving. (∘\\circ) We disallowed the models to generate [UNK] tokens when only the sentences having no unknown words were evaluated (last column).",
+      "headers": [],
+      "rows": [
+        [
+          "Model",
+          "Updates (×105absentsuperscript105\\times 10^{5})",
+          "Epochs",
+          "Hours",
+          "GPU",
+          "Train NLL",
+          "Dev. NLL"
+        ],
+        [
+          "RNNenc-30",
+          "8.46",
+          "6.4",
+          "109",
+          "TITAN BLACK",
+          "28.1",
+          "53.0"
+        ],
+        [
+          "RNNenc-50",
+          "6.00",
+          "4.5",
+          "108",
+          "Quadro K-6000",
+          "44.0",
+          "43.6"
+        ],
+        [
+          "RNNsearch-30",
+          "4.71",
+          "3.6",
+          "113",
+          "TITAN BLACK",
+          "26.7",
+          "47.2"
+        ],
+        [
+          "RNNsearch-50",
+          "2.88",
+          "2.2",
+          "111",
+          "Quadro K-6000",
+          "40.7",
+          "38.1"
+        ],
+        [
+          "RNNsearch-50⋆",
+          "6.67",
+          "5.0",
+          "252",
+          "Quadro K-6000",
+          "36.7",
+          "35.2"
+        ]
+      ],
+      "label": null
+    },
+    {
+      "caption": "Learning statistics and relevant information. Each update corresponds to updating the parameters once using a single minibatch. One epoch is one pass through the training set. NLL is the average conditional log-probabilities of the sentences in either the training set or the development set. Note that the lengths of the sentences differ.",
+      "headers": [
+        "Source",
+        "An admitting privilege is the right of a doctor to admit a patient to a hospital or a medical centre to carry out a diagnosis or a procedure, based on his status as a health care worker at a hospital."
+      ],
+      "rows": [
+        [
+          "Reference",
+          "Le privilège d’admission est le droit d’un médecin, en vertu de son statut de membre soignant d’un hôpital, d’admettre un patient dans un hôpital ou un centre médical afin d’y délivrer un diagnostic ou un traitement."
+        ],
+        [
+          "RNNenc-50",
+          "Un privilège d’admission est le droit d’un médecin de reconnaître un patient à l’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic en fonction de son état de santé."
+        ],
+        [
+          "RNNsearch-50",
+          "Un privilège d’admission est le droit d’un médecin d’admettre un patient à un hôpital ou un centre médical pour effectuer un diagnostic ou une procédure, selon son statut de travailleur des soins de santé à l’hôpital."
+        ],
+        [
+          "Google Translate",
+          "Un privilège admettre est le droit d’un médecin d’admettre un patient dans un hôpital ou un centre médical pour effectuer un diagnostic ou une procédure, fondée sur sa situation en tant que travailleur de soins de santé dans un hôpital."
+        ],
+        [
+          "Source",
+          "This kind of experience is part of Disney’s efforts to ”extend the lifetime of its series and build new relationships with audiences via digital platforms that are becoming ever more important,” he added."
+        ],
+        [
+          "Reference",
+          "Ce type d’expérience entre dans le cadre des efforts de Disney pour ”étendre la durée de vie de ses séries et construire de nouvelles relations avec son public grâce à des plateformes numériques qui sont de plus en plus importantes”, a-t-il ajouté."
+        ],
+        [
+          "RNNenc-50",
+          "Ce type d’expérience fait partie des initiatives du Disney pour ”prolonger la durée de vie de ses nouvelles et de développer des liens avec les lecteurs numériques qui deviennent plus complexes."
+        ],
+        [
+          "RNNsearch-50",
+          "Ce genre d’expérience fait partie des efforts de Disney pour ”prolonger la durée de vie de ses séries et créer de nouvelles relations avec des publics via des plateformes numériques de plus en plus importantes”, a-t-il ajouté."
+        ],
+        [
+          "Google Translate",
+          "Ce genre d’expérience fait partie des efforts de Disney à “étendre la durée de vie de sa série et construire de nouvelles relations avec le public par le biais des plates-formes numériques qui deviennent de plus en plus important”, at-il ajouté."
+        ],
+        [
+          "Source",
+          "In a press conference on Thursday, Mr Blair stated that there was nothing in this video that might constitute a ”reasonable motive” that could lead to criminal charges being brought against the mayor."
+        ],
+        [
+          "Reference",
+          "En conférence de presse, jeudi, M. Blair a affirmé qu’il n’y avait rien dans cette vidéo qui puisse constituer des ”motifs raisonnables” pouvant mener au dépôt d’une accusation criminelle contre le maire."
+        ],
+        [
+          "RNNenc-50",
+          "Lors de la conférence de presse de jeudi, M. Blair a dit qu’il n’y avait rien dans cette vidéo qui pourrait constituer une ”motivation raisonnable” pouvant entraîner des accusations criminelles portées contre le maire."
+        ],
+        [
+          "RNNsearch-50",
+          "Lors d’une conférence de presse jeudi, M. Blair a déclaré qu’il n’y avait rien dans cette vidéo qui pourrait constituer un ”motif raisonnable” qui pourrait conduire à des accusations criminelles contre le maire."
+        ],
+        [
+          "Google Translate",
+          "Lors d’une conférence de presse jeudi, M. Blair a déclaré qu’il n’y avait rien dans cette vido qui pourrait constituer un ”motif raisonnable” qui pourrait mener à des accusations criminelles portes contre le maire."
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [
+    {
+      "latex": "\\displaystyle h_{t}=f\\left(x_{t},h_{t-1}\\right)",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{t}=f\\left(x_{t},h_{t-1}\\right)",
+      "label": "(1)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c=q\\left(\\left\\{h_{1},\\cdots,h_{T_{x}}\\right\\}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c=q\\left(\\left\\{h_{1},\\cdots,h_{T_{x}}\\right\\}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(\\mathbf{y})=\\prod_{t=1}^{T}p(y_{t}\\mid\\left\\{y_{1},\\cdots,y_{t-1}\\right\\},c),",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(\\mathbf{y})=\\prod_{t=1}^{T}p(y_{t}\\mid\\left\\{y_{1},\\cdots,y_{t-1}\\right\\},c),",
+      "label": "(2)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{t}\\mid\\left\\{y_{1},\\cdots,y_{t-1}\\right\\},c)=g(y_{t-1},s_{t},c),",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{t}\\mid\\left\\{y_{1},\\cdots,y_{t-1}\\right\\},c)=g(y_{t-1},s_{t},c),",
+      "label": "(3)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{i}|y_{1},\\ldots,y_{i-1},\\mathbf{x})=g(y_{i-1},s_{i},c_{i}),",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{i}|y_{1},\\ldots,y_{i-1},\\mathbf{x})=g(y_{i-1},s_{i},c_{i}),",
+      "label": "(4)",
+      "inline": false
+    },
+    {
+      "latex": "s_{i}=f(s_{i-1},y_{i-1},c_{i}).",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "s_{i}=f(s_{i-1},y_{i-1},c_{i}).",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}=\\sum_{j=1}^{T_{x}}\\alpha_{ij}h_{j}.",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}=\\sum_{j=1}^{T_{x}}\\alpha_{ij}h_{j}.",
+      "label": "(5)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\alpha_{ij}=\\frac{\\exp\\left(e_{ij}\\right)}{\\sum_{k=1}^{T_{x}}\\exp\\left(e_{ik}\\right)},",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\alpha_{ij}=\\frac{\\exp\\left(e_{ij}\\right)}{\\sum_{k=1}^{T_{x}}\\exp\\left(e_{ik}\\right)},",
+      "label": "(6)",
+      "inline": false
+    },
+    {
+      "latex": "e_{ij}=a(s_{i-1},h_{j})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "e_{ij}=a(s_{i-1},h_{j})",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{i}=f(s_{i-1},y_{i-1},c_{i})=(1-z_{i})\\circ s_{i-1}+z_{i}\\circ\\tilde{s}_{i},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{i}=f(s_{i-1},y_{i-1},c_{i})=(1-z_{i})\\circ s_{i-1}+z_{i}\\circ\\tilde{s}_{i},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{s}_{i}=\\tanh\\left(We(y_{i-1})+U\\left[r_{i}\\circ s_{i-1}\\right]+Cc_{i}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{s}_{i}=\\tanh\\left(We(y_{i-1})+U\\left[r_{i}\\circ s_{i-1}\\right]+Cc_{i}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle z_{i}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle z_{i}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle r_{i}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle a(s_{i-1},h_{j})=v_{a}^{\\top}\\tanh\\left(W_{a}s_{i-1}+U_{a}h_{j}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle a(s_{i-1},h_{j})=v_{a}^{\\top}\\tanh\\left(W_{a}s_{i-1}+U_{a}h_{j}\\right),",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathbf{x}=(x_{1},\\ldots,x_{T_{x}}),\\mbox{ }x_{i}\\in\\mathbb{R}^{K_{x}}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathbf{x}=(x_{1},\\ldots,x_{T_{x}}),\\mbox{ }x_{i}\\in\\mathbb{R}^{K_{x}}",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathbf{y}=(y_{1},\\ldots,y_{T_{y}}),\\mbox{ }y_{i}\\in\\mathbb{R}^{K_{y}},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\mathbf{y}=(y_{1},\\ldots,y_{T_{y}}),\\mbox{ }y_{i}\\in\\mathbb{R}^{K_{y}},",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{h}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{h}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{\\underline{h}}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{\\underline{h}}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{z}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\overrightarrow{r}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}=\\left[\\begin{array}[]{c}\\overrightarrow{h}_{i}\\\\\n\\overleftarrow{h}_{i}\\end{array}\\right]",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle h_{i}=\\left[\\begin{array}[]{c}\\overrightarrow{h}_{i}\\\\\n\\overleftarrow{h}_{i}\\end{array}\\right]",
+      "label": "(9)",
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle s_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{s}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{s}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle z_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle r_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle c_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\alpha_{ij}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\alpha_{ij}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle e_{ij}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{i}|s_{i},y_{i-1},c_{i})\\propto",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle p(y_{i}|s_{i},y_{i-1},c_{i})\\propto",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle t_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle t_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{t}_{i}=",
+      "label": null,
+      "inline": false
+    },
+    {
+      "latex": "\\displaystyle\\tilde{t}_{i}=",
+      "label": null,
+      "inline": false
+    }
+  ],
+  "references": [
+    {
+      "raw_text": "Axelrod et al. (2011) Axelrod, A., He, X., and Gao, J. (2011). Domain adaptation via pseudo in-domain data selection. In Proceedings of the ACL Conference on Empirical Methods in Natural Language Processing (EMNLP), pages 355–362. Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2011",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Axelrod et al. (2011)"
+    },
+    {
+      "raw_text": "Bastien et al. (2012) Bastien, F., Lamblin, P., Pascanu, R., Bergstra, J., Goodfellow, I. J., Bergeron, A., Bouchard, N., and Bengio, Y. (2012). Theano: new features and speed improvements. Deep Learning and Unsupervised Feature Learning NIPS 2012 Workshop.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bastien et al. (2012)"
+    },
+    {
+      "raw_text": "Bengio et al. (1994) Bengio, Y., Simard, P., and Frasconi, P. (1994). Learning long-term dependencies with gradient descent is difficult. IEEE Transactions on Neural Networks, 5(2), 157–166.",
+      "title": null,
+      "authors": [],
+      "year": "1994",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bengio et al. (1994)"
+    },
+    {
+      "raw_text": "Bengio et al. (2003) Bengio, Y., Ducharme, R., Vincent, P., and Janvin, C. (2003). A neural probabilistic language model. J. Mach. Learn. Res., 3, 1137–1155.",
+      "title": null,
+      "authors": [],
+      "year": "2003",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bengio et al. (2003)"
+    },
+    {
+      "raw_text": "Bergstra et al. (2010) Bergstra, J., Breuleux, O., Bastien, F., Lamblin, P., Pascanu, R., Desjardins, G., Turian, J., Warde-Farley, D., and Bengio, Y. (2010). Theano: a CPU and GPU math expression compiler. In Proceedings of the Python for Scientific Computing Conference (SciPy). Oral Presentation.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Bergstra et al. (2010)"
+    },
+    {
+      "raw_text": "Boulanger-Lewandowski et al. (2013) Boulanger-Lewandowski, N., Bengio, Y., and Vincent, P. (2013). Audio chord recognition with recurrent neural networks. In ISMIR.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Boulanger-Lewandowski et al. (2013)"
+    },
+    {
+      "raw_text": "Cho et al. (2014a) Cho, K., van Merrienboer, B., Gulcehre, C., Bougares, F., Schwenk, H., and Bengio, Y. (2014a). Learning phrase representations using RNN encoder-decoder for statistical machine translation. In Proceedings of the Empiricial Methods in Natural Language Processing (EMNLP 2014). to appear.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Cho et al. (2014a)"
+    },
+    {
+      "raw_text": "Cho et al. (2014b) Cho, K., van Merriënboer, B., Bahdanau, D., and Bengio, Y. (2014b). On the properties of neural machine translation: Encoder–Decoder approaches. In Eighth Workshop on Syntax, Semantics and Structure in Statistical Translation. to appear.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Cho et al. (2014b)"
+    },
+    {
+      "raw_text": "Devlin et al. (2014) Devlin, J., Zbib, R., Huang, Z., Lamar, T., Schwartz, R., and Makhoul, J. (2014). Fast and robust neural network joint models for statistical machine translation. In Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Devlin et al. (2014)"
+    },
+    {
+      "raw_text": "Forcada and Ñeco (1997) Forcada, M. L. and Ñeco, R. P. (1997). Recursive hetero-associative memories for translation. In J. Mira, R. Moreno-Díaz, and J. Cabestany, editors, Biological and Artificial Computation: From Neuroscience to Technology, volume 1240 of Lecture Notes in Computer Science, pages 453–462. Springer Berlin Heidelberg.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Forcada and Ñeco (1997)"
+    },
+    {
+      "raw_text": "Goodfellow et al. (2013) Goodfellow, I., Warde-Farley, D., Mirza, M., Courville, A., and Bengio, Y. (2013). Maxout networks. In Proceedings of The 30th International Conference on Machine Learning, pages 1319–1327.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Goodfellow et al. (2013)"
+    },
+    {
+      "raw_text": "Graves (2012) Graves, A. (2012). Sequence transduction with recurrent neural networks. In Proceedings of the 29th International Conference on Machine Learning (ICML 2012).",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves (2012)"
+    },
+    {
+      "raw_text": "Graves (2013) Graves, A. (2013). Generating sequences with recurrent neural networks. arXiv:1308.0850 [cs.NE].",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": "1308.0850",
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves (2013)"
+    },
+    {
+      "raw_text": "Graves et al. (2013) Graves, A., Jaitly, N., and Mohamed, A.-R. (2013). Hybrid speech recognition with deep bidirectional LSTM. In Automatic Speech Recognition and Understanding (ASRU), 2013 IEEE Workshop on, pages 273–278.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Graves et al. (2013)"
+    },
+    {
+      "raw_text": "Hermann and Blunsom (2014) Hermann, K. and Blunsom, P. (2014). Multilingual distributed representations without word alignment. In Proceedings of the Second International Conference on Learning Representations (ICLR 2014).",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hermann and Blunsom (2014)"
+    },
+    {
+      "raw_text": "Hochreiter (1991) Hochreiter, S. (1991). Untersuchungen zu dynamischen neuronalen Netzen. Diploma thesis, Institut für Informatik, Lehrstuhl Prof. Brauer, Technische Universität München.",
+      "title": null,
+      "authors": [],
+      "year": "1991",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hochreiter (1991)"
+    },
+    {
+      "raw_text": "Hochreiter and Schmidhuber (1997) Hochreiter, S. and Schmidhuber, J. (1997). Long short-term memory. Neural Computation, 9(8), 1735–1780.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Hochreiter and Schmidhuber (1997)"
+    },
+    {
+      "raw_text": "Kalchbrenner and Blunsom (2013) Kalchbrenner, N. and Blunsom, P. (2013). Recurrent continuous translation models. In Proceedings of the ACL Conference on Empirical Methods in Natural Language Processing (EMNLP), pages 1700–1709. Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Kalchbrenner and Blunsom (2013)"
+    },
+    {
+      "raw_text": "Koehn (2010) Koehn, P. (2010). Statistical Machine Translation. Cambridge University Press, New York, NY, USA.",
+      "title": null,
+      "authors": [],
+      "year": "2010",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Koehn (2010)"
+    },
+    {
+      "raw_text": "Koehn et al. (2003) Koehn, P., Och, F. J., and Marcu, D. (2003). Statistical phrase-based translation. In Proceedings of the 2003 Conference of the North American Chapter of the Association for Computational Linguistics on Human Language Technology - Volume 1, NAACL ’03, pages 48–54, Stroudsburg, PA, USA. Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2003",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Koehn et al. (2003)"
+    },
+    {
+      "raw_text": "Pascanu et al. (2013a) Pascanu, R., Mikolov, T., and Bengio, Y. (2013a). On the difficulty of training recurrent neural networks. In ICML’2013.",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pascanu et al. (2013a)"
+    },
+    {
+      "raw_text": "Pascanu et al. (2013b) Pascanu, R., Mikolov, T., and Bengio, Y. (2013b). On the difficulty of training recurrent neural networks. In Proceedings of the 30th International Conference on Machine Learning (ICML 2013).",
+      "title": null,
+      "authors": [],
+      "year": "2013",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pascanu et al. (2013b)"
+    },
+    {
+      "raw_text": "Pascanu et al. (2014) Pascanu, R., Gulcehre, C., Cho, K., and Bengio, Y. (2014). How to construct deep recurrent neural networks. In Proceedings of the Second International Conference on Learning Representations (ICLR 2014).",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pascanu et al. (2014)"
+    },
+    {
+      "raw_text": "Pouget-Abadie et al. (2014) Pouget-Abadie, J., Bahdanau, D., van Merriënboer, B., Cho, K., and Bengio, Y. (2014). Overcoming the curse of sentence length for neural machine translation using automatic segmentation. In Eighth Workshop on Syntax, Semantics and Structure in Statistical Translation. to appear.",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Pouget-Abadie et al. (2014)"
+    },
+    {
+      "raw_text": "Schuster and Paliwal (1997) Schuster, M. and Paliwal, K. K. (1997). Bidirectional recurrent neural networks. Signal Processing, IEEE Transactions on, 45(11), 2673–2681.",
+      "title": null,
+      "authors": [],
+      "year": "1997",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Schuster and Paliwal (1997)"
+    },
+    {
+      "raw_text": "Schwenk (2012) Schwenk, H. (2012). Continuous space translation models for phrase-based statistical machine translation. In M. Kay and C. Boitet, editors, Proceedings of the 24th International Conference on Computational Linguistics (COLIN), pages 1071–1080. Indian Institute of Technology Bombay.",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Schwenk (2012)"
+    },
+    {
+      "raw_text": "Schwenk et al. (2006) Schwenk, H., Dchelotte, D., and Gauvain, J.-L. (2006). Continuous space language models for statistical machine translation. In Proceedings of the COLING/ACL on Main conference poster sessions, pages 723–730. Association for Computational Linguistics.",
+      "title": null,
+      "authors": [],
+      "year": "2006",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Schwenk et al. (2006)"
+    },
+    {
+      "raw_text": "Sutskever et al. (2014) Sutskever, I., Vinyals, O., and Le, Q. (2014). Sequence to sequence learning with neural networks. In Advances in Neural Information Processing Systems (NIPS 2014).",
+      "title": null,
+      "authors": [],
+      "year": "2014",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Sutskever et al. (2014)"
+    },
+    {
+      "raw_text": "Zeiler (2012) Zeiler, M. D. (2012). ADADELTA: An adaptive learning rate method. arXiv:1212.5701 [cs.LG].",
+      "title": null,
+      "authors": [],
+      "year": "2012",
+      "venue": null,
+      "arxiv_id": "1212.5701",
+      "doi": null,
+      "url": null,
+      "citation_key": "Zeiler (2012)"
+    }
+  ],
+  "full_text": "## Introduction\n\nNeural machine translation is a newly emerging approach to machine\ntranslation, recently proposed by Kalchbrenner and Blunsom (2013),\nSutskever et al. (2014) and Cho et al. (2014b). Unlike the traditional phrase-based\ntranslation system (see, e.g., Koehn et al., 2003) which consists of many small\nsub-components that are tuned separately, neural machine translation attempts\nto build and train a single, large neural network that reads a sentence and\noutputs a correct translation.\n\nMost of the proposed neural machine translation models belong to a family of\nencoder–decoders (Sutskever et al., 2014; Cho et al., 2014a), with an encoder and a\ndecoder for each language, or involve a language-specific encoder applied to\neach sentence whose outputs are then compared (Hermann and Blunsom, 2014). An encoder\nneural network reads and encodes a source sentence into a fixed-length vector.\nA decoder then outputs a translation from the encoded vector. The whole\nencoder–decoder system, which consists of the encoder and the decoder for a\nlanguage pair, is jointly trained to maximize the probability of a correct\ntranslation given a source sentence.\n\nA potential issue with this encoder–decoder approach is that a neural network\nneeds to be able to compress all the necessary information of a source sentence\ninto a fixed-length vector. This may make it difficult for the neural network\nto cope with long sentences, especially those that are longer than the\nsentences in the training corpus. Cho et al. (2014b) showed that indeed the\nperformance of a basic encoder–decoder deteriorates rapidly as the length of\nan input sentence increases.\n\nIn order to address this issue, we introduce an extension to the\nencoder–decoder model which learns to align and translate jointly. Each time\nthe proposed model generates a word in a translation, it (soft-)searches\nfor a set of positions in a source sentence where the most relevant information\nis concentrated. The model then predicts a target word based on the context\nvectors associated with these source positions and all the previous generated\ntarget words.\n\nThe most important distinguishing feature of this approach from the basic\nencoder–decoder is that it does not attempt to encode a whole input sentence\ninto a single fixed-length vector. Instead, it encodes the input sentence into\na sequence of vectors and chooses a subset of these vectors adaptively while\ndecoding the translation. This frees a neural translation model from having to\nsquash all the information of a source sentence, regardless of its length, into\na fixed-length vector. We show this allows a model to cope better with long\nsentences.\n\nIn this paper, we show that the proposed approach of jointly learning to align\nand translate achieves significantly improved translation performance over the\nbasic encoder–decoder approach. The improvement is more apparent with longer\nsentences, but can be observed with sentences of any length. On the task of\nEnglish-to-French translation, the proposed approach achieves, with a single\nmodel, a translation performance comparable, or close, to the conventional\nphrase-based system. Furthermore, qualitative analysis reveals that the\nproposed model finds a linguistically plausible (soft-)alignment between\na source sentence and the corresponding target sentence.\n\n## Background: Neural Machine Translation\n\nFrom a probabilistic perspective, translation is equivalent to finding a target\nsentence $\\mathbf{y}$ that maximizes the conditional probability of $\\mathbf{y}$ given a\nsource sentence $\\mathbf{x}$, i.e., $\\operatorname*{\\arg\\max}_{\\mathbf{y}}p(\\mathbf{y}\\mid\\mathbf{x})$. In neural\nmachine translation, we fit a parameterized model to maximize the conditional\nprobability of sentence pairs using a parallel training corpus. Once the\nconditional distribution is learned by a translation model, given a source\nsentence a corresponding translation can be generated by searching for the\nsentence that maximizes the conditional probability.\n\nRecently, a number of papers have proposed the use of neural networks to\ndirectly learn this conditional distribution (see,\ne.g., Kalchbrenner and Blunsom, 2013; Cho et al., 2014a; Sutskever et al., 2014; Cho et al., 2014b; Forcada and Ñeco, 1997). This\nneural machine translation approach typically consists of two components, the\nfirst of which encodes a source sentence $\\mathbf{x}$ and the second decodes to a\ntarget sentence $\\mathbf{y}$. For instance, two recurrent neural networks (RNN) were\nused by (Cho et al., 2014a) and (Sutskever et al., 2014) to encode a variable-length\nsource sentence into a fixed-length vector and to decode the vector into a\nvariable-length target sentence.\n\nDespite being a quite new approach, neural machine translation has already\nshown promising results. Sutskever et al. (2014) reported that the neural machine\ntranslation based on RNNs with long short-term memory (LSTM) units achieves\nclose to the state-of-the-art performance of the conventional phrase-based\nmachine translation system on an English-to-French translation task.11\nWe mean by the state-of-the-art performance, the performance of the\nconventional phrase-based system without using any neural network-based\ncomponent.\nAdding neural components to existing translation systems, for instance,\nto score the phrase pairs in the phrase table (Cho et al., 2014a) or to re-rank\ncandidate translations (Sutskever et al., 2014), has allowed to\nsurpass the previous state-of-the-art performance level.\n\n### RNN Encoder–Decoder\n\nHere, we describe briefly the underlying framework, called RNN\nEncoder–Decoder, proposed by Cho et al. (2014a) and Sutskever et al. (2014) upon\nwhich we build a novel architecture that learns to align and translate\nsimultaneously.\n\nIn the Encoder–Decoder framework, an encoder reads the input sentence, a\nsequence of vectors $\\mathbf{x}=\\left(x_{1},\\cdots,x_{T_{x}}\\right)$, into a vector\n$c$.22\nAlthough most of the previous works (see,\ne.g., Cho et al., 2014a; Sutskever et al., 2014; Kalchbrenner and Blunsom, 2013) used to encode a\nvariable-length input sentence into a fixed-length vector, it is not\nnecessary, and even it may be beneficial to have a variable-length\nvector, as we will show later. The most common approach is to use an RNN such that\n\nwhere $h_{t}\\in\\mathbb{R}^{n}$ is a hidden state at time $t$, and $c$ is a vector\ngenerated from the sequence of the hidden states. $f$ and $q$ are some\nnonlinear functions. Sutskever et al. (2014) used an LSTM as $f$ and\n$q\\left(\\left\\{h_{1},\\cdots,h_{T}\\right\\}\\right)=h_{T}$, for instance.\n\nThe decoder is often trained to predict the next word $y_{t^{\\prime}}$ given the context\nvector $c$ and all the previously predicted words $\\left\\{y_{1},\\cdots,y_{t^{\\prime}-1}\\right\\}$. In other words, the decoder defines a probability over the\ntranslation $\\mathbf{y}$ by decomposing the joint probability into the ordered\nconditionals:\n\nwhere $\\mathbf{y}=\\left(y_{1},\\cdots,y_{T_{y}}\\right)$. With an RNN, each\nconditional probability is modeled as\n\nwhere $g$ is a nonlinear, potentially multi-layered, function that outputs the\nprobability of $y_{t}$, and $s_{t}$ is the hidden state of the RNN. It should be\nnoted that other architectures such as a hybrid of an RNN and a\nde-convolutional neural network can be used (Kalchbrenner and Blunsom, 2013).\n\n## Learning to Align and Translate\n\nIn this section, we propose a novel architecture for neural machine\ntranslation. The new architecture consists of a bidirectional RNN as an\nencoder (Sec. 3.2) and a decoder that emulates\nsearching through a source sentence during decoding a translation\n(Sec. 3.1).\n\n### Decoder: General Description\n\nIn a new model architecture, we define each conditional probability in\nEq. (2) as:\n\nwhere $s_{i}$ is an RNN hidden state for time $i$, computed by\n\nIt should be noted that unlike the existing encoder–decoder approach (see\nEq. (2)), here the probability is conditioned on a distinct\ncontext vector $c_{i}$ for each target word $y_{i}$.\n\nThe context vector $c_{i}$ depends on a sequence of annotations $(h_{1},\\cdots,h_{T_{x}})$ to which an encoder maps the input sentence. Each annotation\n$h_{i}$ contains information about the whole input sequence with a strong focus\non the parts surrounding the $i$-th word of the input sequence. We explain in\ndetail how the annotations are computed in the next section.\n\nThe context vector $c_{i}$ is, then, computed as a weighted sum of these\nannotations $h_{i}$:\n\nThe weight $\\alpha_{ij}$ of each annotation $h_{j}$ is computed by\n\nis an alignment model which scores how well the inputs around\nposition $j$ and the output at position $i$ match. The score is based on\nthe RNN hidden state $s_{i-1}$ (just before emitting $y_{i}$,\nEq. (4)) and the $j$-th annotation $h_{j}$ of the input\nsentence.\n\nWe parametrize the alignment model $a$ as a feedforward neural network which is\njointly trained with all the other components of the proposed system. Note\nthat unlike in traditional machine translation, the alignment is not considered\nto be a latent variable. Instead, the alignment model directly computes a soft\nalignment, which allows the gradient of the cost function to be backpropagated\nthrough. This gradient can be used to train the alignment model as well as the\nwhole translation model jointly.\n\nWe can understand the approach of taking a weighted sum of all the annotations\nas computing an expected annotation, where the expectation is over\npossible alignments. Let $\\alpha_{ij}$ be a probability that the target word\n$y_{i}$ is aligned to, or translated from, a source word $x_{j}$. Then, the $i$-th\ncontext vector $c_{i}$ is the expected annotation over all the annotations with\nprobabilities $\\alpha_{ij}$.\n\nThe probability $\\alpha_{ij}$, or its associated energy $e_{ij}$, reflects the\nimportance of the annotation $h_{j}$ with respect to the previous hidden state\n$s_{i-1}$ in deciding the next state $s_{i}$ and generating $y_{i}$. Intuitively,\nthis implements a mechanism of attention in the decoder. The decoder decides\nparts of the source sentence to pay attention to. By letting the decoder have an\nattention mechanism, we relieve the encoder from the burden of having to encode\nall information in the source sentence into a fixed-length vector. With this new\napproach the information can be spread throughout the sequence of annotations,\nwhich can be selectively retrieved by the decoder accordingly.\n\n### Encoder: Bidirectional RNN for Annotating Sequences\n\nThe usual RNN, described in Eq. (1), reads an input\nsequence $\\mathbf{x}$ in order starting from the first symbol $x_{1}$ to the last one\n$x_{T_{x}}$. However, in the proposed scheme, we would like the annotation of each\nword to summarize not only the preceding words, but also the following words.\nHence, we propose to use a bidirectional RNN (BiRNN, Schuster and Paliwal, 1997),\nwhich has been successfully used recently in speech recognition (see,\ne.g., Graves et al., 2013).\n\nA BiRNN consists of forward and backward RNN’s. The forward RNN $\\overrightarrow{f}$ reads\nthe input sequence as it is ordered (from $x_{1}$ to $x_{T_{x}}$) and calculates a\nsequence of forward hidden states $(\\overrightarrow{h}_{1},\\cdots,\\overrightarrow{h}_{T_{x}})$.\nThe backward RNN $\\overleftarrow{f}$ reads the sequence in the reverse order (from\n$x_{T_{x}}$ to $x_{1}$), resulting in a sequence of backward hidden states $(\\overleftarrow{h}_{1},\\cdots,\\overleftarrow{h}_{T_{x}})$.\n\nWe obtain an annotation for each word $x_{j}$ by concatenating the forward hidden\nstate $\\overrightarrow{h}_{j}$ and the backward one $\\overleftarrow{h}_{j}$, i.e., $h_{j}=\\left[\\overrightarrow{h}_{j}^{\\top};\\overleftarrow{h}_{j}^{\\top}\\right]^{\\top}$. In this way, the annotation $h_{j}$\ncontains the summaries of both the preceding words and the following words. Due\nto the tendency of RNNs to better represent recent inputs, the annotation $h_{j}$\nwill be focused on the words around $x_{j}$. This sequence of annotations is used\nby the decoder and the alignment model later to compute the context vector\n(Eqs. (5)–(6)).\n\nSee Fig. 1 for the graphical illustration of the proposed\nmodel.\n\n## Experiment Settings\n\nWe evaluate the proposed approach on the task of English-to-French translation.\nWe use the bilingual, parallel corpora provided by ACL WMT ’14.33\nhttp://www.statmt.org/wmt14/translation-task.html As a comparison, we also report the performance of an RNN Encoder–Decoder\nwhich was proposed recently by Cho et al. (2014a). We use the same training\nprocedures and the same dataset for both models.44\nImplementations are available at https://github.com/lisa-groundhog/GroundHog.\n\n### Dataset\n\nWMT ’14 contains the following English-French parallel corpora: Europarl (61M\nwords), news commentary (5.5M), UN (421M) and two crawled corpora of 90M and\n272.5M words respectively, totaling 850M words.\nFollowing the procedure described\nin Cho et al. (2014a), we reduce the size of the combined corpus to have 348M words\nusing the data selection method by Axelrod et al. (2011).55\nAvailable online at\nhttp://www-lium.univ-lemans.fr/~schwenk/cslm_joint_paper/. We do not use any monolingual data other than the mentioned parallel corpora,\nalthough it may be possible to use a much larger monolingual corpus to pretrain\nan encoder. We concatenate news-test-2012 and news-test-2013 to make a\ndevelopment (validation) set, and evaluate the models on the test set\n(news-test-2014) from WMT ’14, which consists of 3003 sentences not present in\nthe training data.\n\nAfter a usual tokenization66\nWe used the tokenization script from the open-source machine translation\npackage, Moses.,\nwe use a shortlist of 30,000 most frequent words in each language to train our\nmodels. Any word not included in the shortlist is mapped to a special token\n($\\left[\\mbox{UNK}\\right]$). We do not apply any other special preprocessing,\nsuch as lowercasing or stemming, to the data.\n\n### Models\n\nWe train two types of models. The first one is an RNN\nEncoder–Decoder (RNNencdec, Cho et al., 2014a), and the other is the proposed\nmodel, to which we refer as RNNsearch. We train each model twice: first with the\nsentences of length up to 30 words (RNNencdec-30, RNNsearch-30) and then with the\nsentences of length up to 50 word (RNNencdec-50, RNNsearch-50).\n\nThe encoder and decoder of the RNNencdec have 1000 hidden units each.77\nIn this paper, by a ’hidden unit’, we always mean the gated hidden unit (see\nAppendix A.1.1). The encoder of the RNNsearch consists of forward and backward recurrent neural\nnetworks (RNN) each having 1000 hidden units. Its decoder has 1000 hidden units.\nIn both cases, we use a multilayer network with a single\nmaxout (Goodfellow et al., 2013) hidden layer to compute the conditional\nprobability of each target word (Pascanu et al., 2014).\n\nWe use a minibatch stochastic gradient descent (SGD) algorithm together with\nAdadelta (Zeiler, 2012) to train each model. Each SGD update direction is\ncomputed using a minibatch of 80 sentences. We trained each model for\napproximately 5 days.\n\nOnce a model is trained, we use a beam search to find a translation that\napproximately maximizes the conditional probability (see,\ne.g., Graves, 2012; Boulanger-Lewandowski et al., 2013). Sutskever et al. (2014) used this approach to\ngenerate translations from their neural machine translation model.\n\nFor more details on the architectures of the models and training procedure used\nin the experiments, see Appendices A and\nB.\n\n## Results\n\n### Quantitative Results\n\nIn Table 1, we list the translation performances measured in BLEU\nscore. It is clear from the table that in all the cases, the proposed RNNsearch\noutperforms the conventional RNNencdec. More importantly, the performance of the\nRNNsearch is as high as that of the conventional phrase-based translation system\n(Moses), when only the sentences consisting of known words are considered. This\nis a significant achievement, considering that Moses uses a separate monolingual\ncorpus (418M words) in addition to the parallel corpora we used to train the\nRNNsearch and RNNencdec.\n\nOne of the motivations behind the proposed approach was the use of a\nfixed-length context vector in the basic encoder–decoder approach. We\nconjectured that this limitation may make the basic encoder–decoder approach to\nunderperform with long sentences. In Fig. 2, we see that the\nperformance of RNNencdec dramatically drops as the length of the sentences\nincreases. On the other hand, both RNNsearch-30 and RNNsearch-50 are more robust\nto the length of the sentences. RNNsearch-50, especially, shows no performance\ndeterioration even with sentences of length 50 or more. This superiority of the\nproposed model over the basic encoder–decoder is further confirmed by the fact\nthat the RNNsearch-30 even outperforms RNNencdec-50 (see Table 1).\n\n### Qualitative Analysis\n\n##### Alignment\n\nThe proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word.\n\nWe can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne].\n\nThe strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010).\n\n##### Long Sentences\n\nAs clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword.\n\nAs an example, consider this source sentence from the test set:\n\nAn admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital.\n\nThe RNNencdec-50 translated this sentence into:\n\nUn privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé.\n\nThe RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”).\n\nOn the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:\n\nUn privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital.\n\nLet us consider another sentence from the test set:\n\nThis kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added.\n\nThe translation by the RNNencdec-50 is\n\nCe type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes.\n\nAs with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark.\n\nAgain, the RNNsearch-50 was able to translate this long sentence correctly:\n\nCe genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté.\n\nIn conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel.\n\nIn Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations.\n\n#### Alignment\n\nThe proposed approach provides an intuitive way to inspect the\n(soft-)alignment between the words in a generated translation and those\nin a source sentence. This is done by visualizing the annotation weights\n$\\alpha_{ij}$ from Eq. (6), as in\nFig. 3. Each row of a matrix in each plot indicates the\nweights associated with the annotations. From this we see which positions in the\nsource sentence were considered more important when generating the target word.\n\nWe can see from the alignments in Fig. 3 that the alignment of\nwords between English and French is largely monotonic. We see strong weights\nalong the diagonal of each matrix. However, we also observe a number of\nnon-trivial, non-monotonic alignments. Adjectives and nouns are typically\nordered differently between French and English, and we see an example in\nFig. 3 (a). From this figure, we see that the model correctly\ntranslates a phrase [European Economic Area] into [zone économique\neuropéen]. The RNNsearch was able to correctly align [zone] with [Area],\njumping over the two words ([European] and [Economic]), and then looked one word\nback at a time to complete the whole phrase [zone économique européenne].\n\nThe strength of the soft-alignment, opposed to a hard-alignment, is evident, for\ninstance, from Fig. 3 (d). Consider the source phrase [the\nman] which was translated into [l’ homme]. Any hard alignment will map [the] to\n[l’] and [man] to [homme]. This is not helpful for translation, as one must\nconsider the word following [the] to determine whether it should be translated\ninto [le], [la], [les] or [l’]. Our soft-alignment solves this issue naturally\nby letting the model look at both [the] and [man], and in this example, we see\nthat the model was able to correctly translate [the] into [l’]. We observe\nsimilar behaviors in all the presented cases in Fig. 3. An\nadditional benefit of the soft alignment is that it naturally deals with source\nand target phrases of different lengths, without requiring a counter-intuitive\nway of mapping some words to or from nowhere ([NULL]) (see, e.g.,\nChapters 4 and 5 of Koehn, 2010).\n\n#### Long Sentences\n\nAs clearly visible from Fig. 2 the proposed model\n(RNNsearch) is much better than the conventional model (RNNencdec) at translating\nlong sentences. This is likely due to the fact that the RNNsearch does not\nrequire encoding a long sentence into a fixed-length vector perfectly, but only\naccurately encoding the parts of the input sentence that surround a particular\nword.\n\nAs an example, consider this source sentence from the test set:\n\nAn admitting privilege is the right of a doctor to admit a patient to a hospital\nor a medical centre to carry out a diagnosis or a procedure, based on\nhis status as a health care worker at a hospital.\n\nThe RNNencdec-50 translated this sentence into:\n\nUn privilège d’admission est le droit d’un médecin de reconnaître un patient à\nl’hôpital ou un centre médical d’un diagnostic ou de prendre un diagnostic\nen fonction de son état de santé.\n\nThe RNNencdec-50 correctly translated the source sentence until [a medical center].\nHowever, from there on (underlined), it deviated from the original meaning of\nthe source sentence. For instance, it replaced [based on his status as a health\ncare worker at a hospital] in the source sentence with [en fonction de son\nétat de santé] (“based on his state of health”).\n\nOn the other hand, the RNNsearch-50 generated the following correct translation,\npreserving the whole meaning of the input sentence without omitting any details:\n\nUn privilège d’admission est le droit d’un médecin d’admettre un patient à un\nhôpital ou un centre médical pour effectuer un diagnostic ou une\nprocédure, selon son statut de travailleur des soins de santé à\nl’hôpital.\n\nLet us consider another sentence from the test set:\n\nThis kind of experience is part of Disney’s efforts to ”extend the lifetime of\nits series and build new relationships with audiences via digital platforms that\nare becoming ever more important,” he added.\n\nThe translation by the RNNencdec-50 is\n\nCe type d’expérience fait partie des initiatives du Disney pour ”prolonger la\ndurée de vie de ses nouvelles et de développer des liens avec les\nlecteurs numériques qui deviennent plus complexes.\n\nAs with the previous example, the RNNencdec began deviating from the actual meaning\nof the source sentence after generating approximately 30 words (see the\nunderlined phrase). After that point, the quality of the translation\ndeteriorates, with basic mistakes such as the lack of a closing quotation mark.\n\nAgain, the RNNsearch-50 was able to translate this long sentence correctly:\n\nCe genre d’expérience fait partie des efforts de Disney pour ”prolonger la\ndurée de vie de ses séries et créer de nouvelles relations avec des\npublics via des plateformes numériques de plus en plus importantes”, a-t-il\najouté.\n\nIn conjunction with the quantitative results presented already, these\nqualitative observations confirm our hypotheses that the RNNsearch architecture\nenables far more reliable translation of long sentences than the standard RNNencdec\nmodel.\n\nIn Appendix C, we provide a few more sample\ntranslations of long source sentences generated by the RNNencdec-50, RNNsearch-50\nand Google Translate along with the reference translations.\n\n## Related Work\n\n### Learning to Align\n\nA similar approach of aligning an output symbol with an input symbol was\nproposed recently by Graves (2013) in the context of handwriting synthesis.\nHandwriting synthesis is a task where the model is asked to generate handwriting\nof a given sequence of characters. In his work, he used a mixture of Gaussian\nkernels to compute the weights of the annotations, where the location, width and\nmixture coefficient of each kernel was predicted from an alignment model. More\nspecifically, his alignment was restricted to predict the location such that the\nlocation increases monotonically.\n\nThe main difference from our approach is that, in (Graves, 2013), the modes\nof the weights of the annotations only move in one direction. In the context of\nmachine translation, this is a severe limitation, as (long-distance) reordering\nis often needed to generate a grammatically correct translation (for instance,\nEnglish-to-German).\n\nOur approach, on the other hand, requires computing the annotation weight of\nevery word in the source sentence for each word in the translation. This\ndrawback is not severe with the task of translation in which most of input and\noutput sentences are only 15–40 words. However, this may limit the\napplicability of the proposed scheme to other tasks.\n\n### Neural Networks for Machine Translation\n\nSince Bengio et al. (2003) introduced a neural probabilistic language model\nwhich uses a neural network to model the conditional probability of a word given\na fixed number of the preceding words, neural networks have widely been used in\nmachine translation. However, the role of neural networks has been largely\nlimited to simply providing a single feature to an existing statistical machine\ntranslation system or to re-rank a list of candidate translations provided by an\nexisting system.\n\nFor instance, Schwenk (2012) proposed using a feedforward neural network to\ncompute the score of a pair of source and target phrases and to use the score as\nan additional feature in the phrase-based statistical machine translation\nsystem. More recently, Kalchbrenner and Blunsom (2013) and Devlin et al. (2014) reported\nthe successful use of the neural networks as a sub-component of the existing\ntranslation system. Traditionally, a neural network trained as a target-side\nlanguage model has been used to rescore or rerank a list of candidate\ntranslations (see, e.g., Schwenk et al., 2006).\n\nAlthough the above approaches were shown to improve the translation performance\nover the state-of-the-art machine translation systems, we are more interested in\na more ambitious objective of designing a completely new translation system\nbased on neural networks. The neural machine translation approach we consider in\nthis paper is therefore a radical departure from these earlier works. Rather\nthan using a neural network as a part of the existing system, our model works on\nits own and generates a translation from a source sentence directly.\n\n## Conclusion\n\nThe conventional approach to neural machine translation, called an\nencoder–decoder approach, encodes a whole input sentence into a fixed-length\nvector from which a translation will be decoded. We conjectured that the use of\na fixed-length context vector is problematic for translating long sentences,\nbased on a recent empirical study reported by Cho et al. (2014b) and\nPouget-Abadie et al. (2014).\n\nIn this paper, we proposed a novel architecture that addresses this issue. We\nextended the basic encoder–decoder by letting a model (soft-)search for\na set of input words, or their annotations computed by an encoder, when\ngenerating each target word. This frees the model from having to encode a whole\nsource sentence into a fixed-length vector, and also lets the model focus only\non information relevant to the generation of the next target word. This has a\nmajor positive impact on the ability of the neural machine translation system to\nyield good results on longer sentences. Unlike with the traditional machine\ntranslation systems, all of the pieces of the translation system, including the\nalignment mechanism, are jointly trained towards a better log-probability of\nproducing correct translations.\n\nWe tested the proposed model, called RNNsearch, on the task of English-to-French\ntranslation. The experiment revealed that the proposed RNNsearch outperforms the\nconventional encoder–decoder model (RNNencdec) significantly, regardless of the\nsentence length and that it is much more robust to the length of a source\nsentence. From the qualitative analysis where we investigated the\n(soft-)alignment generated by the RNNsearch, we were able to conclude\nthat the model can correctly align each target word with the relevant words, or\ntheir annotations, in the source sentence as it generated a correct translation.\n\nPerhaps more importantly, the proposed approach achieved a translation\nperformance comparable to the existing phrase-based statistical machine\ntranslation. It is a striking result, considering that the proposed\narchitecture, or the whole family of neural machine translation, has only been\nproposed as recently as this year. We believe the architecture proposed here is\na promising step toward better machine translation and a better understanding of\nnatural languages in general.\n\nOne of challenges left for the future is to better handle unknown, or rare\nwords. This will be required for the model to be more widely used and to match\nthe performance of current state-of-the-art machine translation systems in all\ncontexts.\n\n## Acknowledgments\n\nThe authors would like to thank the developers of\nTheano (Bergstra et al., 2010; Bastien et al., 2012). We acknowledge the\nsupport of the following agencies for research funding and computing support:\nNSERC, Calcul Québec, Compute Canada, the Canada Research Chairs and CIFAR.\nBahdanau thanks the support from Planet Intelligent Systems GmbH. We also thank\nFelix Hill, Bart van Merriénboer, Jean Pouget-Abadie, Coline Devin and\nTae-Ho Kim.\n",
+  "extracted_at": "2026-04-13T15:22:13.004305"
+}

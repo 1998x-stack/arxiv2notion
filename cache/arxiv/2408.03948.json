@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "2408.03948v2",
+  "title": "A Survey of AI Reliance",
+  "authors": [
+    "Sven Eckhardt",
+    "Niklas Kühl",
+    "Mateusz Dolata",
+    "Gerhard Schwabe"
+  ],
+  "abstract": "Although artificial intelligence (AI) systems are becoming increasingly indispensable, research into how humans rely on these systems (AI reliance) is lagging behind. To advance this research, this survey presents a novel, comprehensive sociotechnical perspective on AI reliance, essential to fully understand the phenomenon. To address these challenges, the survey introduces a categorization framework resulting in a morphological box, which guides rigorous AI reliance research. Further, the survey identifies the core influences on AI reliance within the components of a sociotechnical system and discusses current limitations alongside emerging future research avenues to form a research agenda.",
+  "categories": [
+    "cs.HC",
+    "cs.AI",
+    "cs.CY"
+  ],
+  "primary_category": "cs.HC",
+  "published": "2024-07-22T09:34:58+00:00",
+  "updated": "2025-08-30T14:03:45+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2408.03948v2.pdf"
+}

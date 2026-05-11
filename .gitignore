@@ -1,2 +1,9 @@
 .env
 .env.local
+__pycache__
+*/__pycache__
+.claude/
+.pytest_cache
+.ruff_cachecache/
+*.pyc
+.DS_Store

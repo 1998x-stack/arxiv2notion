@@ -1,0 +1,32 @@
+{
+  "arxiv_id": "2506.08837v3",
+  "title": "Design Patterns for Securing LLM Agents against Prompt Injections",
+  "authors": [
+    "Luca Beurer-Kellner",
+    "Beat Buesser",
+    "Ana-Maria Creţu",
+    "Edoardo Debenedetti",
+    "Daniel Dobos",
+    "Daniel Fabian",
+    "Marc Fischer",
+    "David Froelicher",
+    "Kathrin Grosse",
+    "Daniel Naeff",
+    "Ezinwanne Ozoani",
+    "Andrew Paverd",
+    "Florian Tramèr",
+    "Václav Volhejn"
+  ],
+  "abstract": "As AI agents powered by Large Language Models (LLMs) become increasingly versatile and capable of addressing a broad spectrum of tasks, ensuring their security has become a critical challenge. Among the most pressing threats are prompt injection attacks, which exploit the agent's resilience on natural language inputs -- an especially dangerous threat when agents are granted tool access or handle sensitive information. In this work, we propose a set of principled design patterns for building AI agents with provable resistance to prompt injection. We systematically analyze these patterns, discuss their trade-offs in terms of utility and security, and illustrate their real-world applicability through a series of case studies.",
+  "categories": [
+    "cs.LG",
+    "cs.CR"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2025-06-10T14:23:55+00:00",
+  "updated": "2025-06-27T11:13:27+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2506.08837v3.pdf"
+}

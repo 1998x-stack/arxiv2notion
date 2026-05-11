@@ -1,0 +1,1932 @@
+{
+  "paper_id": "2603.11619",
+  "title": "Taming OpenClaw: Security Analysis and Mitigation of Autonomous LLM Agent Threats",
+  "authors": [
+    "Xinhao Deng",
+    "Yixiang Zhang",
+    "Jiaqing Wu",
+    "Jiaqi Bai",
+    "Sibo Yi",
+    "Zhuoheng Zou",
+    "Yue Xiao",
+    "Rennai Qiu",
+    "Jianan Ma",
+    "Jialuo Chen",
+    "Xiaohu Du",
+    "Xiaofang Yang",
+    "Shiwen Cui",
+    "Changhua Meng",
+    "Weiqiang Wang",
+    "Jiaxing Song",
+    "Ke Xu",
+    "Qi Li"
+  ],
+  "affiliations": [
+    "Ant Group & Tsinghua UniversityChina",
+    "Tsinghua UniversityBeijingChina",
+    "Ant GroupHangzhouChina"
+  ],
+  "abstract": "Autonomous Large Language Model (LLM) agents, exemplified by OpenClaw, demonstrate remarkable capabilities in executing complex, long-horizon tasks. However, their tightly coupled instant-messaging interaction paradigm and high-privilege execution capabilities substantially expand the system attack surface. In this paper, we present a comprehensive security threat analysis of OpenClaw. To structure our analysis, we introduce a five-layer lifecycle-oriented security framework that captures key stages of agent operation, i.e., initialization, input, inference, decision, and execution, and systematically examine compound threats across the agent’s operational lifecycle, including indirect prompt injection, skill supply chain contamination, memory poisoning, and intent drift. Through detailed case studies on OpenClaw, we demonstrate the prevalence and severity of these threats and analyze the limitations of existing defenses. Our findings reveal critical weaknesses in current point-based defense mechanisms when addressing cross-temporal and multi-stage systemic risks, highlighting the need for holistic security architectures for autonomous LLM agents. Within this framework, we further examine representative defense strategies at each lifecycle stage, including plugin vetting frameworks, context-aware instruction filtering, memory integrity validation protocols, intent verification mechanisms, and capability enforcement architectures.",
+  "sections": [
+    {
+      "title": "Introduction",
+      "level": 2,
+      "paragraphs": [
+        "Large Language Models (LLMs) have demonstrated remarkable capabilities in understanding and generating human language, achieving major advances in natural language processing, code generation, and complex reasoning tasks (OpenAI, 2024; Team, 2024; Baiet al., 2023; Team, 2025). Building upon these capabilities, autonomous LLM agents have emerged as a new paradigm that transforms AI systems from passive conversational assistants into proactive entities capable of independently executing complex, long-horizon tasks. This paradigm is exemplified by advanced agent frameworks such as OpenClaw (Steinberger and the OpenClaw contributors, 2026).",
+        "Unlike early constrained LLM applications, OpenClaw positions LLMs as the central cognitive engine within a highly extensible and interactive system architecture. In particular, it enables deep environmental engagement by bridging human intent and computational execution through rich instant messaging (IM) interfaces. Furthermore, OpenClaw allows agents to dynamically orchestrate specialized third-party plugins, maintain persistent contextual memory, and perform high-privilege operations such as automated software engineering and system administration.",
+        "However, the very capabilities that empower autonomous LLM agents also introduce significant security risks. Unlike traditional LLM applications operating in constrained, stateless settings, autonomous agents rely on persistent memory, cross-system integration, and privileged access to execute complex workflows. Their interactive nature and high-privilege execution capabilities substantially expand the system attack surface (Chenet al., 2026; Wanget al., 2026b). While recent studies (Zhanget al., 2025; Debenedettiet al., 2024) have uncovered several critical vulnerabilities in LLM-based systems, the autonomous nature of agents introduces unique multi-stage threats that extend beyond isolated prompt injection (Liuet al., 2025a) or jailbreak attacks (Yiet al., 2024).",
+        "The threat landscape of autonomous LLM agents consists of multi-stage systemic risks spanning the entire operational lifecycle: (I) Initialization: Prior to runtime, agents face severe supply chain risks arising from malicious skills, credential leakage, and insecure configurations (Liuet al., 2026). (II) Input: During environmental interaction, the ingestion of untrusted external data exposes agents to indirect prompt injection, system prompt extraction, and malicious file parsing (Wanget al., 2025d). (III) Inference: Long-horizon operation renders agents vulnerable to memory poisoning and context drift, gradually eroding adherence to the user’s original instructions (Sunilet al., 2026). (IV) Decision: Through vulnerability exploitation or complex environmental interactions, the agent’s decision-making process may deviate from user intent, leading to goal hijacking, tool-selection manipulation, and the bypass of alignment policies (Denget al., 2026). (V) Execution: Finally, the high-privilege execution capabilities required for autonomous operation create opportunities for critical system compromise, including arbitrary code execution, privilege escalation, data exfiltration, and lateral movement (National Vulnerability Database (NVD), 2026).",
+        "Existing defenses remain insufficient against these multifaceted threats. Most approaches focus on hardening isolated interfaces within the agent pipeline, such as guardrail-based input filtering (Donget al., 2024; Wanget al., 2026a), prompt–data separation through structured queries (Chenet al., 2025a), or robustness-oriented defensive training via preference optimization (Chenet al., 2025b). Detection-based methods further attempt to identify injected instructions, yet they remain largely orthogonal to end-to-end, lifecycle-level security guarantees for autonomous agents (Liuet al., 2025b). Consequently, these piecemeal defenses exhibit significant limitations in mitigating cross-temporal, multi-stage attacks that unfold over extended agent interactions, leaving critical gaps exploitable by coordinated adversaries.",
+        "To comprehensively characterize the defense space against these threats, we organize applicable security measures across five lifecycle stages that align with the agent’s threat taxonomy: (I) Foundational Base: Defense measures at the initialization stage focus on configuration validation and plugin vetting to mitigate supply chain attacks and prevent credential leakage. (II) Input Perception: Defense strategies sanitize and filter external inputs to intercept malicious prompt injections and adversarial content before they reach the core reasoning engine. (III) Cognitive State:\nDefense mechanisms safeguard the agent’s internal state during inference by preventing memory poisoning and detecting context drift across long-horizon interactions. (IV) Decision Alignment: Defense approaches verify that generated plans, tool selections, and intermediate decisions remain consistent with user intent and predefined alignment policies. (V) Execution Control: Defense architectures enforce strict capability restrictions and privilege management to ensure secure and sandboxed action execution.",
+        "In summary, this paper makes the following contributions:",
+        "We present a systematic taxonomy of the autonomous agent threat landscape across its complete operational lifecycle (Initialization, Input, Inference, Decision, and Execution), identifying compounding risks unique to long-horizon agent operations.",
+        "We demonstrate the prevalence and severity of these threats through detailed case studies on OpenClaw and analyze how effectively existing defense strategies mitigate real-world attack scenarios.",
+        "We provide a comprehensive analysis of defense mechanisms applicable to each lifecycle stage of OpenClaw.",
+        "We explore the broader defense design space by examining potential defense strategies corresponding to different lifecycle stages, providing insights for building comprehensive protection against autonomous agent threats."
+      ],
+      "subsections": [],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Large Language Models (LLMs) have demonstrated remarkable capabilities in understanding and generating human language, achieving major advances in natural language processing, code generation, and complex reasoning tasks (OpenAI, 2024; Team, 2024; Baiet al., 2023; Team, 2025). Building upon these capabilities, autonomous LLM agents have emerged as a new paradigm that transforms AI systems from passive conversational assistants into proactive entities capable of independently executing complex, long-horizon tasks. This paradigm is exemplified by advanced agent frameworks such as OpenClaw (Steinberger and the OpenClaw contributors, 2026)."
+        },
+        {
+          "type": "para",
+          "data": "Unlike early constrained LLM applications, OpenClaw positions LLMs as the central cognitive engine within a highly extensible and interactive system architecture. In particular, it enables deep environmental engagement by bridging human intent and computational execution through rich instant messaging (IM) interfaces. Furthermore, OpenClaw allows agents to dynamically orchestrate specialized third-party plugins, maintain persistent contextual memory, and perform high-privilege operations such as automated software engineering and system administration."
+        },
+        {
+          "type": "para",
+          "data": "However, the very capabilities that empower autonomous LLM agents also introduce significant security risks. Unlike traditional LLM applications operating in constrained, stateless settings, autonomous agents rely on persistent memory, cross-system integration, and privileged access to execute complex workflows. Their interactive nature and high-privilege execution capabilities substantially expand the system attack surface (Chenet al., 2026; Wanget al., 2026b). While recent studies (Zhanget al., 2025; Debenedettiet al., 2024) have uncovered several critical vulnerabilities in LLM-based systems, the autonomous nature of agents introduces unique multi-stage threats that extend beyond isolated prompt injection (Liuet al., 2025a) or jailbreak attacks (Yiet al., 2024)."
+        },
+        {
+          "type": "para",
+          "data": "The threat landscape of autonomous LLM agents consists of multi-stage systemic risks spanning the entire operational lifecycle: (I) Initialization: Prior to runtime, agents face severe supply chain risks arising from malicious skills, credential leakage, and insecure configurations (Liuet al., 2026). (II) Input: During environmental interaction, the ingestion of untrusted external data exposes agents to indirect prompt injection, system prompt extraction, and malicious file parsing (Wanget al., 2025d). (III) Inference: Long-horizon operation renders agents vulnerable to memory poisoning and context drift, gradually eroding adherence to the user’s original instructions (Sunilet al., 2026). (IV) Decision: Through vulnerability exploitation or complex environmental interactions, the agent’s decision-making process may deviate from user intent, leading to goal hijacking, tool-selection manipulation, and the bypass of alignment policies (Denget al., 2026). (V) Execution: Finally, the high-privilege execution capabilities required for autonomous operation create opportunities for critical system compromise, including arbitrary code execution, privilege escalation, data exfiltration, and lateral movement (National Vulnerability Database (NVD), 2026)."
+        },
+        {
+          "type": "para",
+          "data": "Existing defenses remain insufficient against these multifaceted threats. Most approaches focus on hardening isolated interfaces within the agent pipeline, such as guardrail-based input filtering (Donget al., 2024; Wanget al., 2026a), prompt–data separation through structured queries (Chenet al., 2025a), or robustness-oriented defensive training via preference optimization (Chenet al., 2025b). Detection-based methods further attempt to identify injected instructions, yet they remain largely orthogonal to end-to-end, lifecycle-level security guarantees for autonomous agents (Liuet al., 2025b). Consequently, these piecemeal defenses exhibit significant limitations in mitigating cross-temporal, multi-stage attacks that unfold over extended agent interactions, leaving critical gaps exploitable by coordinated adversaries."
+        },
+        {
+          "type": "para",
+          "data": "To comprehensively characterize the defense space against these threats, we organize applicable security measures across five lifecycle stages that align with the agent’s threat taxonomy: (I) Foundational Base: Defense measures at the initialization stage focus on configuration validation and plugin vetting to mitigate supply chain attacks and prevent credential leakage. (II) Input Perception: Defense strategies sanitize and filter external inputs to intercept malicious prompt injections and adversarial content before they reach the core reasoning engine. (III) Cognitive State:\nDefense mechanisms safeguard the agent’s internal state during inference by preventing memory poisoning and detecting context drift across long-horizon interactions. (IV) Decision Alignment: Defense approaches verify that generated plans, tool selections, and intermediate decisions remain consistent with user intent and predefined alignment policies. (V) Execution Control: Defense architectures enforce strict capability restrictions and privilege management to ensure secure and sandboxed action execution."
+        },
+        {
+          "type": "para",
+          "data": "In summary, this paper makes the following contributions:"
+        },
+        {
+          "type": "para",
+          "data": "We present a systematic taxonomy of the autonomous agent threat landscape across its complete operational lifecycle (Initialization, Input, Inference, Decision, and Execution), identifying compounding risks unique to long-horizon agent operations."
+        },
+        {
+          "type": "para",
+          "data": "We demonstrate the prevalence and severity of these threats through detailed case studies on OpenClaw and analyze how effectively existing defense strategies mitigate real-world attack scenarios."
+        },
+        {
+          "type": "para",
+          "data": "We provide a comprehensive analysis of defense mechanisms applicable to each lifecycle stage of OpenClaw."
+        },
+        {
+          "type": "para",
+          "data": "We explore the broader defense design space by examining potential defense strategies corresponding to different lifecycle stages, providing insights for building comprehensive protection against autonomous agent threats."
+        }
+      ]
+    },
+    {
+      "title": "Background",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Autonomous LLM Agents",
+          "level": 3,
+          "paragraphs": [
+            "Autonomous LLM agents extend static language models into dynamic systems capable of perceiving environments, reasoning over tasks, and executing actions to achieve goals (Wanget al., 2025a; Yanget al., 2024).\nUnlike stateless LLM applications, these agents rely on persistent memory and cross-system integration to support long-horizon workflows. The operational lifecycle of an autonomous agent can be divided into five stages (Parket al., 2023):",
+            "Stage I-Initialization: Loading system prompts, security configurations, and plugins to establish the agent’s operational environment and trust boundaries.",
+            "Stage II-Input: Ingesting multi-modal inputs while distinguishing trusted user instructions from untrusted external data sources.",
+            "Stage III-Inference: Processing inputs, retrieving external knowledge (e.g., via retrieval-augmented generation (Lewiset al., 2020)), and performing reasoning with techniques such as Chain-of-Thought (CoT) prompting (Weiet al., 2022) while maintaining contextual memory.",
+            "Stage IV-Decision: Selecting appropriate tools and generating execution parameters through agent planning frameworks such as ReAct (Yaoet al., 2023).",
+            "Stage V-Execution: Performing actions through external systems, often requiring strict sandboxing and access-control mechanisms to manage privileged operations."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Autonomous LLM agents extend static language models into dynamic systems capable of perceiving environments, reasoning over tasks, and executing actions to achieve goals (Wanget al., 2025a; Yanget al., 2024).\nUnlike stateless LLM applications, these agents rely on persistent memory and cross-system integration to support long-horizon workflows. The operational lifecycle of an autonomous agent can be divided into five stages (Parket al., 2023):"
+            },
+            {
+              "type": "para",
+              "data": "Stage I-Initialization: Loading system prompts, security configurations, and plugins to establish the agent’s operational environment and trust boundaries."
+            },
+            {
+              "type": "para",
+              "data": "Stage II-Input: Ingesting multi-modal inputs while distinguishing trusted user instructions from untrusted external data sources."
+            },
+            {
+              "type": "para",
+              "data": "Stage III-Inference: Processing inputs, retrieving external knowledge (e.g., via retrieval-augmented generation (Lewiset al., 2020)), and performing reasoning with techniques such as Chain-of-Thought (CoT) prompting (Weiet al., 2022) while maintaining contextual memory."
+            },
+            {
+              "type": "para",
+              "data": "Stage IV-Decision: Selecting appropriate tools and generating execution parameters through agent planning frameworks such as ReAct (Yaoet al., 2023)."
+            },
+            {
+              "type": "para",
+              "data": "Stage V-Execution: Performing actions through external systems, often requiring strict sandboxing and access-control mechanisms to manage privileged operations."
+            }
+          ]
+        },
+        {
+          "title": "OpenClaw Architecture",
+          "level": 3,
+          "paragraphs": [
+            "OpenClaw (Steinberger and the OpenClaw contributors, 2026) represents a representative implementation of modern autonomous LLM agents through a “kernel–plugin” architecture. The system separates functionality into two primary components: the pi-coding-agent, which serves as a minimal Trusted Computing Base (TCB) responsible for memory management, task planning, and execution orchestration, and an extensible plugin ecosystem that expands capabilities through third-party tools. While this modular design significantly improves flexibility and task automation, it also introduces complex security challenges. The separation between the agent core and external plugins creates an expanded and partially ambiguous trust boundary. In particular, dynamic plugin loading without strict integrity verification, implicit trust in external API responses, and privileged host access during automated code generation collectively enlarge the system attack surface.",
+            "As a result, adversaries may exploit these architectural weaknesses to escalate localized manipulations, such as prompt injection or malicious plugin behavior, into broader system-level compromises spanning multiple stages of the agent lifecycle."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "OpenClaw (Steinberger and the OpenClaw contributors, 2026) represents a representative implementation of modern autonomous LLM agents through a “kernel–plugin” architecture. The system separates functionality into two primary components: the pi-coding-agent, which serves as a minimal Trusted Computing Base (TCB) responsible for memory management, task planning, and execution orchestration, and an extensible plugin ecosystem that expands capabilities through third-party tools. While this modular design significantly improves flexibility and task automation, it also introduces complex security challenges. The separation between the agent core and external plugins creates an expanded and partially ambiguous trust boundary. In particular, dynamic plugin loading without strict integrity verification, implicit trust in external API responses, and privileged host access during automated code generation collectively enlarge the system attack surface."
+            },
+            {
+              "type": "para",
+              "data": "As a result, adversaries may exploit these architectural weaknesses to escalate localized manipulations, such as prompt injection or malicious plugin behavior, into broader system-level compromises spanning multiple stages of the agent lifecycle."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Threat Model",
+      "level": 2,
+      "paragraphs": [
+        "We define the security assumptions, adversarial capabilities, and defense objectives considered in this work for autonomous LLM agents."
+      ],
+      "subsections": [
+        {
+          "title": "Scope and Assumptions",
+          "level": 3,
+          "paragraphs": [
+            "Autonomous LLM agents interact with complex external environments, integrate third-party tools, and execute actions across multiple systems. As a result, their attack surface spans external inputs, software supply chains, and runtime execution environments. In this work, we primarily focus on threats originating from untrusted external interactions.",
+            "Recent studies have demonstrated several practical attack vectors against LLM-based agents. These include indirect prompt injection through multi-modal documents (Greshakeet al., 2023; Wanget al., 2025d), poisoning of retrieval-augmented generation (RAG) knowledge sources (Sunilet al., 2026; Srivastava and He, 2025), and adversarial manipulation of long-term memory. Security analyses further reveal risks introduced by malicious third-party plugins and runtime exploits, including context drift (Dongreet al., 2025), unauthorized API invocation, and data exfiltration (Kanget al., 2023; Liuet al., 2025a). Our threat model is grounded in vulnerabilities observed in recent empirical studies and security audits of autonomous LLM agents (Debenedettiet al., 2024; Liuet al., 2026; Zouet al., 2025).",
+            "We assume a well-defined Trusted Computing Base. The trusted components include the agent kernel, underlying hardware platform, host operating system, standard cryptographic primitives, and the LLM inference infrastructure. This trust assumption also covers the foundational model weights. Consequently, attacks targeting the internal parameters of the underlying LLM, such as model weight poisoning, model extraction, or adversarial prefix optimization (Zouet al., 2023), are considered out of scope. We further exclude hardware side-channel attacks, network-layer denial-of-service attacks, and out-of-band social engineering."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Autonomous LLM agents interact with complex external environments, integrate third-party tools, and execute actions across multiple systems. As a result, their attack surface spans external inputs, software supply chains, and runtime execution environments. In this work, we primarily focus on threats originating from untrusted external interactions."
+            },
+            {
+              "type": "para",
+              "data": "Recent studies have demonstrated several practical attack vectors against LLM-based agents. These include indirect prompt injection through multi-modal documents (Greshakeet al., 2023; Wanget al., 2025d), poisoning of retrieval-augmented generation (RAG) knowledge sources (Sunilet al., 2026; Srivastava and He, 2025), and adversarial manipulation of long-term memory. Security analyses further reveal risks introduced by malicious third-party plugins and runtime exploits, including context drift (Dongreet al., 2025), unauthorized API invocation, and data exfiltration (Kanget al., 2023; Liuet al., 2025a). Our threat model is grounded in vulnerabilities observed in recent empirical studies and security audits of autonomous LLM agents (Debenedettiet al., 2024; Liuet al., 2026; Zouet al., 2025)."
+            },
+            {
+              "type": "para",
+              "data": "We assume a well-defined Trusted Computing Base. The trusted components include the agent kernel, underlying hardware platform, host operating system, standard cryptographic primitives, and the LLM inference infrastructure. This trust assumption also covers the foundational model weights. Consequently, attacks targeting the internal parameters of the underlying LLM, such as model weight poisoning, model extraction, or adversarial prefix optimization (Zouet al., 2023), are considered out of scope. We further exclude hardware side-channel attacks, network-layer denial-of-service attacks, and out-of-band social engineering."
+            }
+          ]
+        },
+        {
+          "title": "Adversary Capabilities",
+          "level": 3,
+          "paragraphs": [
+            "We consider a computationally bounded adversary whose objectives include data exfiltration, privilege escalation, or manipulation of the agent’s decision-making behavior. The adversary may operate under the following capability profiles.",
+            "External Content Attacker.\nThe adversary interacts with the agent exclusively through maliciously crafted environmental inputs, such as compromised web pages, manipulated API responses, or adversarial files. Although the attacker has no direct system access, they exploit the agent’s autonomous perception and reasoning pipeline to trigger indirect prompt injections or confused-deputy behaviors (Greshakeet al., 2023).",
+            "Supply Chain Attacker.\nThe adversary distributes trojanized plugins, compromises community package repositories, or manipulates external tools integrated into the agent workflow. Such attacks may enable arbitrary code execution or malicious API interception within the plugin environment during system initialization.",
+            "Malicious Tenant.\nIn multi-tenant deployments, an authorized but malicious user may attempt to escape their isolated execution context. The attacker’s goal is to access cross-tenant memory or execute unauthorized system-level commands by bypassing sandbox enforcement policies (Wanget al., 2026b; Bors, 2026).",
+            "Across all adversary models, we assume that attackers lack white-box access to the internal representations of the LLM (e.g., gradients or hidden states) during inference. Additionally, adversaries cannot bypass host-level cryptographic authentication or compromise the trusted computing base."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We consider a computationally bounded adversary whose objectives include data exfiltration, privilege escalation, or manipulation of the agent’s decision-making behavior. The adversary may operate under the following capability profiles."
+            },
+            {
+              "type": "para",
+              "data": "External Content Attacker.\nThe adversary interacts with the agent exclusively through maliciously crafted environmental inputs, such as compromised web pages, manipulated API responses, or adversarial files. Although the attacker has no direct system access, they exploit the agent’s autonomous perception and reasoning pipeline to trigger indirect prompt injections or confused-deputy behaviors (Greshakeet al., 2023)."
+            },
+            {
+              "type": "para",
+              "data": "Supply Chain Attacker.\nThe adversary distributes trojanized plugins, compromises community package repositories, or manipulates external tools integrated into the agent workflow. Such attacks may enable arbitrary code execution or malicious API interception within the plugin environment during system initialization."
+            },
+            {
+              "type": "para",
+              "data": "Malicious Tenant.\nIn multi-tenant deployments, an authorized but malicious user may attempt to escape their isolated execution context. The attacker’s goal is to access cross-tenant memory or execute unauthorized system-level commands by bypassing sandbox enforcement policies (Wanget al., 2026b; Bors, 2026)."
+            },
+            {
+              "type": "para",
+              "data": "Across all adversary models, we assume that attackers lack white-box access to the internal representations of the LLM (e.g., gradients or hidden states) during inference. Additionally, adversaries cannot bypass host-level cryptographic authentication or compromise the trusted computing base."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "We define the security assumptions, adversarial capabilities, and defense objectives considered in this work for autonomous LLM agents."
+        }
+      ]
+    },
+    {
+      "title": "Real-World Security Threats to OpenClaw",
+      "level": 2,
+      "paragraphs": [
+        "Despite its sophisticated architecture, OpenClaw and similar autonomous agents face substantial security risks in real-world deployments. Recent empirical studies and vulnerability disclosures have revealed systemic weaknesses spanning all five stages of the agent lifecycle."
+      ],
+      "subsections": [
+        {
+          "title": "Stage I: Initialization Threats.",
+          "level": 3,
+          "paragraphs": [
+            "The initialization phase defines the foundational trust boundary of OpenClaw, yet it is particularly susceptible to supply-chain and configuration-related attacks.",
+            "Malicious and Vulnerable Plugins.\nSkill ecosystems provide extensibility but significantly expand the attack surface. We find that adversaries can exploit this ecosystem by injecting malicious skills that abuse the capability routing interface. As illustrated in Figure 1, skill poisoning enables attackers to silently replace legitimate functionality11Attack details can be found in Appendix A. Consequently, a benign user request can be transparently hijacked to produce attacker-controlled outputs, demonstrating how capability impersonation compromises the agent during initialization. Recently Liu et al. (Liuet al., 2026) conducted a large-scale empirical security audit of agent skills and found that approximately 26% of community-contributed tools contain various security vulnerabilities.",
+            "Credential Leakage and Insecure Configuration.\nBeyond explicitly malicious code, legitimate skills often mishandle configuration data, inadvertently exposing sensitive credentials such as API keys and OAuth tokens during execution (Liuet al., 2026). In addition, OpenClaw’s flexible configuration system allows users to disable critical security controls, including plugin signature verification and execution sandboxing. Such misconfigurations significantly weaken the agent’s security boundary and can transform the system into an exploitable attack vector."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/skill-3.png",
+              "alt": "Refer to caption",
+              "caption": "Effect of skill poisoning. A benign user request triggers a maliciously injected skill, producing attacker-controlled output and demonstrating stealthy capability impersonation.",
+              "label": "S4.F1"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The initialization phase defines the foundational trust boundary of OpenClaw, yet it is particularly susceptible to supply-chain and configuration-related attacks."
+            },
+            {
+              "type": "para",
+              "data": "Malicious and Vulnerable Plugins.\nSkill ecosystems provide extensibility but significantly expand the attack surface. We find that adversaries can exploit this ecosystem by injecting malicious skills that abuse the capability routing interface. As illustrated in Figure 1, skill poisoning enables attackers to silently replace legitimate functionality11Attack details can be found in Appendix A. Consequently, a benign user request can be transparently hijacked to produce attacker-controlled outputs, demonstrating how capability impersonation compromises the agent during initialization. Recently Liu et al. (Liuet al., 2026) conducted a large-scale empirical security audit of agent skills and found that approximately 26% of community-contributed tools contain various security vulnerabilities."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/skill-3.png",
+                "alt": "Refer to caption",
+                "caption": "Effect of skill poisoning. A benign user request triggers a maliciously injected skill, producing attacker-controlled output and demonstrating stealthy capability impersonation.",
+                "label": "S4.F1"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Credential Leakage and Insecure Configuration.\nBeyond explicitly malicious code, legitimate skills often mishandle configuration data, inadvertently exposing sensitive credentials such as API keys and OAuth tokens during execution (Liuet al., 2026). In addition, OpenClaw’s flexible configuration system allows users to disable critical security controls, including plugin signature verification and execution sandboxing. Such misconfigurations significantly weaken the agent’s security boundary and can transform the system into an exploitable attack vector."
+            }
+          ]
+        },
+        {
+          "title": "Stage II: Input Vulnerabilities",
+          "level": 3,
+          "paragraphs": [
+            "OpenClaw must continuously ingest untrusted external data from users, tools, and online resources. This architectural requirement significantly enlarges the attack surface, enabling adversaries to inject malicious inputs that manipulate the agent’s perception and reasoning processes.",
+            "Indirect Prompt Injection.\nThe most pervasive threat during the input phase is indirect prompt injection. Attackers embed malicious directives within external content retrieved by the agent (Greshakeet al., 2023; Liuet al., 2025a). Particularly, we find that it creates a zero-click exploit that subverts the control flow without direct user interaction. Figure 2 illustrates a successful attack execution where an embedded payload in a retrieved web page overrides the user objective, forcing the agent to output an attacker-controlled string instead of completing the intended task22Attack details can be found in Appendix B.",
+            "System Prompt Extraction and Malicious File Parsing.\nAdversaries may craft adversarial queries to extract hidden system prompts, revealing the agent’s internal instructions and providing a blueprint for bypassing security safeguards. In addition, weaknesses in media ingestion pipelines and archive extraction mechanisms can be exploited to access sensitive files or escape intended sandbox boundaries within privileged runtimes (OpenClaw Security Advisory, 2026a, b)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/IPI-2.png",
+              "alt": "Refer to caption",
+              "caption": "Effect of Indirect Prompt Injection. The agent blindly follows an embedded instruction from retrieved external content, overriding the legitimate user request.",
+              "label": "S4.F2"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "OpenClaw must continuously ingest untrusted external data from users, tools, and online resources. This architectural requirement significantly enlarges the attack surface, enabling adversaries to inject malicious inputs that manipulate the agent’s perception and reasoning processes."
+            },
+            {
+              "type": "para",
+              "data": "Indirect Prompt Injection.\nThe most pervasive threat during the input phase is indirect prompt injection. Attackers embed malicious directives within external content retrieved by the agent (Greshakeet al., 2023; Liuet al., 2025a). Particularly, we find that it creates a zero-click exploit that subverts the control flow without direct user interaction. Figure 2 illustrates a successful attack execution where an embedded payload in a retrieved web page overrides the user objective, forcing the agent to output an attacker-controlled string instead of completing the intended task22Attack details can be found in Appendix B."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/IPI-2.png",
+                "alt": "Refer to caption",
+                "caption": "Effect of Indirect Prompt Injection. The agent blindly follows an embedded instruction from retrieved external content, overriding the legitimate user request.",
+                "label": "S4.F2"
+              }
+            },
+            {
+              "type": "para",
+              "data": "System Prompt Extraction and Malicious File Parsing.\nAdversaries may craft adversarial queries to extract hidden system prompts, revealing the agent’s internal instructions and providing a blueprint for bypassing security safeguards. In addition, weaknesses in media ingestion pipelines and archive extraction mechanisms can be exploited to access sensitive files or escape intended sandbox boundaries within privileged runtimes (OpenClaw Security Advisory, 2026a, b)."
+            }
+          ]
+        },
+        {
+          "title": "Stage III: State and Memory Corruption",
+          "level": 3,
+          "paragraphs": [
+            "Long-horizon autonomy requires OpenClaw to maintain persistent internal state and memory across multiple interaction steps. This persistence introduces a new class of attacks in which adversaries gradually poison the agent’s cognitive state, leading to long-term reasoning corruption and stealthy behavioral manipulation.",
+            "Memory Poisoning.\nPersistent memory introduces a highly critical attack surface. We find that adversaries manipulate the long-term memory store to induce durable behavioral biases across multiple sessions. Figure 3 demonstrates this impact33Attack details can be found in Appendix C. An attacker implants a fabricated policy rule into the agent’s memory, causing it to persistently reject benign requests in subsequent sessions. This transforms a transient input exploit into long-term behavioral control. Existing studies (Sunilet al., 2026; Srivastava and He, 2025) also report similar vulnerabilities.",
+            "Context Drift.\nAgents operating over long interaction sequences frequently exhibit context drift. Their behavior progressively deviates from task-consistent objectives due to the accumulation of imperfect context representations (Dongreet al., 2025). This drift amplifies latent errors in retrieval and reasoning, leading to unintended actions even without explicit adversarial manipulation."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/memory-2.png",
+              "alt": "Refer to caption",
+              "caption": "Effect of Memory Poisoning. The agent references a maliciously injected memory rule to block a harmless user request, illustrating persistent state corruption.",
+              "label": "S4.F3"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Long-horizon autonomy requires OpenClaw to maintain persistent internal state and memory across multiple interaction steps. This persistence introduces a new class of attacks in which adversaries gradually poison the agent’s cognitive state, leading to long-term reasoning corruption and stealthy behavioral manipulation."
+            },
+            {
+              "type": "para",
+              "data": "Memory Poisoning.\nPersistent memory introduces a highly critical attack surface. We find that adversaries manipulate the long-term memory store to induce durable behavioral biases across multiple sessions. Figure 3 demonstrates this impact33Attack details can be found in Appendix C. An attacker implants a fabricated policy rule into the agent’s memory, causing it to persistently reject benign requests in subsequent sessions. This transforms a transient input exploit into long-term behavioral control. Existing studies (Sunilet al., 2026; Srivastava and He, 2025) also report similar vulnerabilities."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/memory-2.png",
+                "alt": "Refer to caption",
+                "caption": "Effect of Memory Poisoning. The agent references a maliciously injected memory rule to block a harmless user request, illustrating persistent state corruption.",
+                "label": "S4.F3"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Context Drift.\nAgents operating over long interaction sequences frequently exhibit context drift. Their behavior progressively deviates from task-consistent objectives due to the accumulation of imperfect context representations (Dongreet al., 2025). This drift amplifies latent errors in retrieval and reasoning, leading to unintended actions even without explicit adversarial manipulation."
+            }
+          ]
+        },
+        {
+          "title": "Stage IV: Decision Manipulation.",
+          "level": 3,
+          "paragraphs": [
+            "During the decision stage, the agent selects tools and plans task execution strategies. Adversaries can exploit this stage by influencing the decision-making process, causing the agent to select unsafe tools, deviate from intended goals, or execute attacker-controlled workflows.",
+            "Intent Drift and Goal Hijacking\nWe observe that adversaries can inject structured instructions that cause the agent to reinterpret its objectives and prioritize malicious tasks (Denget al., 2026). Even under benign conditions, ambiguous instructions can trigger severe intent drift. Figure 4 illustrates a scenario where a basic diagnostic security request escalates into unauthorized firewall modifications and service termination44Attack details can be found in Appendix D. A sequence of locally justifiable tool calls drifts into a globally destructive outcome, culminating in a complete system outage.",
+            "Tool Selection Manipulation and Policy Bypass.\nAgents may invoke high-privilege tools in response to maliciously crafted inputs while bypassing safer alternatives (Debenedettiet al., 2024). Iterative prompt manipulation effectively circumvents alignment policies, highlighting that content filters are insufficient without hardened execution controls (National Cyber Security Centre, 2025)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/intent-drift.png",
+              "alt": "Refer to caption",
+              "caption": "Effect of Intent Drift. An unconfirmed inspection request spirals into unauthorized configuration changes and improper service restarts, ultimately rendering the system inaccessible.",
+              "label": "S4.F4"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "During the decision stage, the agent selects tools and plans task execution strategies. Adversaries can exploit this stage by influencing the decision-making process, causing the agent to select unsafe tools, deviate from intended goals, or execute attacker-controlled workflows."
+            },
+            {
+              "type": "para",
+              "data": "Intent Drift and Goal Hijacking\nWe observe that adversaries can inject structured instructions that cause the agent to reinterpret its objectives and prioritize malicious tasks (Denget al., 2026). Even under benign conditions, ambiguous instructions can trigger severe intent drift. Figure 4 illustrates a scenario where a basic diagnostic security request escalates into unauthorized firewall modifications and service termination44Attack details can be found in Appendix D. A sequence of locally justifiable tool calls drifts into a globally destructive outcome, culminating in a complete system outage."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/intent-drift.png",
+                "alt": "Refer to caption",
+                "caption": "Effect of Intent Drift. An unconfirmed inspection request spirals into unauthorized configuration changes and improper service restarts, ultimately rendering the system inaccessible.",
+                "label": "S4.F4"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Tool Selection Manipulation and Policy Bypass.\nAgents may invoke high-privilege tools in response to maliciously crafted inputs while bypassing safer alternatives (Debenedettiet al., 2024). Iterative prompt manipulation effectively circumvents alignment policies, highlighting that content filters are insufficient without hardened execution controls (National Cyber Security Centre, 2025)."
+            }
+          ]
+        },
+        {
+          "title": "Stage V: Execution Exploitation",
+          "level": 3,
+          "paragraphs": [
+            "The execution stage converts high-level decisions into privileged system actions. Consequently, it represents the final realization point of attacks, where earlier compromises propagate into concrete operations that may impact external systems, infrastructure, or sensitive data.",
+            "High-Risk Command Execution and Privilege Escalation.\nWe observe that adversaries exploit autonomous tool invocation to launch unsafe command sequences resulting in arbitrary code execution. Attackers frequently decompose malicious behavior into individually benign steps to assemble a latent execution chain. Figure 5 depicts the severe infrastructure impact of triggering such a chain55Attack details can be found in Appendix E. Resource consumption rapidly escalates to full saturation, transforming the agent into an active vector for a denial-of-service attack. Furthermore, misconfigured sandbox policies frequently allow constrained sessions to escalate privileges and access sensitive host tooling (Bors, 2026). Similar vulnerabilities are also reported recently (Wanget al., 2025d; Zouet al., 2025)",
+            "Data Exfiltration and Lateral Movement\nCapabilities granting access to file systems and network APIs enable sophisticated exfiltration channels. Compromised agents can harvest confidential data without explicit user intent (Liuet al., 2026). In distributed deployments, the ability to invoke network resources acts as an attack amplifier, allowing lateral movement and extensive policy violations across interconnected environments (Zouet al., 2025)."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/ACE-2.png",
+              "alt": "Refer to caption",
+              "caption": "System-level consequences of High-Risk Command Execution. Triggering a covertly assembled script chain results in rapid resource exhaustion and service disruption.",
+              "label": "S4.F5"
+            }
+          ],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The execution stage converts high-level decisions into privileged system actions. Consequently, it represents the final realization point of attacks, where earlier compromises propagate into concrete operations that may impact external systems, infrastructure, or sensitive data."
+            },
+            {
+              "type": "para",
+              "data": "High-Risk Command Execution and Privilege Escalation.\nWe observe that adversaries exploit autonomous tool invocation to launch unsafe command sequences resulting in arbitrary code execution. Attackers frequently decompose malicious behavior into individually benign steps to assemble a latent execution chain. Figure 5 depicts the severe infrastructure impact of triggering such a chain55Attack details can be found in Appendix E. Resource consumption rapidly escalates to full saturation, transforming the agent into an active vector for a denial-of-service attack. Furthermore, misconfigured sandbox policies frequently allow constrained sessions to escalate privileges and access sensitive host tooling (Bors, 2026). Similar vulnerabilities are also reported recently (Wanget al., 2025d; Zouet al., 2025)"
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/ACE-2.png",
+                "alt": "Refer to caption",
+                "caption": "System-level consequences of High-Risk Command Execution. Triggering a covertly assembled script chain results in rapid resource exhaustion and service disruption.",
+                "label": "S4.F5"
+              }
+            },
+            {
+              "type": "para",
+              "data": "Data Exfiltration and Lateral Movement\nCapabilities granting access to file systems and network APIs enable sophisticated exfiltration channels. Compromised agents can harvest confidential data without explicit user intent (Liuet al., 2026). In distributed deployments, the ability to invoke network resources acts as an attack amplifier, allowing lateral movement and extensive policy violations across interconnected environments (Zouet al., 2025)."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": [
+        {
+          "type": "para",
+          "data": "Despite its sophisticated architecture, OpenClaw and similar autonomous agents face substantial security risks in real-world deployments. Recent empirical studies and vulnerability disclosures have revealed systemic weaknesses spanning all five stages of the agent lifecycle."
+        }
+      ]
+    },
+    {
+      "title": "Defense Objectives and Limitations of Existing Defenses",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Defense Objectives",
+          "level": 3,
+          "paragraphs": [
+            "To effectively mitigate the aforementioned threats within the OpenClaw framework, defense mechanisms must satisfy three foundational security objectives. These properties aim to balance robust execution isolation with the operational utility required for autonomous agents.",
+            "Integrity.\nPreserve the agent’s decision-making and memory integrity by strictly isolating trustworthy user directives from untrusted external data. This logical separation ensures the execution trajectory remains cryptographically and semantically aligned with the original user intent, neutralizing control-flow hijacking via malicious inputs (Chenet al., 2026).",
+            "Confidentiality.\nSafeguard sensitive user credentials, session tokens, and long-term memory structures. Defenses must proactively thwart unauthorized data exfiltration through seemingly legitimate API channels, preventing attackers from coercing the OpenClaw agent into encoding and transmitting sensitive data via external network requests (Kanget al., 2023).",
+            "Availability.\nGuarantee graceful degradation by isolating compromised plugins, sandboxing runtime execution, and pruning poisoned context streams without halting core cognitive operations. The system must actively prevent adversaries from inducing infinite reasoning loops or executing semantic denial-of-service (DoS) attacks against OpenClaw.",
+            "These properties necessitate a defense-in-depth architecture rooted in the principle of least privilege, rigorously constraining all OpenClaw tools and plugins to minimalistic, context-aware permission spaces."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "To effectively mitigate the aforementioned threats within the OpenClaw framework, defense mechanisms must satisfy three foundational security objectives. These properties aim to balance robust execution isolation with the operational utility required for autonomous agents."
+            },
+            {
+              "type": "para",
+              "data": "Integrity.\nPreserve the agent’s decision-making and memory integrity by strictly isolating trustworthy user directives from untrusted external data. This logical separation ensures the execution trajectory remains cryptographically and semantically aligned with the original user intent, neutralizing control-flow hijacking via malicious inputs (Chenet al., 2026)."
+            },
+            {
+              "type": "para",
+              "data": "Confidentiality.\nSafeguard sensitive user credentials, session tokens, and long-term memory structures. Defenses must proactively thwart unauthorized data exfiltration through seemingly legitimate API channels, preventing attackers from coercing the OpenClaw agent into encoding and transmitting sensitive data via external network requests (Kanget al., 2023)."
+            },
+            {
+              "type": "para",
+              "data": "Availability.\nGuarantee graceful degradation by isolating compromised plugins, sandboxing runtime execution, and pruning poisoned context streams without halting core cognitive operations. The system must actively prevent adversaries from inducing infinite reasoning loops or executing semantic denial-of-service (DoS) attacks against OpenClaw."
+            },
+            {
+              "type": "para",
+              "data": "These properties necessitate a defense-in-depth architecture rooted in the principle of least privilege, rigorously constraining all OpenClaw tools and plugins to minimalistic, context-aware permission spaces."
+            }
+          ]
+        },
+        {
+          "title": "Limitations of Existing Defenses in Guaranteeing OpenClaw Security",
+          "level": 3,
+          "paragraphs": [
+            "We systematically evaluate existing defense mechanisms across the five-stage agent lifecycle, revealing critical vulnerabilities where current paradigms fail to provide robust security guarantees for the OpenClaw architecture. The fundamental flaw across these stages is the inability to handle the temporal and compositional threats.",
+            "Initialization Stage Defenses.\nExisting supply chain security mechanisms for LLM agents primarily rely on plugin vetting, static analysis, and community reputation scores (Liuet al., 2026; Chenet al., 2026). While these approaches provide a baseline defense, OpenClaw skills are inherently dynamic artifacts, combining natural-language instructions, executable commands, and external dependencies. This complexity produces evolving behaviors that static vetting cannot adequately capture (Luoet al., 2025). More critically, these defenses assume a trustworthy initialization state. Consequently, they are insufficient against dynamic supply chain compromises, where initially benign components may be weaponized post-deployment through updates or malicious configuration changes (Luoet al., 2025).",
+            "Input Stage Defenses.\nCurrent defenses against prompt injection, including input sanitization, guardrails, structural parsing, and game-theoretic detection (Donget al., 2024; Genget al., 2025; Shiet al., 2025; Chenet al., 2025a; Liuet al., 2025b), largely assume stateless, single-turn interactions (Liuet al., 2025a; Greshakeet al., 2023). This assumption leaves OpenClaw vulnerable to temporal composition attacks, where individually benign inputs accumulate across multiple interactions to trigger malicious behaviors (Dongreet al., 2025). Furthermore, indirect prompt injection through external data sources remains insufficiently mitigated. Advanced frameworks such as AegisAgent (Wanget al., 2025c) demonstrate that autonomous detection and intervention against prompt injection can improve resilience, yet these techniques have not been integrated into a full-lifecycle defense for dynamic, multi-turn agent workflows.",
+            "Inference Stage Defenses.\nMemory integrity during agent reasoning represents a critical vulnerability (Weiet al., 2025). Existing mitigations, including context drift detection (Dongreet al., 2025) and model-level alignment techniques (Xieet al., 2023; Chenet al., 2025b), are reactive and lack continuous protection for evolving agent memory states. OpenClaw currently does not implement persistent monitoring to detect when legitimate context accumulation is gradually subverted by adversarial perturbations. Proactive frameworks like A-MemGuard (Weiet al., 2025) illustrate that continuous memory safeguarding is feasible, highlighting the gap between current static defenses and dynamic memory protection requirements.",
+            "Decision Stage Defenses.\nSecurity protections at the planning and decision layers are largely ad hoc. Although goal hijacking is recognized as a significant threat (Denget al., 2026), existing evaluation frameworks such as AgentDojo (Debenedettiet al., 2024) and ASB (Zhanget al., 2025) focus primarily on attack characterization rather than real-time mitigation. OpenClaw lacks mechanisms to continuously verify the alignment of planned actions with user objectives, leaving operational constraints unenforced. Techniques like BlindGuard (Miaoet al., 2025) demonstrate that runtime intent verification and multi-agent monitoring can reduce such risks, but integration into general agent architectures remains limited.",
+            "Execution Stage Defenses.\nRuntime confinement in OpenClaw currently relies on conventional software sandboxing. Studies from Snyk Labs (Bors, 2026) and ART 2025 (Zouet al., 2025) reveal that such sandboxes can be bypassed through sophisticated escape techniques. Black-box red-teaming tools (Wanget al., 2025d) provide post hoc evaluation but lack active runtime protection. Additionally, permissive capability enforcement facilitates lateral movement after compromise, a problem further compounded by the absence of behavioral monitoring and secure rollback mechanisms. Lifecycle-aware runtime frameworks, inspired by AGrail (Luoet al., 2025), suggest that adaptive enforcement combined with continuous observation could mitigate these vulnerabilities.",
+            "Cross-Stage System-Level Integration Gaps.\nThe most fundamental limitation in protecting OpenClaw lies in the fragmented nature of existing defenses (Shahriaret al., 2025). Current mitigations operate as isolated point solutions rather than components of a cohesive security architecture. For instance, robust input sanitization is rendered ineffective if the initialization stage is compromised, and execution sandboxing cannot remediate poisoned memory states from prior stages. Systems like BlindGuard (Miaoet al., 2025) demonstrate the benefits of holistic, multi-stage defense strategies, though generalizable adoption remains a challenge.",
+            "Summary.\nAddressing the above challenges requires a lifecycle-aware, defense-in-depth architecture that enforces cross-stage security coherence. Integrating dynamic memory protection (Weiet al., 2025), adaptive guardrails (Luoet al., 2025), autonomous prompt injection defenses (Wanget al., 2025c), and system-wide monitoring (Miaoet al., 2025) offers a path toward robust security guarantees for complex LLM-based agent frameworks. Future work should focus on unifying these complementary mechanisms into a coherent operational framework to mitigate temporal, compositional, and memory-oriented threats across the entire agent lifecycle."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We systematically evaluate existing defense mechanisms across the five-stage agent lifecycle, revealing critical vulnerabilities where current paradigms fail to provide robust security guarantees for the OpenClaw architecture. The fundamental flaw across these stages is the inability to handle the temporal and compositional threats."
+            },
+            {
+              "type": "para",
+              "data": "Initialization Stage Defenses.\nExisting supply chain security mechanisms for LLM agents primarily rely on plugin vetting, static analysis, and community reputation scores (Liuet al., 2026; Chenet al., 2026). While these approaches provide a baseline defense, OpenClaw skills are inherently dynamic artifacts, combining natural-language instructions, executable commands, and external dependencies. This complexity produces evolving behaviors that static vetting cannot adequately capture (Luoet al., 2025). More critically, these defenses assume a trustworthy initialization state. Consequently, they are insufficient against dynamic supply chain compromises, where initially benign components may be weaponized post-deployment through updates or malicious configuration changes (Luoet al., 2025)."
+            },
+            {
+              "type": "para",
+              "data": "Input Stage Defenses.\nCurrent defenses against prompt injection, including input sanitization, guardrails, structural parsing, and game-theoretic detection (Donget al., 2024; Genget al., 2025; Shiet al., 2025; Chenet al., 2025a; Liuet al., 2025b), largely assume stateless, single-turn interactions (Liuet al., 2025a; Greshakeet al., 2023). This assumption leaves OpenClaw vulnerable to temporal composition attacks, where individually benign inputs accumulate across multiple interactions to trigger malicious behaviors (Dongreet al., 2025). Furthermore, indirect prompt injection through external data sources remains insufficiently mitigated. Advanced frameworks such as AegisAgent (Wanget al., 2025c) demonstrate that autonomous detection and intervention against prompt injection can improve resilience, yet these techniques have not been integrated into a full-lifecycle defense for dynamic, multi-turn agent workflows."
+            },
+            {
+              "type": "para",
+              "data": "Inference Stage Defenses.\nMemory integrity during agent reasoning represents a critical vulnerability (Weiet al., 2025). Existing mitigations, including context drift detection (Dongreet al., 2025) and model-level alignment techniques (Xieet al., 2023; Chenet al., 2025b), are reactive and lack continuous protection for evolving agent memory states. OpenClaw currently does not implement persistent monitoring to detect when legitimate context accumulation is gradually subverted by adversarial perturbations. Proactive frameworks like A-MemGuard (Weiet al., 2025) illustrate that continuous memory safeguarding is feasible, highlighting the gap between current static defenses and dynamic memory protection requirements."
+            },
+            {
+              "type": "para",
+              "data": "Decision Stage Defenses.\nSecurity protections at the planning and decision layers are largely ad hoc. Although goal hijacking is recognized as a significant threat (Denget al., 2026), existing evaluation frameworks such as AgentDojo (Debenedettiet al., 2024) and ASB (Zhanget al., 2025) focus primarily on attack characterization rather than real-time mitigation. OpenClaw lacks mechanisms to continuously verify the alignment of planned actions with user objectives, leaving operational constraints unenforced. Techniques like BlindGuard (Miaoet al., 2025) demonstrate that runtime intent verification and multi-agent monitoring can reduce such risks, but integration into general agent architectures remains limited."
+            },
+            {
+              "type": "para",
+              "data": "Execution Stage Defenses.\nRuntime confinement in OpenClaw currently relies on conventional software sandboxing. Studies from Snyk Labs (Bors, 2026) and ART 2025 (Zouet al., 2025) reveal that such sandboxes can be bypassed through sophisticated escape techniques. Black-box red-teaming tools (Wanget al., 2025d) provide post hoc evaluation but lack active runtime protection. Additionally, permissive capability enforcement facilitates lateral movement after compromise, a problem further compounded by the absence of behavioral monitoring and secure rollback mechanisms. Lifecycle-aware runtime frameworks, inspired by AGrail (Luoet al., 2025), suggest that adaptive enforcement combined with continuous observation could mitigate these vulnerabilities."
+            },
+            {
+              "type": "para",
+              "data": "Cross-Stage System-Level Integration Gaps.\nThe most fundamental limitation in protecting OpenClaw lies in the fragmented nature of existing defenses (Shahriaret al., 2025). Current mitigations operate as isolated point solutions rather than components of a cohesive security architecture. For instance, robust input sanitization is rendered ineffective if the initialization stage is compromised, and execution sandboxing cannot remediate poisoned memory states from prior stages. Systems like BlindGuard (Miaoet al., 2025) demonstrate the benefits of holistic, multi-stage defense strategies, though generalizable adoption remains a challenge."
+            },
+            {
+              "type": "para",
+              "data": "Summary.\nAddressing the above challenges requires a lifecycle-aware, defense-in-depth architecture that enforces cross-stage security coherence. Integrating dynamic memory protection (Weiet al., 2025), adaptive guardrails (Luoet al., 2025), autonomous prompt injection defenses (Wanget al., 2025c), and system-wide monitoring (Miaoet al., 2025) offers a path toward robust security guarantees for complex LLM-based agent frameworks. Future work should focus on unifying these complementary mechanisms into a coherent operational framework to mitigate temporal, compositional, and memory-oriented threats across the entire agent lifecycle."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Defense Measures Across the Agent Lifecycle",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Design Principles of Defenses",
+          "level": 3,
+          "paragraphs": [
+            "We systematize defense measures into a five-layer architecture corresponding to the agent lifecycle stages defined in our threat taxonomy in Figure 6. This layered approach reflects a fundamental security reality: autonomous agents are highly susceptible to cross-stage attack propagation (e.g., a malicious prompt payload corrupting persistent memory, ultimately triggering an unauthorized API call). Consequently, point-defenses deployed at a single interface are fundamentally inadequate.",
+            "As illustrated in Table 1, our proposed defense measures are governed by three core principles:\nFirst, Complete Lifecycle Mediation mandates that every interface capable of mutating agent state or behavior is explicitly guarded.\nSecond, Defense-in-Depth deploys heterogeneous security controls (spanning lexical, semantic, and system-level checks) across the pipeline, ensuring resilience against single-point bypasses.\nThird, Least Privilege with Provenance Tracking ensures components operate with minimal necessary authority, while security-critical context (e.g., the trust tier of an input) is explicitly propagated downstream using metadata tagging or information flow control (IFC).",
+            "Together, these principles establish a robust security invariant: no untrusted input, state mutation, or synthesized plan can affect the agent’s external environment without satisfying the rigorous security predicates of its respective lifecycle stage."
+          ],
+          "subsections": [],
+          "figures": [
+            {
+              "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/x1.png",
+              "alt": "Refer to caption",
+              "caption": "Five-layer defense-in-depth architecture aligned with the agent lifecycle. Each layer enforces a distinct security objective and propagates cryptographically or semantically verified context to adjacent layers.",
+              "label": "S6.F6"
+            }
+          ],
+          "tables": [
+            {
+              "caption": "Targeted threat coverage and design objectives of the proposed defense-in-depth architecture. The matrix maps anticipated risk categories throughout the autonomous LLM agent lifecycle to the corresponding defense layers. A checkmark (✓\\checkmark) indicates that a vulnerability is mitigated by a given layer, whereas a cross (×\\times) denotes that the risk is not covered by that layer, revealing the scope and limitations of the defenses at different layers.",
+              "headers": [],
+              "rows": [
+                [
+                  "Agent Lifecycle",
+                  "Threat Category",
+                  "The Effectiveness of Defenses at different Layers"
+                ],
+                [
+                  "Foundational Base",
+                  "Input Perception",
+                  "Cognitive State",
+                  "Decision Alignment",
+                  "Execution Control"
+                ],
+                [
+                  "I. Initialization",
+                  "Malicious Plugins",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times"
+                ],
+                [
+                  "Credential & Secrets Leakage",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "Insecure Configuration",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "II. Input",
+                  "Prompt Injection",
+                  "×\\times",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times"
+                ],
+                [
+                  "System Prompt Extraction",
+                  "×\\times",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times"
+                ],
+                [
+                  "Malicious File Parsing",
+                  "×\\times",
+                  "✓",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "III. Inference",
+                  "Memory Poisoning",
+                  "×\\times",
+                  "×\\times",
+                  "✓",
+                  "×\\times",
+                  "×\\times"
+                ],
+                [
+                  "Context Drift",
+                  "×\\times",
+                  "×\\times",
+                  "✓",
+                  "✓",
+                  "×\\times"
+                ],
+                [
+                  "IV. Decision",
+                  "Goal Hijacking",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓",
+                  "×\\times"
+                ],
+                [
+                  "Tool Selection Manipulation",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓",
+                  "✓"
+                ],
+                [
+                  "Alignment Policy Bypass",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓",
+                  "×\\times"
+                ],
+                [
+                  "V. Execution",
+                  "Arbitrary Code Execution",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "Privilege Escalation",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "Data Exfiltration",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ],
+                [
+                  "Lateral Movement",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "×\\times",
+                  "✓"
+                ]
+              ],
+              "label": null
+            }
+          ],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "We systematize defense measures into a five-layer architecture corresponding to the agent lifecycle stages defined in our threat taxonomy in Figure 6. This layered approach reflects a fundamental security reality: autonomous agents are highly susceptible to cross-stage attack propagation (e.g., a malicious prompt payload corrupting persistent memory, ultimately triggering an unauthorized API call). Consequently, point-defenses deployed at a single interface are fundamentally inadequate."
+            },
+            {
+              "type": "figure",
+              "data": {
+                "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/x1.png",
+                "alt": "Refer to caption",
+                "caption": "Five-layer defense-in-depth architecture aligned with the agent lifecycle. Each layer enforces a distinct security objective and propagates cryptographically or semantically verified context to adjacent layers.",
+                "label": "S6.F6"
+              }
+            },
+            {
+              "type": "table",
+              "data": {
+                "caption": "Targeted threat coverage and design objectives of the proposed defense-in-depth architecture. The matrix maps anticipated risk categories throughout the autonomous LLM agent lifecycle to the corresponding defense layers. A checkmark (✓\\checkmark) indicates that a vulnerability is mitigated by a given layer, whereas a cross (×\\times) denotes that the risk is not covered by that layer, revealing the scope and limitations of the defenses at different layers.",
+                "headers": [],
+                "rows": [
+                  [
+                    "Agent Lifecycle",
+                    "Threat Category",
+                    "The Effectiveness of Defenses at different Layers"
+                  ],
+                  [
+                    "Foundational Base",
+                    "Input Perception",
+                    "Cognitive State",
+                    "Decision Alignment",
+                    "Execution Control"
+                  ],
+                  [
+                    "I. Initialization",
+                    "Malicious Plugins",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times"
+                  ],
+                  [
+                    "Credential & Secrets Leakage",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "Insecure Configuration",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "II. Input",
+                    "Prompt Injection",
+                    "×\\times",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times"
+                  ],
+                  [
+                    "System Prompt Extraction",
+                    "×\\times",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times"
+                  ],
+                  [
+                    "Malicious File Parsing",
+                    "×\\times",
+                    "✓",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "III. Inference",
+                    "Memory Poisoning",
+                    "×\\times",
+                    "×\\times",
+                    "✓",
+                    "×\\times",
+                    "×\\times"
+                  ],
+                  [
+                    "Context Drift",
+                    "×\\times",
+                    "×\\times",
+                    "✓",
+                    "✓",
+                    "×\\times"
+                  ],
+                  [
+                    "IV. Decision",
+                    "Goal Hijacking",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓",
+                    "×\\times"
+                  ],
+                  [
+                    "Tool Selection Manipulation",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓",
+                    "✓"
+                  ],
+                  [
+                    "Alignment Policy Bypass",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓",
+                    "×\\times"
+                  ],
+                  [
+                    "V. Execution",
+                    "Arbitrary Code Execution",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "Privilege Escalation",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "Data Exfiltration",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ],
+                  [
+                    "Lateral Movement",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "×\\times",
+                    "✓"
+                  ]
+                ],
+                "label": null
+              }
+            },
+            {
+              "type": "para",
+              "data": "As illustrated in Table 1, our proposed defense measures are governed by three core principles:\nFirst, Complete Lifecycle Mediation mandates that every interface capable of mutating agent state or behavior is explicitly guarded.\nSecond, Defense-in-Depth deploys heterogeneous security controls (spanning lexical, semantic, and system-level checks) across the pipeline, ensuring resilience against single-point bypasses.\nThird, Least Privilege with Provenance Tracking ensures components operate with minimal necessary authority, while security-critical context (e.g., the trust tier of an input) is explicitly propagated downstream using metadata tagging or information flow control (IFC)."
+            },
+            {
+              "type": "para",
+              "data": "Together, these principles establish a robust security invariant: no untrusted input, state mutation, or synthesized plan can affect the agent’s external environment without satisfying the rigorous security predicates of its respective lifecycle stage."
+            }
+          ]
+        },
+        {
+          "title": "Initialization-Stage Defenses",
+          "level": 3,
+          "paragraphs": [
+            "Initialization defenses secure the agent’s startup phase, establishing a verifiable root of trust. Because a compromised startup environment invalidates all downstream security assumptions, preventing the ingestion of malicious plugins, poisoned skills, or over-privileged configurations is paramount.",
+            "Effective initialization relies on three foundational technologies:",
+            "Plugin Vetting via Static and Dynamic Analysis: External modules are subjected to rigorous program analysis. Defenses construct Abstract Syntax Trees (ASTs) and utilize taint analysis to detect unauthorized dynamic code execution, credential harvesting, or anomalous network socket creation.",
+            "Skill Verification and Cryptographic Signatures: To thwart skill poisoning, the system enforces strict consistency between a tool’s declared metadata, behavioral embeddings, and executable logic. Verified skills are bound to cryptographically signed Software Bill of Materials (SBOMs) to guarantee provenance.",
+            "Policy-Driven Configuration Validation: Configurations defining RBAC (Role-Based Access Control) bounds, API scopes, and memory limits are strictly validated against deployment policies, rejecting any latent privilege escalation attempts before runtime.",
+            "Upon successful validation, the initialization stage provisions a Trusted Execution Manifest. This manifest serves as an immutable security baseline, ideally anchored in a Trusted Execution Environment (TEE), against which all subsequent runtime behaviors are audited."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Initialization defenses secure the agent’s startup phase, establishing a verifiable root of trust. Because a compromised startup environment invalidates all downstream security assumptions, preventing the ingestion of malicious plugins, poisoned skills, or over-privileged configurations is paramount."
+            },
+            {
+              "type": "para",
+              "data": "Effective initialization relies on three foundational technologies:"
+            },
+            {
+              "type": "para",
+              "data": "Plugin Vetting via Static and Dynamic Analysis: External modules are subjected to rigorous program analysis. Defenses construct Abstract Syntax Trees (ASTs) and utilize taint analysis to detect unauthorized dynamic code execution, credential harvesting, or anomalous network socket creation."
+            },
+            {
+              "type": "para",
+              "data": "Skill Verification and Cryptographic Signatures: To thwart skill poisoning, the system enforces strict consistency between a tool’s declared metadata, behavioral embeddings, and executable logic. Verified skills are bound to cryptographically signed Software Bill of Materials (SBOMs) to guarantee provenance."
+            },
+            {
+              "type": "para",
+              "data": "Policy-Driven Configuration Validation: Configurations defining RBAC (Role-Based Access Control) bounds, API scopes, and memory limits are strictly validated against deployment policies, rejecting any latent privilege escalation attempts before runtime."
+            },
+            {
+              "type": "para",
+              "data": "Upon successful validation, the initialization stage provisions a Trusted Execution Manifest. This manifest serves as an immutable security baseline, ideally anchored in a Trusted Execution Environment (TEE), against which all subsequent runtime behaviors are audited."
+            }
+          ]
+        },
+        {
+          "title": "Input-Stage Defenses",
+          "level": 3,
+          "paragraphs": [
+            "Input-stage defenses act as a boundary gateway, preventing untrusted external data (e.g., web payloads, parsed documents) from hijacking the agent’s control flow. The primary challenge is mitigating indirect prompt injection, where imperative commands are stealthily embedded within ostensibly descriptive data.",
+            "To enforce strict privilege separation between the agent’s control plane and data plane, modern defenses employ two key technologies:",
+            "Instruction Hierarchy Enforcement: Systems enforce structural boundaries by treating developer-defined system prompts as high-privileged instructions and external retrieval data as low-privileged tokens. Techniques such as cryptographic token tagging or specialized attention-masking ensure the LLM prioritizes high-privilege instructions during conflicts.",
+            "Semantic Firewalls: Unlike brittle lexical filters, semantic firewalls leverage auxiliary, fine-tuned lightweight models to perform intent classification on incoming data segments. They evaluate discourse roles, flagging content that exhibits directive intent or attempts to invoke internal APIs (e.g., tool_use) when it should purely serve as context.",
+            "Identified threats trigger a graduated response that ranges from targeted sanitization, such as redacting executable payloads, to complete quarantine. This approach preserves data utility while neutralizing vectors that could enable control hijacking."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Input-stage defenses act as a boundary gateway, preventing untrusted external data (e.g., web payloads, parsed documents) from hijacking the agent’s control flow. The primary challenge is mitigating indirect prompt injection, where imperative commands are stealthily embedded within ostensibly descriptive data."
+            },
+            {
+              "type": "para",
+              "data": "To enforce strict privilege separation between the agent’s control plane and data plane, modern defenses employ two key technologies:"
+            },
+            {
+              "type": "para",
+              "data": "Instruction Hierarchy Enforcement: Systems enforce structural boundaries by treating developer-defined system prompts as high-privileged instructions and external retrieval data as low-privileged tokens. Techniques such as cryptographic token tagging or specialized attention-masking ensure the LLM prioritizes high-privilege instructions during conflicts."
+            },
+            {
+              "type": "para",
+              "data": "Semantic Firewalls: Unlike brittle lexical filters, semantic firewalls leverage auxiliary, fine-tuned lightweight models to perform intent classification on incoming data segments. They evaluate discourse roles, flagging content that exhibits directive intent or attempts to invoke internal APIs (e.g., tool_use) when it should purely serve as context."
+            },
+            {
+              "type": "para",
+              "data": "Identified threats trigger a graduated response that ranges from targeted sanitization, such as redacting executable payloads, to complete quarantine. This approach preserves data utility while neutralizing vectors that could enable control hijacking."
+            }
+          ]
+        },
+        {
+          "title": "Inference-Stage Defenses",
+          "level": 3,
+          "paragraphs": [
+            "Inference-stage defenses safeguard the integrity of the agent’s persistent memory and reasoning context. Autonomous agents are highly vulnerable to memory poisoning (adversarial injection of biased facts into vector databases) and context drift (lossy compression eroding critical alignment instructions over long-horizon tasks).",
+            "Treating memory as a first-class attack surface requires the following mechanisms:",
+            "Vector-Space Access Control and Write Validation: Before state updates are committed to the vector database, an alignment filter evaluates the new knowledge for logical contradictions, policy violations, or sleeper instructions. Memory reads/writes are strictly partitioned using multi-tenant isolation principles.",
+            "Cryptographic State Checkpointing: To bound the impact of poisoning, systems periodically snapshot validated memory states. By utilizing Merkle-tree-based data structures, the agent can cryptographically verify state integrity and execute rapid, deterministic rollbacks to known-good checkpoints upon detecting anomalies.",
+            "Semantic Drift Detection: To combat lossy compression, defenses maintain a high-fidelity, frozen representation of the original system prompt. Cross-encoder models periodically measure the semantic distance between the current working context and the original objective, triggering an alert or context-refresh if divergence exceeds a safe threshold."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Inference-stage defenses safeguard the integrity of the agent’s persistent memory and reasoning context. Autonomous agents are highly vulnerable to memory poisoning (adversarial injection of biased facts into vector databases) and context drift (lossy compression eroding critical alignment instructions over long-horizon tasks)."
+            },
+            {
+              "type": "para",
+              "data": "Treating memory as a first-class attack surface requires the following mechanisms:"
+            },
+            {
+              "type": "para",
+              "data": "Vector-Space Access Control and Write Validation: Before state updates are committed to the vector database, an alignment filter evaluates the new knowledge for logical contradictions, policy violations, or sleeper instructions. Memory reads/writes are strictly partitioned using multi-tenant isolation principles."
+            },
+            {
+              "type": "para",
+              "data": "Cryptographic State Checkpointing: To bound the impact of poisoning, systems periodically snapshot validated memory states. By utilizing Merkle-tree-based data structures, the agent can cryptographically verify state integrity and execute rapid, deterministic rollbacks to known-good checkpoints upon detecting anomalies."
+            },
+            {
+              "type": "para",
+              "data": "Semantic Drift Detection: To combat lossy compression, defenses maintain a high-fidelity, frozen representation of the original system prompt. Cross-encoder models periodically measure the semantic distance between the current working context and the original objective, triggering an alert or context-refresh if divergence exceeds a safe threshold."
+            }
+          ]
+        },
+        {
+          "title": "Decision-Stage Defenses",
+          "level": 3,
+          "paragraphs": [
+            "Decision-stage defenses verify that a synthesized plan is aligned with the authorized objective before execution. This layer addresses vulnerabilities where an agent, operating on benign inputs, hallucinates or logically deduces an unsafe sequence of actions (objective substitution).",
+            "This stage treats the plan as a measurable artifact, utilizing dual-engine verification:",
+            "Constrained Decoding and Formal Verification: At the generation level, constrained decoding (e.g., forcing JSON schema compliance) ensures syntactic safety. At the logical level, symbolic solvers or formal verification engines prove that the proposed action sequence does not violate hard invariants (e.g., “never expose data from directory $X$ to network port $Y$”).",
+            "Semantic Trajectory Analysis: Because symbolic rules cannot capture all nuances of intent hijacking, an independent verifier model evaluates the proposed subgoals against the overarching user intent, ensuring the trajectory strictly advances the authorized task without introducing parasitic objectives.",
+            "High-risk plans are automatically suspended and fed back into the policy engine, enabling continuous reinforcement learning from intercepted safety violations."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Decision-stage defenses verify that a synthesized plan is aligned with the authorized objective before execution. This layer addresses vulnerabilities where an agent, operating on benign inputs, hallucinates or logically deduces an unsafe sequence of actions (objective substitution)."
+            },
+            {
+              "type": "para",
+              "data": "This stage treats the plan as a measurable artifact, utilizing dual-engine verification:"
+            },
+            {
+              "type": "para",
+              "data": "Constrained Decoding and Formal Verification: At the generation level, constrained decoding (e.g., forcing JSON schema compliance) ensures syntactic safety. At the logical level, symbolic solvers or formal verification engines prove that the proposed action sequence does not violate hard invariants (e.g., “never expose data from directory $X$ to network port $Y$”)."
+            },
+            {
+              "type": "para",
+              "data": "Semantic Trajectory Analysis: Because symbolic rules cannot capture all nuances of intent hijacking, an independent verifier model evaluates the proposed subgoals against the overarching user intent, ensuring the trajectory strictly advances the authorized task without introducing parasitic objectives."
+            },
+            {
+              "type": "para",
+              "data": "High-risk plans are automatically suspended and fed back into the policy engine, enabling continuous reinforcement learning from intercepted safety violations."
+            }
+          ]
+        },
+        {
+          "title": "Execution-Stage Defenses",
+          "level": 3,
+          "paragraphs": [
+            "Execution-stage defenses serve as the ultimate enforcement boundary, operating under the assume breach paradigm. Should upstream defenses fail to detect a sophisticated attack, this layer provides robust behavioral containment and isolation at the system level.",
+            "Key technical enablers at this stage include:",
+            "Kernel-Level Sandboxing and Capability Enforcement: Utilizing technologies like eBPF (Extended Berkeley Packet Filter), seccomp, and containerization, the execution engine strictly confines the agent to its authorized capability set. Unauthorized system calls, unauthorized file I/O, or anomalous outbound network traffic are intercepted and denied at the OS kernel level.",
+            "Runtime Trace Monitoring: Defenses shift from isolated action inspection to stateful trajectory monitoring. Heuristics analyze execution traces to detect advanced persistent threats, such as living-off-the-land (LotL) techniques, deferred execution loops, or suspicious CPU/memory resource exhaustion patterns.",
+            "Atomic Transactions and Containment: Where possible, environmental mutations are executed as atomic transactions within ephemeral, reversible environments. If a post-execution monitor detects damage, the system orchestrates an automated state rollback to minimize the blast radius.",
+            "Finally, for irreversible or highly privileged operations, the execution stage seamlessly integrates Human-in-the-Loop (HITL) authorization, presenting the cryptographic provenance and risk assessment of the action to a human reviewer."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "Execution-stage defenses serve as the ultimate enforcement boundary, operating under the assume breach paradigm. Should upstream defenses fail to detect a sophisticated attack, this layer provides robust behavioral containment and isolation at the system level."
+            },
+            {
+              "type": "para",
+              "data": "Key technical enablers at this stage include:"
+            },
+            {
+              "type": "para",
+              "data": "Kernel-Level Sandboxing and Capability Enforcement: Utilizing technologies like eBPF (Extended Berkeley Packet Filter), seccomp, and containerization, the execution engine strictly confines the agent to its authorized capability set. Unauthorized system calls, unauthorized file I/O, or anomalous outbound network traffic are intercepted and denied at the OS kernel level."
+            },
+            {
+              "type": "para",
+              "data": "Runtime Trace Monitoring: Defenses shift from isolated action inspection to stateful trajectory monitoring. Heuristics analyze execution traces to detect advanced persistent threats, such as living-off-the-land (LotL) techniques, deferred execution loops, or suspicious CPU/memory resource exhaustion patterns."
+            },
+            {
+              "type": "para",
+              "data": "Atomic Transactions and Containment: Where possible, environmental mutations are executed as atomic transactions within ephemeral, reversible environments. If a post-execution monitor detects damage, the system orchestrates an automated state rollback to minimize the blast radius."
+            },
+            {
+              "type": "para",
+              "data": "Finally, for irreversible or highly privileged operations, the execution stage seamlessly integrates Human-in-the-Loop (HITL) authorization, presenting the cryptographic provenance and risk assessment of the action to a human reviewer."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    },
+    {
+      "title": "Conclusion and Future Work",
+      "level": 2,
+      "paragraphs": [],
+      "subsections": [
+        {
+          "title": "Conclusion",
+          "level": 3,
+          "paragraphs": [
+            "The transition from passive language models to proactive autonomous agents represents a major advancement in artificial intelligence capabilities, but it also introduces complex multi-stage security vulnerabilities. Existing mitigation strategies remain fragmented and are fundamentally ill-equipped to address compound, cross-stage attacks that arise in long-horizon agent operations. To address this gap, this paper presents a systematic analysis of defense mechanisms across the full operational lifecycle of LLM agents.",
+            "We first formalize a threat taxonomy that characterizes security risks across five operational strata of the agent pipeline. Building on this taxonomy, we analyze how coordinated security controls can be deployed across the lifecycle, including foundational trust guarantees prior to initialization, strict input validation, cognitive state integrity during inference, intent-aware decision verification, and sandboxed execution control. This layered architecture provides redundant protection, ensuring that adversaries cannot compromise the system through a single point of failure. Overall, this work offers practical insights toward robust, lightweight, and native security paradigms for the safe and reliable deployment of future autonomous AI systems."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "The transition from passive language models to proactive autonomous agents represents a major advancement in artificial intelligence capabilities, but it also introduces complex multi-stage security vulnerabilities. Existing mitigation strategies remain fragmented and are fundamentally ill-equipped to address compound, cross-stage attacks that arise in long-horizon agent operations. To address this gap, this paper presents a systematic analysis of defense mechanisms across the full operational lifecycle of LLM agents."
+            },
+            {
+              "type": "para",
+              "data": "We first formalize a threat taxonomy that characterizes security risks across five operational strata of the agent pipeline. Building on this taxonomy, we analyze how coordinated security controls can be deployed across the lifecycle, including foundational trust guarantees prior to initialization, strict input validation, cognitive state integrity during inference, intent-aware decision verification, and sandboxed execution control. This layered architecture provides redundant protection, ensuring that adversaries cannot compromise the system through a single point of failure. Overall, this work offers practical insights toward robust, lightweight, and native security paradigms for the safe and reliable deployment of future autonomous AI systems."
+            }
+          ]
+        },
+        {
+          "title": "Future Research",
+          "level": 3,
+          "paragraphs": [
+            "While lifecycle-aware defenses provide a promising foundation for securing autonomous agents, several challenges remain. Addressing these limitations and countering increasingly sophisticated adversarial threats requires further research in several key directions.",
+            "First, integrating hardware-assisted security primitives offers a promising pathway to reduce computational overhead while strengthening the foundational trust layer. Recent studies show that executing critical model components and memory parameters within Trusted Execution Environments (TEEs), such as TEE–GPU co-execution architectures (Caiet al., 2025) or Arm TrustZone for edge devices (Wanget al., 2025b), can provide strong confidentiality and integrity guarantees. Migrating trust manifests and memory validation mechanisms to these environments could establish a hardware-rooted chain of trust across the agent lifecycle while minimizing latency overhead.",
+            "Second, future defense architectures should explore dynamic and adaptive security policies. Rather than relying on statically configured thresholds for toxicity or context drift, reinforcement learning techniques could dynamically adjust the sensitivity of defense layers based on task complexity and environmental uncertainty. Such adaptive policies may better balance operational autonomy with strict security controls, enabling agents to maintain high task utility while remaining resilient to evolving adversarial strategies."
+          ],
+          "subsections": [],
+          "figures": [],
+          "tables": [],
+          "equations": [],
+          "ordered_content": [
+            {
+              "type": "para",
+              "data": "While lifecycle-aware defenses provide a promising foundation for securing autonomous agents, several challenges remain. Addressing these limitations and countering increasingly sophisticated adversarial threats requires further research in several key directions."
+            },
+            {
+              "type": "para",
+              "data": "First, integrating hardware-assisted security primitives offers a promising pathway to reduce computational overhead while strengthening the foundational trust layer. Recent studies show that executing critical model components and memory parameters within Trusted Execution Environments (TEEs), such as TEE–GPU co-execution architectures (Caiet al., 2025) or Arm TrustZone for edge devices (Wanget al., 2025b), can provide strong confidentiality and integrity guarantees. Migrating trust manifests and memory validation mechanisms to these environments could establish a hardware-rooted chain of trust across the agent lifecycle while minimizing latency overhead."
+            },
+            {
+              "type": "para",
+              "data": "Second, future defense architectures should explore dynamic and adaptive security policies. Rather than relying on statically configured thresholds for toxicity or context drift, reinforcement learning techniques could dynamically adjust the sensitivity of defense layers based on task complexity and environmental uncertainty. Such adaptive policies may better balance operational autonomy with strict security controls, enabling agents to maintain high task utility while remaining resilient to evolving adversarial strategies."
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "tables": [],
+      "equations": [],
+      "ordered_content": []
+    }
+  ],
+  "figures": [
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/skill-3.png",
+      "alt": "Refer to caption",
+      "caption": "Effect of skill poisoning. A benign user request triggers a maliciously injected skill, producing attacker-controlled output and demonstrating stealthy capability impersonation.",
+      "label": "S4.F1"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/IPI-2.png",
+      "alt": "Refer to caption",
+      "caption": "Effect of Indirect Prompt Injection. The agent blindly follows an embedded instruction from retrieved external content, overriding the legitimate user request.",
+      "label": "S4.F2"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/memory-2.png",
+      "alt": "Refer to caption",
+      "caption": "Effect of Memory Poisoning. The agent references a maliciously injected memory rule to block a harmless user request, illustrating persistent state corruption.",
+      "label": "S4.F3"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/intent-drift.png",
+      "alt": "Refer to caption",
+      "caption": "Effect of Intent Drift. An unconfirmed inspection request spirals into unauthorized configuration changes and improper service restarts, ultimately rendering the system inaccessible.",
+      "label": "S4.F4"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/ACE-2.png",
+      "alt": "Refer to caption",
+      "caption": "System-level consequences of High-Risk Command Execution. Triggering a covertly assembled script chain results in rapid resource exhaustion and service disruption.",
+      "label": "S4.F5"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/x1.png",
+      "alt": "Refer to caption",
+      "caption": "Five-layer defense-in-depth architecture aligned with the agent lifecycle. Each layer enforces a distinct security objective and propagates cryptographically or semantically verified context to adjacent layers.",
+      "label": "S6.F6"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/skill-1.png",
+      "alt": "Refer to caption",
+      "caption": "The poisoning instruction coercing the agent to generate a malicious weather skill and elevate its invocation priority.",
+      "label": "A1.F7"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/skill-2.png",
+      "alt": "Refer to caption",
+      "caption": "The generated poisoned skill, packaged as a valid artifact while semantically replacing legitimate weather functionality.",
+      "label": "A1.F8"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/IPI-1.png",
+      "alt": "Refer to caption",
+      "caption": "Attacker-crafted web page containing an embedded malicious instruction. Disguised as ordinary content, it attempts to override the user task and hijack the agent’s output.",
+      "label": "A2.F9"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/memory-1.png",
+      "alt": "Refer to caption",
+      "caption": "Memory poisoning via a malicious memory update. The attacker causes OpenClaw to append a fabricated rule to persistent memory, transforming transient adversarial input into long-term behavioral control.",
+      "label": "A3.F10"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/ACE-1.png",
+      "alt": "Refer to caption",
+      "caption": "Staged setup of a high-risk command execution attack. The attacker instructs the agent to execute apparently benign file write commands that secretly assemble a latent execution chain.",
+      "label": "A5.F11"
+    },
+    {
+      "src": "https://ar5iv.labs.arxiv.org/html/2603.11619/assets/figures/screenshot/ACE-3.png",
+      "alt": "Refer to caption",
+      "caption": "CPU Utilization Surge During a Denial-of-Service Attack.",
+      "label": "A5.F12"
+    }
+  ],
+  "tables": [
+    {
+      "caption": "Targeted threat coverage and design objectives of the proposed defense-in-depth architecture. The matrix maps anticipated risk categories throughout the autonomous LLM agent lifecycle to the corresponding defense layers. A checkmark (✓\\checkmark) indicates that a vulnerability is mitigated by a given layer, whereas a cross (×\\times) denotes that the risk is not covered by that layer, revealing the scope and limitations of the defenses at different layers.",
+      "headers": [],
+      "rows": [
+        [
+          "Agent Lifecycle",
+          "Threat Category",
+          "The Effectiveness of Defenses at different Layers"
+        ],
+        [
+          "Foundational Base",
+          "Input Perception",
+          "Cognitive State",
+          "Decision Alignment",
+          "Execution Control"
+        ],
+        [
+          "I. Initialization",
+          "Malicious Plugins",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "×\\times"
+        ],
+        [
+          "Credential & Secrets Leakage",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "Insecure Configuration",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "II. Input",
+          "Prompt Injection",
+          "×\\times",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "×\\times"
+        ],
+        [
+          "System Prompt Extraction",
+          "×\\times",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "×\\times"
+        ],
+        [
+          "Malicious File Parsing",
+          "×\\times",
+          "✓",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "III. Inference",
+          "Memory Poisoning",
+          "×\\times",
+          "×\\times",
+          "✓",
+          "×\\times",
+          "×\\times"
+        ],
+        [
+          "Context Drift",
+          "×\\times",
+          "×\\times",
+          "✓",
+          "✓",
+          "×\\times"
+        ],
+        [
+          "IV. Decision",
+          "Goal Hijacking",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓",
+          "×\\times"
+        ],
+        [
+          "Tool Selection Manipulation",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓",
+          "✓"
+        ],
+        [
+          "Alignment Policy Bypass",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓",
+          "×\\times"
+        ],
+        [
+          "V. Execution",
+          "Arbitrary Code Execution",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "Privilege Escalation",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "Data Exfiltration",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ],
+        [
+          "Lateral Movement",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "×\\times",
+          "✓"
+        ]
+      ],
+      "label": null
+    }
+  ],
+  "equations": [],
+  "references": [
+    {
+      "raw_text": "J. Bai, S. Bai, et al. (2023) Qwen technical report. External Links: 2309.16609, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2309.16609",
+      "doi": null,
+      "url": null,
+      "citation_key": "J. Bai, S. Bai, et al. (2023)"
+    },
+    {
+      "raw_text": "D. Bors (2026) Escaping the agent on ways to bypass openclaw’s security sandbox. Note: Online: Snyk LabsDiscusses sandbox policy enforcement failures and bypass techniques in OpenClaw autonomous agent frameworks URL: https://labs.snyk.io/resources/bypass-openclaw-security-sandbox/ Cited by: §3.2, §4.5, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://labs.snyk.io/resources/bypass-openclaw-security-sandbox/",
+      "citation_key": "D. Bors (2026)"
+    },
+    {
+      "raw_text": "Y. Cai, Z. An, Y. Meng, H. Liu, P. Wang, H. Lei, Y. Guo, and D. Li (2025) Trustworthy and controllable professional knowledge utilization in large language models with tee-gpu execution. External Links: 2512.16238, Link Cited by: §7.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.16238",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Cai, Z. An, Y. Meng, H. Liu, P. Wang, H. Lei, Y. Guo, and D. Li (2025)"
+    },
+    {
+      "raw_text": "S. Chen, J. Piet, C. Sitawarin, and D. Wagner (2025a) StruQ: defending against prompt injection with structured queries. In Proceedings of the 34th USENIX Conference on Security Symposium, SEC ’25, USA. External Links: ISBN 978-1-939133-52-6 Cited by: §1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "S. Chen, J. Piet, C. Sitawarin, and D. Wagner (2025a)"
+    },
+    {
+      "raw_text": "S. Chen, A. Zharmagambetov, S. Mahloujifar, K. Chaudhuri, D. Wagner, and C. Guo (2025b) SecAlign: defending against prompt injection with preference optimization. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security, CCS ’25, New York, NY, USA, pp. 2833–2847. External Links: ISBN 9798400715259, Link, Document Cited by: §1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "S. Chen, A. Zharmagambetov, S. Mahloujifar, K. Chaudhuri, D. Wagner, and C. Guo (2025b)"
+    },
+    {
+      "raw_text": "T. Chen, D. Liu, X. Hu, J. Yu, and W. Wang (2026) A trajectory-based safety audit of clawdbot (openclaw). External Links: 2602.14364, Link Cited by: §1, §5.1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2602.14364",
+      "doi": null,
+      "url": null,
+      "citation_key": "T. Chen, D. Liu, X. Hu, J. Yu, and W. Wang (2026)"
+    },
+    {
+      "raw_text": "E. Debenedetti, J. Zhang, M. Balunovic, L. Beurer-Kellner, M. Fischer, and F. Tramèr (2024) Agentdojo: a dynamic environment to evaluate prompt injection attacks and defenses for llm agents. Advances in Neural Information Processing Systems 37, pp. 82895–82920. Cited by: §1, §3.1, §4.4, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "E. Debenedetti, J. Zhang, M. Balunovic, L. Beurer-Kellner, M. Fischer, and F. Tramèr (2024)"
+    },
+    {
+      "raw_text": "X. Deng, J. Wu, M. Chen, Y. Xiao, K. Xu, and Q. Li (2026) Automating agent hijacking via structural template injection. External Links: 2602.16958, Link Cited by: §1, §4.4, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2602.16958",
+      "doi": null,
+      "url": null,
+      "citation_key": "X. Deng, J. Wu, M. Chen, Y. Xiao, K. Xu, and Q. Li (2026)"
+    },
+    {
+      "raw_text": "Y. Dong, R. Mu, G. Jin, Y. Qi, J. Hu, X. Zhao, J. Meng, W. Ruan, and X. Huang (2024) Building guardrails for large language models. External Links: 2402.01822, Link Cited by: §1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2402.01822",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Dong, R. Mu, G. Jin, Y. Qi, J. Hu, X. Zhao, J. Meng, W. Ruan, and X. Huang (2024)"
+    },
+    {
+      "raw_text": "V. Dongre, R. A. Rossi, V. D. Lai, D. S. Yoon, D. Hakkani-Tür, and T. Bui (2025) Drift no more? context equilibria in multi-turn llm interactions. External Links: 2510.07777, Link Cited by: §3.1, §4.3, §5.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.07777",
+      "doi": null,
+      "url": null,
+      "citation_key": "V. Dongre, R. A. Rossi, V. D. Lai, D. S. Yoon, D. Hakkani-Tür, and T. Bui (2025)"
+    },
+    {
+      "raw_text": "R. Geng, Y. Wang, C. Yin, M. Cheng, Y. Chen, and J. Jia (2025) PISanitizer: preventing prompt injection to long-context llms via prompt sanitization. External Links: 2511.10720, Link Cited by: §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2511.10720",
+      "doi": null,
+      "url": null,
+      "citation_key": "R. Geng, Y. Wang, C. Yin, M. Cheng, Y. Chen, and J. Jia (2025)"
+    },
+    {
+      "raw_text": "K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz (2023) Not what you’ve signed up for: compromising real-world llm-integrated applications with indirect prompt injection. External Links: 2302.12173, Link Cited by: §3.1, §3.2, §4.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.12173",
+      "doi": null,
+      "url": null,
+      "citation_key": "K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz (2023)"
+    },
+    {
+      "raw_text": "D. Kang, X. Li, I. Stoica, C. Guestrin, M. Zaharia, and T. Hashimoto (2023) Exploiting programmatic behavior of llms: dual-use through standard security attacks. External Links: 2302.05733, Link Cited by: §3.1, §5.1.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2302.05733",
+      "doi": null,
+      "url": null,
+      "citation_key": "D. Kang, X. Li, I. Stoica, C. Guestrin, M. Zaharia, and T. Hashimoto (2023)"
+    },
+    {
+      "raw_text": "P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, et al. (2020) Retrieval-augmented generation for knowledge-intensive nlp tasks. Advances in neural information processing systems 33, pp. 9459–9474. Cited by: 3rd item.",
+      "title": null,
+      "authors": [],
+      "year": "2020",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, et al. (2020)"
+    },
+    {
+      "raw_text": "Y. Liu, G. Deng, Y. Li, K. Wang, Z. Wang, X. Wang, T. Zhang, Y. Liu, H. Wang, Y. Zheng, L. Y. Zhang, and Y. Liu (2025a) Prompt injection attack against llm-integrated applications. External Links: 2306.05499, Link Cited by: §1, §3.1, §4.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2306.05499",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Liu, G. Deng, Y. Li, K. Wang, Z. Wang, X. Wang, T. Zhang, Y. Liu, H. Wang, Y. Zheng, L. Y. Zhang, and Y. Liu (2025a)"
+    },
+    {
+      "raw_text": "Y. Liu, W. Wang, R. Feng, Y. Zhang, G. Xu, G. Deng, Y. Li, and L. Zhang (2026) Agent skills in the wild: an empirical study of security vulnerabilities at scale. External Links: 2601.10338, Link Cited by: §1, §3.1, §4.1, §4.1, §4.5, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2601.10338",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Liu, W. Wang, R. Feng, Y. Zhang, G. Xu, G. Deng, Y. Li, and L. Zhang (2026)"
+    },
+    {
+      "raw_text": "Y. Liu, Y. Jia, J. Jia, D. Song, and N. Z. Gong (2025b) DataSentinel: a game-theoretic detection of prompt injection attacks. External Links: 2504.11358, Link Cited by: §1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2504.11358",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Liu, Y. Jia, J. Jia, D. Song, and N. Z. Gong (2025b)"
+    },
+    {
+      "raw_text": "W. Luo, S. Dai, X. Liu, S. Banerjee, H. Sun, M. Chen, and C. Xiao (2025) AGrail: a lifelong agent guardrail with effective and adaptive safety detection. External Links: 2502.11448, Link Cited by: §5.2, §5.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2502.11448",
+      "doi": null,
+      "url": null,
+      "citation_key": "W. Luo, S. Dai, X. Liu, S. Banerjee, H. Sun, M. Chen, and C. Xiao (2025)"
+    },
+    {
+      "raw_text": "R. Miao, Y. Liu, Y. Wang, X. Shen, Y. Tan, Y. Dai, S. Pan, and X. Wang (2025) BlindGuard: safeguarding llm-based multi-agent systems under unknown attacks. External Links: 2508.08127, Link Cited by: §5.2, §5.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2508.08127",
+      "doi": null,
+      "url": null,
+      "citation_key": "R. Miao, Y. Liu, Y. Wang, X. Shen, Y. Tan, Y. Dai, S. Pan, and X. Wang (2025)"
+    },
+    {
+      "raw_text": "National Cyber Security Centre (2025) National Cyber Security Centre. External Links: Link Cited by: §4.4.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "National Cyber Security Centre (2025)"
+    },
+    {
+      "raw_text": "National Vulnerability Database (NVD) (2026) CVE-2026-25253 detail. Note: https://nvd.nist.gov/vuln/detail/CVE-2026-25253NVD published 2026-02-01; last modified 2026-02-13 Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-25253NVD",
+      "citation_key": "National Vulnerability Database (NVD) (2026)"
+    },
+    {
+      "raw_text": "OpenAI (2024) GPT-4 technical report. External Links: 2303.08774, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2303.08774",
+      "doi": null,
+      "url": null,
+      "citation_key": "OpenAI (2024)"
+    },
+    {
+      "raw_text": "OpenClaw Security Advisory (2026a) OpenClaw Arbitrary Local File Read via BlueBubbles mediaPath. Note: GitHub Security Advisory GHSA-rwj8-p9vq-25gvAccessed: 2026-03-06 Cited by: §4.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "OpenClaw Security Advisory (2026a)"
+    },
+    {
+      "raw_text": "OpenClaw Security Advisory (2026b) OpenClaw Destination Symlink Traversal in stageSandboxMedia. Note: GitHub Security Advisory GHSA-cfvj-7rx7-fc7cAccessed: 2026-03-06 Cited by: §4.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "OpenClaw Security Advisory (2026b)"
+    },
+    {
+      "raw_text": "J. S. Park, J. C. O’Brien, C. J. Cai, M. R. Morris, P. Liang, and M. S. Bernstein (2023) Generative agents: interactive simulacra of human behavior. External Links: 2304.03442, Link Cited by: §2.1.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2304.03442",
+      "doi": null,
+      "url": null,
+      "citation_key": "J. S. Park, J. C. O’Brien, C. J. Cai, M. R. Morris, P. Liang, and M. S. Bernstein (2023)"
+    },
+    {
+      "raw_text": "A. Shahriar, M. N. Rahman, S. Ahmed, F. Sadeque, and M. R. Parvez (2025) A survey on agentic security: applications, threats and defenses. External Links: 2510.06445, Link Cited by: §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.06445",
+      "doi": null,
+      "url": null,
+      "citation_key": "A. Shahriar, M. N. Rahman, S. Ahmed, F. Sadeque, and M. R. Parvez (2025)"
+    },
+    {
+      "raw_text": "T. Shi, K. Zhu, Z. Wang, Y. Jia, W. Cai, W. Liang, H. Wang, H. Alzahrani, J. Lu, K. Kawaguchi, B. Alomair, X. Zhao, W. Y. Wang, N. Gong, W. Guo, and D. Song (2025) PromptArmor: simple yet effective prompt injection defenses. External Links: 2507.15219, Link Cited by: §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2507.15219",
+      "doi": null,
+      "url": null,
+      "citation_key": "T. Shi, K. Zhu, Z. Wang, Y. Jia, W. Cai, W. Liang, H. Wang, H. Alzahrani, J. Lu, K. Kawaguchi, B. Alomair, X. Zhao, W. Y. Wang, N. Gong, W. Guo, and D. Song (2025)"
+    },
+    {
+      "raw_text": "S. S. Srivastava and H. He (2025) MemoryGraft: persistent compromise of llm agents via poisoned experience retrieval. External Links: 2512.16962, Link Cited by: §3.1, §4.3.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2512.16962",
+      "doi": null,
+      "url": null,
+      "citation_key": "S. S. Srivastava and H. He (2025)"
+    },
+    {
+      "raw_text": "P. Steinberger and the OpenClaw contributors (2026) OpenClaw: personal ai assistant Note: GitHub repository. Accessed: 2026-03-05 External Links: Link Cited by: §1, §2.2.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "P. Steinberger and the OpenClaw contributors (2026)"
+    },
+    {
+      "raw_text": "B. D. Sunil, I. Sinha, P. Maheshwari, S. Todmal, S. Mallik, and S. Mishra (2026) Memory poisoning attack and defense on memory-based llm-agents. External Links: 2601.05504, Link Cited by: §1, §3.1, §4.3.",
+      "title": null,
+      "authors": [],
+      "year": "2026",
+      "venue": null,
+      "arxiv_id": "2601.05504",
+      "doi": null,
+      "url": null,
+      "citation_key": "B. D. Sunil, I. Sinha, P. Maheshwari, S. Todmal, S. Mallik, and S. Mishra (2026)"
+    },
+    {
+      "raw_text": "G. Team (2024) Gemini 1.5: unlocking multimodal understanding across millions of tokens of context. External Links: 2403.05530, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2403.05530",
+      "doi": null,
+      "url": null,
+      "citation_key": "G. Team (2024)"
+    },
+    {
+      "raw_text": "Q. Team (2025) Qwen3 technical report. External Links: 2505.09388, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2505.09388",
+      "doi": null,
+      "url": null,
+      "citation_key": "Q. Team (2025)"
+    },
+    {
+      "raw_text": "X. Wang, B. Li, et al. (2025a) OpenHands: an open platform for ai software developers as generalist agents. External Links: 2407.16741, Link Cited by: §2.1.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2407.16741",
+      "doi": null,
+      "url": null,
+      "citation_key": "X. Wang, B. Li, et al. (2025a)"
+    },
+    {
+      "raw_text": "X. Wang, J. Shi, Z. Zhao, Y. Yu, Z. Hua, and J. Gu (2025b) TZ-llm: protecting on-device large language models with arm trustzone. External Links: 2511.13717, Link Cited by: §7.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2511.13717",
+      "doi": null,
+      "url": null,
+      "citation_key": "X. Wang, J. Shi, Z. Zhao, Y. Yu, Z. Hua, and J. Gu (2025b)"
+    },
+    {
+      "raw_text": "Y. Wang, H. Yang, S. Pal, and W. Xu (2025c) AegisAgent: an autonomous defense agent against prompt injection attacks in llm-hars. External Links: 2512.20986, Link Cited by: §5.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2512.20986",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Wang, H. Yang, S. Pal, and W. Xu (2025c)"
+    },
+    {
+      "raw_text": "Y. Wang, S. Chen, R. Alkhudair, B. Alomair, and D. Wagner (2026a) Defending against prompt injection with datafilter. External Links: 2510.19207, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2510.19207",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Wang, S. Chen, R. Alkhudair, B. Alomair, and D. Wagner (2026a)"
+    },
+    {
+      "raw_text": "Y. Wang, F. Xu, Z. Lin, G. He, Y. Huang, H. Gao, Z. Niu, S. Lian, and Z. Liu (2026b) From assistant to double agent: formalizing and benchmarking attacks on openclaw for personalized local ai agent. External Links: 2602.08412, Link Cited by: §1, §3.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2602.08412",
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Wang, F. Xu, Z. Lin, G. He, Y. Huang, H. Gao, Z. Niu, S. Lian, and Z. Liu (2026b)"
+    },
+    {
+      "raw_text": "Z. Wang, V. Siu, Z. Ye, T. Shi, Y. Nie, X. Zhao, C. Wang, W. Guo, and D. Song (2025d) AgentVigil: generic black-box red-teaming for indirect prompt injection against llm agents. External Links: 2505.05849, Link Cited by: §1, §3.1, §4.5, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": null,
+      "venue": null,
+      "arxiv_id": "2505.05849",
+      "doi": null,
+      "url": null,
+      "citation_key": "Z. Wang, V. Siu, Z. Ye, T. Shi, Y. Nie, X. Zhao, C. Wang, W. Guo, and D. Song (2025d)"
+    },
+    {
+      "raw_text": "J. Wei, X. Wang, D. Schuurmans, M. Bosma, F. Xia, E. Chi, Q. V. Le, D. Zhou, et al. (2022) Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems 35, pp. 24824–24837. Cited by: 3rd item.",
+      "title": null,
+      "authors": [],
+      "year": "2022",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "J. Wei, X. Wang, D. Schuurmans, M. Bosma, F. Xia, E. Chi, Q. V. Le, D. Zhou, et al. (2022)"
+    },
+    {
+      "raw_text": "Q. Wei, T. Yang, Y. Wang, X. Li, L. Li, Z. Yin, Y. Zhan, T. Holz, Z. Lin, and X. Wang (2025) A-memguard: a proactive defense framework for llm-based agent memory. External Links: 2510.02373, Link Cited by: §5.2, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2510.02373",
+      "doi": null,
+      "url": null,
+      "citation_key": "Q. Wei, T. Yang, Y. Wang, X. Li, L. Li, Z. Yin, Y. Zhan, T. Holz, Z. Lin, and X. Wang (2025)"
+    },
+    {
+      "raw_text": "Y. Xie, J. Yi, J. Shao, J. Curl, L. Lyu, Q. Chen, X. Xie, and F. Wu (2023) Defending chatgpt against jailbreak attack via self-reminders. Nature Machine Intelligence 5 (12), pp. 1486–1496. Cited by: §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "Y. Xie, J. Yi, J. Shao, J. Curl, L. Lyu, Q. Chen, X. Xie, and F. Wu (2023)"
+    },
+    {
+      "raw_text": "J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and O. Press (2024) SWE-agent: agent-computer interfaces enable automated software engineering. In Proceedings of the 38th International Conference on Neural Information Processing Systems, NIPS ’24, Red Hook, NY, USA. External Links: ISBN 9798331314385 Cited by: §2.1.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": null,
+      "doi": null,
+      "url": null,
+      "citation_key": "J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and O. Press (2024)"
+    },
+    {
+      "raw_text": "S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao (2023) ReAct: synergizing reasoning and acting in language models. External Links: 2210.03629, Link Cited by: 4th item.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2210.03629",
+      "doi": null,
+      "url": null,
+      "citation_key": "S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao (2023)"
+    },
+    {
+      "raw_text": "S. Yi, Y. Liu, Z. Sun, T. Cong, X. He, J. Song, K. Xu, and Q. Li (2024) Jailbreak attacks and defenses against large language models: a survey. External Links: 2407.04295, Link Cited by: §1.",
+      "title": null,
+      "authors": [],
+      "year": "2024",
+      "venue": null,
+      "arxiv_id": "2407.04295",
+      "doi": null,
+      "url": null,
+      "citation_key": "S. Yi, Y. Liu, Z. Sun, T. Cong, X. He, J. Song, K. Xu, and Q. Li (2024)"
+    },
+    {
+      "raw_text": "H. Zhang, J. Huang, K. Mei, Y. Yao, Z. Wang, C. Zhan, H. Wang, and Y. Zhang (2025) Agent security bench (asb): formalizing and benchmarking attacks and defenses in llm-based agents. External Links: 2410.02644, Link Cited by: §1, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2410.02644",
+      "doi": null,
+      "url": null,
+      "citation_key": "H. Zhang, J. Huang, K. Mei, Y. Yao, Z. Wang, C. Zhan, H. Wang, and Y. Zhang (2025)"
+    },
+    {
+      "raw_text": "A. Zou, M. Lin, E. Jones, M. Nowak, M. Dziemian, N. Winter, A. Grattan, V. Nathanael, A. Croft, X. Davies, J. Patel, R. Kirk, N. Burnikell, Y. Gal, D. Hendrycks, J. Z. Kolter, and M. Fredrikson (2025) Security challenges in ai agent deployment: insights from a large scale public competition. External Links: 2507.20526, Link Cited by: §3.1, §4.5, §4.5, §5.2.",
+      "title": null,
+      "authors": [],
+      "year": "2025",
+      "venue": null,
+      "arxiv_id": "2507.20526",
+      "doi": null,
+      "url": null,
+      "citation_key": "A. Zou, M. Lin, E. Jones, M. Nowak, M. Dziemian, N. Winter, A. Grattan, V. Nathanael, A. Croft, X. Davies, J. Patel, R. Kirk, N. Burnikell, Y. Gal, D. Hendrycks, J. Z. Kolter, and M. Fredrikson (2025)"
+    },
+    {
+      "raw_text": "A. Zou, Z. Wang, N. Carlini, M. Nasr, J. Z. Kolter, and M. Fredrikson (2023) Universal and transferable adversarial attacks on aligned language models. External Links: 2307.15043, Link Cited by: §3.1.",
+      "title": null,
+      "authors": [],
+      "year": "2023",
+      "venue": null,
+      "arxiv_id": "2307.15043",
+      "doi": null,
+      "url": null,
+      "citation_key": "A. Zou, Z. Wang, N. Carlini, M. Nasr, J. Z. Kolter, and M. Fredrikson (2023)"
+    }
+  ],
+  "full_text": "## Introduction\n\nLarge Language Models (LLMs) have demonstrated remarkable capabilities in understanding and generating human language, achieving major advances in natural language processing, code generation, and complex reasoning tasks (OpenAI, 2024; Team, 2024; Baiet al., 2023; Team, 2025). Building upon these capabilities, autonomous LLM agents have emerged as a new paradigm that transforms AI systems from passive conversational assistants into proactive entities capable of independently executing complex, long-horizon tasks. This paradigm is exemplified by advanced agent frameworks such as OpenClaw (Steinberger and the OpenClaw contributors, 2026).\n\nUnlike early constrained LLM applications, OpenClaw positions LLMs as the central cognitive engine within a highly extensible and interactive system architecture. In particular, it enables deep environmental engagement by bridging human intent and computational execution through rich instant messaging (IM) interfaces. Furthermore, OpenClaw allows agents to dynamically orchestrate specialized third-party plugins, maintain persistent contextual memory, and perform high-privilege operations such as automated software engineering and system administration.\n\nHowever, the very capabilities that empower autonomous LLM agents also introduce significant security risks. Unlike traditional LLM applications operating in constrained, stateless settings, autonomous agents rely on persistent memory, cross-system integration, and privileged access to execute complex workflows. Their interactive nature and high-privilege execution capabilities substantially expand the system attack surface (Chenet al., 2026; Wanget al., 2026b). While recent studies (Zhanget al., 2025; Debenedettiet al., 2024) have uncovered several critical vulnerabilities in LLM-based systems, the autonomous nature of agents introduces unique multi-stage threats that extend beyond isolated prompt injection (Liuet al., 2025a) or jailbreak attacks (Yiet al., 2024).\n\nThe threat landscape of autonomous LLM agents consists of multi-stage systemic risks spanning the entire operational lifecycle: (I) Initialization: Prior to runtime, agents face severe supply chain risks arising from malicious skills, credential leakage, and insecure configurations (Liuet al., 2026). (II) Input: During environmental interaction, the ingestion of untrusted external data exposes agents to indirect prompt injection, system prompt extraction, and malicious file parsing (Wanget al., 2025d). (III) Inference: Long-horizon operation renders agents vulnerable to memory poisoning and context drift, gradually eroding adherence to the user’s original instructions (Sunilet al., 2026). (IV) Decision: Through vulnerability exploitation or complex environmental interactions, the agent’s decision-making process may deviate from user intent, leading to goal hijacking, tool-selection manipulation, and the bypass of alignment policies (Denget al., 2026). (V) Execution: Finally, the high-privilege execution capabilities required for autonomous operation create opportunities for critical system compromise, including arbitrary code execution, privilege escalation, data exfiltration, and lateral movement (National Vulnerability Database (NVD), 2026).\n\nExisting defenses remain insufficient against these multifaceted threats. Most approaches focus on hardening isolated interfaces within the agent pipeline, such as guardrail-based input filtering (Donget al., 2024; Wanget al., 2026a), prompt–data separation through structured queries (Chenet al., 2025a), or robustness-oriented defensive training via preference optimization (Chenet al., 2025b). Detection-based methods further attempt to identify injected instructions, yet they remain largely orthogonal to end-to-end, lifecycle-level security guarantees for autonomous agents (Liuet al., 2025b). Consequently, these piecemeal defenses exhibit significant limitations in mitigating cross-temporal, multi-stage attacks that unfold over extended agent interactions, leaving critical gaps exploitable by coordinated adversaries.\n\nTo comprehensively characterize the defense space against these threats, we organize applicable security measures across five lifecycle stages that align with the agent’s threat taxonomy: (I) Foundational Base: Defense measures at the initialization stage focus on configuration validation and plugin vetting to mitigate supply chain attacks and prevent credential leakage. (II) Input Perception: Defense strategies sanitize and filter external inputs to intercept malicious prompt injections and adversarial content before they reach the core reasoning engine. (III) Cognitive State:\nDefense mechanisms safeguard the agent’s internal state during inference by preventing memory poisoning and detecting context drift across long-horizon interactions. (IV) Decision Alignment: Defense approaches verify that generated plans, tool selections, and intermediate decisions remain consistent with user intent and predefined alignment policies. (V) Execution Control: Defense architectures enforce strict capability restrictions and privilege management to ensure secure and sandboxed action execution.\n\nIn summary, this paper makes the following contributions:\n\nWe present a systematic taxonomy of the autonomous agent threat landscape across its complete operational lifecycle (Initialization, Input, Inference, Decision, and Execution), identifying compounding risks unique to long-horizon agent operations.\n\nWe demonstrate the prevalence and severity of these threats through detailed case studies on OpenClaw and analyze how effectively existing defense strategies mitigate real-world attack scenarios.\n\nWe provide a comprehensive analysis of defense mechanisms applicable to each lifecycle stage of OpenClaw.\n\nWe explore the broader defense design space by examining potential defense strategies corresponding to different lifecycle stages, providing insights for building comprehensive protection against autonomous agent threats.\n\n## Background\n\n### Autonomous LLM Agents\n\nAutonomous LLM agents extend static language models into dynamic systems capable of perceiving environments, reasoning over tasks, and executing actions to achieve goals (Wanget al., 2025a; Yanget al., 2024).\nUnlike stateless LLM applications, these agents rely on persistent memory and cross-system integration to support long-horizon workflows. The operational lifecycle of an autonomous agent can be divided into five stages (Parket al., 2023):\n\nStage I-Initialization: Loading system prompts, security configurations, and plugins to establish the agent’s operational environment and trust boundaries.\n\nStage II-Input: Ingesting multi-modal inputs while distinguishing trusted user instructions from untrusted external data sources.\n\nStage III-Inference: Processing inputs, retrieving external knowledge (e.g., via retrieval-augmented generation (Lewiset al., 2020)), and performing reasoning with techniques such as Chain-of-Thought (CoT) prompting (Weiet al., 2022) while maintaining contextual memory.\n\nStage IV-Decision: Selecting appropriate tools and generating execution parameters through agent planning frameworks such as ReAct (Yaoet al., 2023).\n\nStage V-Execution: Performing actions through external systems, often requiring strict sandboxing and access-control mechanisms to manage privileged operations.\n\n### OpenClaw Architecture\n\nOpenClaw (Steinberger and the OpenClaw contributors, 2026) represents a representative implementation of modern autonomous LLM agents through a “kernel–plugin” architecture. The system separates functionality into two primary components: the pi-coding-agent, which serves as a minimal Trusted Computing Base (TCB) responsible for memory management, task planning, and execution orchestration, and an extensible plugin ecosystem that expands capabilities through third-party tools. While this modular design significantly improves flexibility and task automation, it also introduces complex security challenges. The separation between the agent core and external plugins creates an expanded and partially ambiguous trust boundary. In particular, dynamic plugin loading without strict integrity verification, implicit trust in external API responses, and privileged host access during automated code generation collectively enlarge the system attack surface.\n\nAs a result, adversaries may exploit these architectural weaknesses to escalate localized manipulations, such as prompt injection or malicious plugin behavior, into broader system-level compromises spanning multiple stages of the agent lifecycle.\n\n## Threat Model\n\nWe define the security assumptions, adversarial capabilities, and defense objectives considered in this work for autonomous LLM agents.\n\n### Scope and Assumptions\n\nAutonomous LLM agents interact with complex external environments, integrate third-party tools, and execute actions across multiple systems. As a result, their attack surface spans external inputs, software supply chains, and runtime execution environments. In this work, we primarily focus on threats originating from untrusted external interactions.\n\nRecent studies have demonstrated several practical attack vectors against LLM-based agents. These include indirect prompt injection through multi-modal documents (Greshakeet al., 2023; Wanget al., 2025d), poisoning of retrieval-augmented generation (RAG) knowledge sources (Sunilet al., 2026; Srivastava and He, 2025), and adversarial manipulation of long-term memory. Security analyses further reveal risks introduced by malicious third-party plugins and runtime exploits, including context drift (Dongreet al., 2025), unauthorized API invocation, and data exfiltration (Kanget al., 2023; Liuet al., 2025a). Our threat model is grounded in vulnerabilities observed in recent empirical studies and security audits of autonomous LLM agents (Debenedettiet al., 2024; Liuet al., 2026; Zouet al., 2025).\n\nWe assume a well-defined Trusted Computing Base. The trusted components include the agent kernel, underlying hardware platform, host operating system, standard cryptographic primitives, and the LLM inference infrastructure. This trust assumption also covers the foundational model weights. Consequently, attacks targeting the internal parameters of the underlying LLM, such as model weight poisoning, model extraction, or adversarial prefix optimization (Zouet al., 2023), are considered out of scope. We further exclude hardware side-channel attacks, network-layer denial-of-service attacks, and out-of-band social engineering.\n\n### Adversary Capabilities\n\nWe consider a computationally bounded adversary whose objectives include data exfiltration, privilege escalation, or manipulation of the agent’s decision-making behavior. The adversary may operate under the following capability profiles.\n\nExternal Content Attacker.\nThe adversary interacts with the agent exclusively through maliciously crafted environmental inputs, such as compromised web pages, manipulated API responses, or adversarial files. Although the attacker has no direct system access, they exploit the agent’s autonomous perception and reasoning pipeline to trigger indirect prompt injections or confused-deputy behaviors (Greshakeet al., 2023).\n\nSupply Chain Attacker.\nThe adversary distributes trojanized plugins, compromises community package repositories, or manipulates external tools integrated into the agent workflow. Such attacks may enable arbitrary code execution or malicious API interception within the plugin environment during system initialization.\n\nMalicious Tenant.\nIn multi-tenant deployments, an authorized but malicious user may attempt to escape their isolated execution context. The attacker’s goal is to access cross-tenant memory or execute unauthorized system-level commands by bypassing sandbox enforcement policies (Wanget al., 2026b; Bors, 2026).\n\nAcross all adversary models, we assume that attackers lack white-box access to the internal representations of the LLM (e.g., gradients or hidden states) during inference. Additionally, adversaries cannot bypass host-level cryptographic authentication or compromise the trusted computing base.\n\n## Real-World Security Threats to OpenClaw\n\nDespite its sophisticated architecture, OpenClaw and similar autonomous agents face substantial security risks in real-world deployments. Recent empirical studies and vulnerability disclosures have revealed systemic weaknesses spanning all five stages of the agent lifecycle.\n\n### Stage I: Initialization Threats.\n\nThe initialization phase defines the foundational trust boundary of OpenClaw, yet it is particularly susceptible to supply-chain and configuration-related attacks.\n\nMalicious and Vulnerable Plugins.\nSkill ecosystems provide extensibility but significantly expand the attack surface. We find that adversaries can exploit this ecosystem by injecting malicious skills that abuse the capability routing interface. As illustrated in Figure 1, skill poisoning enables attackers to silently replace legitimate functionality11Attack details can be found in Appendix A. Consequently, a benign user request can be transparently hijacked to produce attacker-controlled outputs, demonstrating how capability impersonation compromises the agent during initialization. Recently Liu et al. (Liuet al., 2026) conducted a large-scale empirical security audit of agent skills and found that approximately 26% of community-contributed tools contain various security vulnerabilities.\n\nCredential Leakage and Insecure Configuration.\nBeyond explicitly malicious code, legitimate skills often mishandle configuration data, inadvertently exposing sensitive credentials such as API keys and OAuth tokens during execution (Liuet al., 2026). In addition, OpenClaw’s flexible configuration system allows users to disable critical security controls, including plugin signature verification and execution sandboxing. Such misconfigurations significantly weaken the agent’s security boundary and can transform the system into an exploitable attack vector.\n\n### Stage II: Input Vulnerabilities\n\nOpenClaw must continuously ingest untrusted external data from users, tools, and online resources. This architectural requirement significantly enlarges the attack surface, enabling adversaries to inject malicious inputs that manipulate the agent’s perception and reasoning processes.\n\nIndirect Prompt Injection.\nThe most pervasive threat during the input phase is indirect prompt injection. Attackers embed malicious directives within external content retrieved by the agent (Greshakeet al., 2023; Liuet al., 2025a). Particularly, we find that it creates a zero-click exploit that subverts the control flow without direct user interaction. Figure 2 illustrates a successful attack execution where an embedded payload in a retrieved web page overrides the user objective, forcing the agent to output an attacker-controlled string instead of completing the intended task22Attack details can be found in Appendix B.\n\nSystem Prompt Extraction and Malicious File Parsing.\nAdversaries may craft adversarial queries to extract hidden system prompts, revealing the agent’s internal instructions and providing a blueprint for bypassing security safeguards. In addition, weaknesses in media ingestion pipelines and archive extraction mechanisms can be exploited to access sensitive files or escape intended sandbox boundaries within privileged runtimes (OpenClaw Security Advisory, 2026a, b).\n\n### Stage III: State and Memory Corruption\n\nLong-horizon autonomy requires OpenClaw to maintain persistent internal state and memory across multiple interaction steps. This persistence introduces a new class of attacks in which adversaries gradually poison the agent’s cognitive state, leading to long-term reasoning corruption and stealthy behavioral manipulation.\n\nMemory Poisoning.\nPersistent memory introduces a highly critical attack surface. We find that adversaries manipulate the long-term memory store to induce durable behavioral biases across multiple sessions. Figure 3 demonstrates this impact33Attack details can be found in Appendix C. An attacker implants a fabricated policy rule into the agent’s memory, causing it to persistently reject benign requests in subsequent sessions. This transforms a transient input exploit into long-term behavioral control. Existing studies (Sunilet al., 2026; Srivastava and He, 2025) also report similar vulnerabilities.\n\nContext Drift.\nAgents operating over long interaction sequences frequently exhibit context drift. Their behavior progressively deviates from task-consistent objectives due to the accumulation of imperfect context representations (Dongreet al., 2025). This drift amplifies latent errors in retrieval and reasoning, leading to unintended actions even without explicit adversarial manipulation.\n\n### Stage IV: Decision Manipulation.\n\nDuring the decision stage, the agent selects tools and plans task execution strategies. Adversaries can exploit this stage by influencing the decision-making process, causing the agent to select unsafe tools, deviate from intended goals, or execute attacker-controlled workflows.\n\nIntent Drift and Goal Hijacking\nWe observe that adversaries can inject structured instructions that cause the agent to reinterpret its objectives and prioritize malicious tasks (Denget al., 2026). Even under benign conditions, ambiguous instructions can trigger severe intent drift. Figure 4 illustrates a scenario where a basic diagnostic security request escalates into unauthorized firewall modifications and service termination44Attack details can be found in Appendix D. A sequence of locally justifiable tool calls drifts into a globally destructive outcome, culminating in a complete system outage.\n\nTool Selection Manipulation and Policy Bypass.\nAgents may invoke high-privilege tools in response to maliciously crafted inputs while bypassing safer alternatives (Debenedettiet al., 2024). Iterative prompt manipulation effectively circumvents alignment policies, highlighting that content filters are insufficient without hardened execution controls (National Cyber Security Centre, 2025).\n\n### Stage V: Execution Exploitation\n\nThe execution stage converts high-level decisions into privileged system actions. Consequently, it represents the final realization point of attacks, where earlier compromises propagate into concrete operations that may impact external systems, infrastructure, or sensitive data.\n\nHigh-Risk Command Execution and Privilege Escalation.\nWe observe that adversaries exploit autonomous tool invocation to launch unsafe command sequences resulting in arbitrary code execution. Attackers frequently decompose malicious behavior into individually benign steps to assemble a latent execution chain. Figure 5 depicts the severe infrastructure impact of triggering such a chain55Attack details can be found in Appendix E. Resource consumption rapidly escalates to full saturation, transforming the agent into an active vector for a denial-of-service attack. Furthermore, misconfigured sandbox policies frequently allow constrained sessions to escalate privileges and access sensitive host tooling (Bors, 2026). Similar vulnerabilities are also reported recently (Wanget al., 2025d; Zouet al., 2025)\n\nData Exfiltration and Lateral Movement\nCapabilities granting access to file systems and network APIs enable sophisticated exfiltration channels. Compromised agents can harvest confidential data without explicit user intent (Liuet al., 2026). In distributed deployments, the ability to invoke network resources acts as an attack amplifier, allowing lateral movement and extensive policy violations across interconnected environments (Zouet al., 2025).\n\n## Defense Objectives and Limitations of Existing Defenses\n\n### Defense Objectives\n\nTo effectively mitigate the aforementioned threats within the OpenClaw framework, defense mechanisms must satisfy three foundational security objectives. These properties aim to balance robust execution isolation with the operational utility required for autonomous agents.\n\nIntegrity.\nPreserve the agent’s decision-making and memory integrity by strictly isolating trustworthy user directives from untrusted external data. This logical separation ensures the execution trajectory remains cryptographically and semantically aligned with the original user intent, neutralizing control-flow hijacking via malicious inputs (Chenet al., 2026).\n\nConfidentiality.\nSafeguard sensitive user credentials, session tokens, and long-term memory structures. Defenses must proactively thwart unauthorized data exfiltration through seemingly legitimate API channels, preventing attackers from coercing the OpenClaw agent into encoding and transmitting sensitive data via external network requests (Kanget al., 2023).\n\nAvailability.\nGuarantee graceful degradation by isolating compromised plugins, sandboxing runtime execution, and pruning poisoned context streams without halting core cognitive operations. The system must actively prevent adversaries from inducing infinite reasoning loops or executing semantic denial-of-service (DoS) attacks against OpenClaw.\n\nThese properties necessitate a defense-in-depth architecture rooted in the principle of least privilege, rigorously constraining all OpenClaw tools and plugins to minimalistic, context-aware permission spaces.\n\n### Limitations of Existing Defenses in Guaranteeing OpenClaw Security\n\nWe systematically evaluate existing defense mechanisms across the five-stage agent lifecycle, revealing critical vulnerabilities where current paradigms fail to provide robust security guarantees for the OpenClaw architecture. The fundamental flaw across these stages is the inability to handle the temporal and compositional threats.\n\nInitialization Stage Defenses.\nExisting supply chain security mechanisms for LLM agents primarily rely on plugin vetting, static analysis, and community reputation scores (Liuet al., 2026; Chenet al., 2026). While these approaches provide a baseline defense, OpenClaw skills are inherently dynamic artifacts, combining natural-language instructions, executable commands, and external dependencies. This complexity produces evolving behaviors that static vetting cannot adequately capture (Luoet al., 2025). More critically, these defenses assume a trustworthy initialization state. Consequently, they are insufficient against dynamic supply chain compromises, where initially benign components may be weaponized post-deployment through updates or malicious configuration changes (Luoet al., 2025).\n\nInput Stage Defenses.\nCurrent defenses against prompt injection, including input sanitization, guardrails, structural parsing, and game-theoretic detection (Donget al., 2024; Genget al., 2025; Shiet al., 2025; Chenet al., 2025a; Liuet al., 2025b), largely assume stateless, single-turn interactions (Liuet al., 2025a; Greshakeet al., 2023). This assumption leaves OpenClaw vulnerable to temporal composition attacks, where individually benign inputs accumulate across multiple interactions to trigger malicious behaviors (Dongreet al., 2025). Furthermore, indirect prompt injection through external data sources remains insufficiently mitigated. Advanced frameworks such as AegisAgent (Wanget al., 2025c) demonstrate that autonomous detection and intervention against prompt injection can improve resilience, yet these techniques have not been integrated into a full-lifecycle defense for dynamic, multi-turn agent workflows.\n\nInference Stage Defenses.\nMemory integrity during agent reasoning represents a critical vulnerability (Weiet al., 2025). Existing mitigations, including context drift detection (Dongreet al., 2025) and model-level alignment techniques (Xieet al., 2023; Chenet al., 2025b), are reactive and lack continuous protection for evolving agent memory states. OpenClaw currently does not implement persistent monitoring to detect when legitimate context accumulation is gradually subverted by adversarial perturbations. Proactive frameworks like A-MemGuard (Weiet al., 2025) illustrate that continuous memory safeguarding is feasible, highlighting the gap between current static defenses and dynamic memory protection requirements.\n\nDecision Stage Defenses.\nSecurity protections at the planning and decision layers are largely ad hoc. Although goal hijacking is recognized as a significant threat (Denget al., 2026), existing evaluation frameworks such as AgentDojo (Debenedettiet al., 2024) and ASB (Zhanget al., 2025) focus primarily on attack characterization rather than real-time mitigation. OpenClaw lacks mechanisms to continuously verify the alignment of planned actions with user objectives, leaving operational constraints unenforced. Techniques like BlindGuard (Miaoet al., 2025) demonstrate that runtime intent verification and multi-agent monitoring can reduce such risks, but integration into general agent architectures remains limited.\n\nExecution Stage Defenses.\nRuntime confinement in OpenClaw currently relies on conventional software sandboxing. Studies from Snyk Labs (Bors, 2026) and ART 2025 (Zouet al., 2025) reveal that such sandboxes can be bypassed through sophisticated escape techniques. Black-box red-teaming tools (Wanget al., 2025d) provide post hoc evaluation but lack active runtime protection. Additionally, permissive capability enforcement facilitates lateral movement after compromise, a problem further compounded by the absence of behavioral monitoring and secure rollback mechanisms. Lifecycle-aware runtime frameworks, inspired by AGrail (Luoet al., 2025), suggest that adaptive enforcement combined with continuous observation could mitigate these vulnerabilities.\n\nCross-Stage System-Level Integration Gaps.\nThe most fundamental limitation in protecting OpenClaw lies in the fragmented nature of existing defenses (Shahriaret al., 2025). Current mitigations operate as isolated point solutions rather than components of a cohesive security architecture. For instance, robust input sanitization is rendered ineffective if the initialization stage is compromised, and execution sandboxing cannot remediate poisoned memory states from prior stages. Systems like BlindGuard (Miaoet al., 2025) demonstrate the benefits of holistic, multi-stage defense strategies, though generalizable adoption remains a challenge.\n\nSummary.\nAddressing the above challenges requires a lifecycle-aware, defense-in-depth architecture that enforces cross-stage security coherence. Integrating dynamic memory protection (Weiet al., 2025), adaptive guardrails (Luoet al., 2025), autonomous prompt injection defenses (Wanget al., 2025c), and system-wide monitoring (Miaoet al., 2025) offers a path toward robust security guarantees for complex LLM-based agent frameworks. Future work should focus on unifying these complementary mechanisms into a coherent operational framework to mitigate temporal, compositional, and memory-oriented threats across the entire agent lifecycle.\n\n## Defense Measures Across the Agent Lifecycle\n\n### Design Principles of Defenses\n\nWe systematize defense measures into a five-layer architecture corresponding to the agent lifecycle stages defined in our threat taxonomy in Figure 6. This layered approach reflects a fundamental security reality: autonomous agents are highly susceptible to cross-stage attack propagation (e.g., a malicious prompt payload corrupting persistent memory, ultimately triggering an unauthorized API call). Consequently, point-defenses deployed at a single interface are fundamentally inadequate.\n\nAs illustrated in Table 1, our proposed defense measures are governed by three core principles:\nFirst, Complete Lifecycle Mediation mandates that every interface capable of mutating agent state or behavior is explicitly guarded.\nSecond, Defense-in-Depth deploys heterogeneous security controls (spanning lexical, semantic, and system-level checks) across the pipeline, ensuring resilience against single-point bypasses.\nThird, Least Privilege with Provenance Tracking ensures components operate with minimal necessary authority, while security-critical context (e.g., the trust tier of an input) is explicitly propagated downstream using metadata tagging or information flow control (IFC).\n\nTogether, these principles establish a robust security invariant: no untrusted input, state mutation, or synthesized plan can affect the agent’s external environment without satisfying the rigorous security predicates of its respective lifecycle stage.\n\n### Initialization-Stage Defenses\n\nInitialization defenses secure the agent’s startup phase, establishing a verifiable root of trust. Because a compromised startup environment invalidates all downstream security assumptions, preventing the ingestion of malicious plugins, poisoned skills, or over-privileged configurations is paramount.\n\nEffective initialization relies on three foundational technologies:\n\nPlugin Vetting via Static and Dynamic Analysis: External modules are subjected to rigorous program analysis. Defenses construct Abstract Syntax Trees (ASTs) and utilize taint analysis to detect unauthorized dynamic code execution, credential harvesting, or anomalous network socket creation.\n\nSkill Verification and Cryptographic Signatures: To thwart skill poisoning, the system enforces strict consistency between a tool’s declared metadata, behavioral embeddings, and executable logic. Verified skills are bound to cryptographically signed Software Bill of Materials (SBOMs) to guarantee provenance.\n\nPolicy-Driven Configuration Validation: Configurations defining RBAC (Role-Based Access Control) bounds, API scopes, and memory limits are strictly validated against deployment policies, rejecting any latent privilege escalation attempts before runtime.\n\nUpon successful validation, the initialization stage provisions a Trusted Execution Manifest. This manifest serves as an immutable security baseline, ideally anchored in a Trusted Execution Environment (TEE), against which all subsequent runtime behaviors are audited.\n\n### Input-Stage Defenses\n\nInput-stage defenses act as a boundary gateway, preventing untrusted external data (e.g., web payloads, parsed documents) from hijacking the agent’s control flow. The primary challenge is mitigating indirect prompt injection, where imperative commands are stealthily embedded within ostensibly descriptive data.\n\nTo enforce strict privilege separation between the agent’s control plane and data plane, modern defenses employ two key technologies:\n\nInstruction Hierarchy Enforcement: Systems enforce structural boundaries by treating developer-defined system prompts as high-privileged instructions and external retrieval data as low-privileged tokens. Techniques such as cryptographic token tagging or specialized attention-masking ensure the LLM prioritizes high-privilege instructions during conflicts.\n\nSemantic Firewalls: Unlike brittle lexical filters, semantic firewalls leverage auxiliary, fine-tuned lightweight models to perform intent classification on incoming data segments. They evaluate discourse roles, flagging content that exhibits directive intent or attempts to invoke internal APIs (e.g., tool_use) when it should purely serve as context.\n\nIdentified threats trigger a graduated response that ranges from targeted sanitization, such as redacting executable payloads, to complete quarantine. This approach preserves data utility while neutralizing vectors that could enable control hijacking.\n\n### Inference-Stage Defenses\n\nInference-stage defenses safeguard the integrity of the agent’s persistent memory and reasoning context. Autonomous agents are highly vulnerable to memory poisoning (adversarial injection of biased facts into vector databases) and context drift (lossy compression eroding critical alignment instructions over long-horizon tasks).\n\nTreating memory as a first-class attack surface requires the following mechanisms:\n\nVector-Space Access Control and Write Validation: Before state updates are committed to the vector database, an alignment filter evaluates the new knowledge for logical contradictions, policy violations, or sleeper instructions. Memory reads/writes are strictly partitioned using multi-tenant isolation principles.\n\nCryptographic State Checkpointing: To bound the impact of poisoning, systems periodically snapshot validated memory states. By utilizing Merkle-tree-based data structures, the agent can cryptographically verify state integrity and execute rapid, deterministic rollbacks to known-good checkpoints upon detecting anomalies.\n\nSemantic Drift Detection: To combat lossy compression, defenses maintain a high-fidelity, frozen representation of the original system prompt. Cross-encoder models periodically measure the semantic distance between the current working context and the original objective, triggering an alert or context-refresh if divergence exceeds a safe threshold.\n\n### Decision-Stage Defenses\n\nDecision-stage defenses verify that a synthesized plan is aligned with the authorized objective before execution. This layer addresses vulnerabilities where an agent, operating on benign inputs, hallucinates or logically deduces an unsafe sequence of actions (objective substitution).\n\nThis stage treats the plan as a measurable artifact, utilizing dual-engine verification:\n\nConstrained Decoding and Formal Verification: At the generation level, constrained decoding (e.g., forcing JSON schema compliance) ensures syntactic safety. At the logical level, symbolic solvers or formal verification engines prove that the proposed action sequence does not violate hard invariants (e.g., “never expose data from directory $X$ to network port $Y$”).\n\nSemantic Trajectory Analysis: Because symbolic rules cannot capture all nuances of intent hijacking, an independent verifier model evaluates the proposed subgoals against the overarching user intent, ensuring the trajectory strictly advances the authorized task without introducing parasitic objectives.\n\nHigh-risk plans are automatically suspended and fed back into the policy engine, enabling continuous reinforcement learning from intercepted safety violations.\n\n### Execution-Stage Defenses\n\nExecution-stage defenses serve as the ultimate enforcement boundary, operating under the assume breach paradigm. Should upstream defenses fail to detect a sophisticated attack, this layer provides robust behavioral containment and isolation at the system level.\n\nKey technical enablers at this stage include:\n\nKernel-Level Sandboxing and Capability Enforcement: Utilizing technologies like eBPF (Extended Berkeley Packet Filter), seccomp, and containerization, the execution engine strictly confines the agent to its authorized capability set. Unauthorized system calls, unauthorized file I/O, or anomalous outbound network traffic are intercepted and denied at the OS kernel level.\n\nRuntime Trace Monitoring: Defenses shift from isolated action inspection to stateful trajectory monitoring. Heuristics analyze execution traces to detect advanced persistent threats, such as living-off-the-land (LotL) techniques, deferred execution loops, or suspicious CPU/memory resource exhaustion patterns.\n\nAtomic Transactions and Containment: Where possible, environmental mutations are executed as atomic transactions within ephemeral, reversible environments. If a post-execution monitor detects damage, the system orchestrates an automated state rollback to minimize the blast radius.\n\nFinally, for irreversible or highly privileged operations, the execution stage seamlessly integrates Human-in-the-Loop (HITL) authorization, presenting the cryptographic provenance and risk assessment of the action to a human reviewer.\n\n## Conclusion and Future Work\n\n### Conclusion\n\nThe transition from passive language models to proactive autonomous agents represents a major advancement in artificial intelligence capabilities, but it also introduces complex multi-stage security vulnerabilities. Existing mitigation strategies remain fragmented and are fundamentally ill-equipped to address compound, cross-stage attacks that arise in long-horizon agent operations. To address this gap, this paper presents a systematic analysis of defense mechanisms across the full operational lifecycle of LLM agents.\n\nWe first formalize a threat taxonomy that characterizes security risks across five operational strata of the agent pipeline. Building on this taxonomy, we analyze how coordinated security controls can be deployed across the lifecycle, including foundational trust guarantees prior to initialization, strict input validation, cognitive state integrity during inference, intent-aware decision verification, and sandboxed execution control. This layered architecture provides redundant protection, ensuring that adversaries cannot compromise the system through a single point of failure. Overall, this work offers practical insights toward robust, lightweight, and native security paradigms for the safe and reliable deployment of future autonomous AI systems.\n\n### Future Research\n\nWhile lifecycle-aware defenses provide a promising foundation for securing autonomous agents, several challenges remain. Addressing these limitations and countering increasingly sophisticated adversarial threats requires further research in several key directions.\n\nFirst, integrating hardware-assisted security primitives offers a promising pathway to reduce computational overhead while strengthening the foundational trust layer. Recent studies show that executing critical model components and memory parameters within Trusted Execution Environments (TEEs), such as TEE–GPU co-execution architectures (Caiet al., 2025) or Arm TrustZone for edge devices (Wanget al., 2025b), can provide strong confidentiality and integrity guarantees. Migrating trust manifests and memory validation mechanisms to these environments could establish a hardware-rooted chain of trust across the agent lifecycle while minimizing latency overhead.\n\nSecond, future defense architectures should explore dynamic and adaptive security policies. Rather than relying on statically configured thresholds for toxicity or context drift, reinforcement learning techniques could dynamically adjust the sensitivity of defense layers based on task complexity and environmental uncertainty. Such adaptive policies may better balance operational autonomy with strict security controls, enabling agents to maintain high task utility while remaining resilient to evolving adversarial strategies.\n",
+  "extracted_at": "2026-04-13T14:46:54.980200"
+}

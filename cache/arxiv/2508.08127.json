@@ -1,0 +1,25 @@
+{
+  "arxiv_id": "2508.08127v1",
+  "title": "BlindGuard: Safeguarding LLM-based Multi-Agent Systems under Unknown Attacks",
+  "authors": [
+    "Rui Miao",
+    "Yixin Liu",
+    "Yili Wang",
+    "Xu Shen",
+    "Yue Tan",
+    "Yiwei Dai",
+    "Shirui Pan",
+    "Xin Wang"
+  ],
+  "abstract": "The security of LLM-based multi-agent systems (MAS) is critically threatened by propagation vulnerability, where malicious agents can distort collective decision-making through inter-agent message interactions. While existing supervised defense methods demonstrate promising performance, they may be impractical in real-world scenarios due to their heavy reliance on labeled malicious agents to train a supervised malicious detection model. To enable practical and generalizable MAS defenses, in this paper, we propose BlindGuard, an unsupervised defense method that learns without requiring any attack-specific labels or prior knowledge of malicious behaviors. To this end, we establish a hierarchical agent encoder to capture individual, neighborhood, and global interaction patterns of each agent, providing a comprehensive understanding for malicious agent detection. Meanwhile, we design a corruption-guided detector that consists of directional noise injection and contrastive learning, allowing effective detection model training solely on normal agent behaviors. Extensive experiments show that BlindGuard effectively detects diverse attack types (i.e., prompt injection, memory poisoning, and tool attack) across MAS with various communication patterns while maintaining superior generalizability compared to supervised baselines. The code is available at: https://github.com/MR9812/BlindGuard.",
+  "categories": [
+    "cs.AI"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2025-08-11T16:04:47+00:00",
+  "updated": "2025-08-11T16:04:47+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2508.08127v1.pdf"
+}

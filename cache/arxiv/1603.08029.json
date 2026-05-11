@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "1603.08029v1",
+  "title": "Resnet in Resnet: Generalizing Residual Architectures",
+  "authors": [
+    "Sasha Targ",
+    "Diogo Almeida",
+    "Kevin Lyman"
+  ],
+  "abstract": "Residual networks (ResNets) have recently achieved state-of-the-art on challenging computer vision tasks. We introduce Resnet in Resnet (RiR): a deep dual-stream architecture that generalizes ResNets and standard CNNs and is easily implemented with no computational overhead. RiR consistently improves performance over ResNets, outperforms architectures with similar amounts of augmentation on CIFAR-10, and establishes a new state-of-the-art on CIFAR-100.",
+  "categories": [
+    "cs.LG",
+    "cs.CV",
+    "cs.NE",
+    "stat.ML"
+  ],
+  "primary_category": "cs.LG",
+  "published": "2016-03-25T20:55:40+00:00",
+  "updated": "2016-03-25T20:55:40+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1603.08029v1.pdf"
+}

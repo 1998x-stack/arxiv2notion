@@ -1,0 +1,36 @@
+{
+  "arxiv_id": "2309.01219v3",
+  "title": "Siren's Song in the AI Ocean: A Survey on Hallucination in Large Language Models",
+  "authors": [
+    "Yue Zhang",
+    "Yafu Li",
+    "Leyang Cui",
+    "Deng Cai",
+    "Lemao Liu",
+    "Tingchen Fu",
+    "Xinting Huang",
+    "Enbo Zhao",
+    "Yu Zhang",
+    "Chen Xu",
+    "Yulong Chen",
+    "Longyue Wang",
+    "Anh Tuan Luu",
+    "Wei Bi",
+    "Freda Shi",
+    "Shuming Shi"
+  ],
+  "abstract": "While large language models (LLMs) have demonstrated remarkable capabilities across a range of downstream tasks, a significant concern revolves around their propensity to exhibit hallucinations: LLMs occasionally generate content that diverges from the user input, contradicts previously generated context, or misaligns with established world knowledge. This phenomenon poses a substantial challenge to the reliability of LLMs in real-world scenarios. In this paper, we survey recent efforts on the detection, explanation, and mitigation of hallucination, with an emphasis on the unique challenges posed by LLMs. We present taxonomies of the LLM hallucination phenomena and evaluation benchmarks, analyze existing approaches aiming at mitigating LLM hallucination, and discuss potential directions for future research.",
+  "categories": [
+    "cs.CL",
+    "cs.AI",
+    "cs.CY",
+    "cs.LG"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2023-09-03T16:56:48+00:00",
+  "updated": "2025-09-14T09:34:46+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "work in progress;",
+  "pdf_url": "https://arxiv.org/pdf/2309.01219v3.pdf"
+}

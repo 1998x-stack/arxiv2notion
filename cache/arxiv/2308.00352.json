@@ -1,0 +1,33 @@
+{
+  "arxiv_id": "2308.00352v7",
+  "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+  "authors": [
+    "Sirui Hong",
+    "Mingchen Zhuge",
+    "Jiaqi Chen",
+    "Xiawu Zheng",
+    "Yuheng Cheng",
+    "Ceyao Zhang",
+    "Jinlin Wang",
+    "Zili Wang",
+    "Steven Ka Shing Yau",
+    "Zijuan Lin",
+    "Liyang Zhou",
+    "Chenyu Ran",
+    "Lingfeng Xiao",
+    "Chenglin Wu",
+    "Jürgen Schmidhuber"
+  ],
+  "abstract": "Remarkable progress has been made on automated problem solving through societies of agents based on large language models (LLMs). Existing LLM-based multi-agent systems can already solve simple dialogue tasks. Solutions to more complex tasks, however, are complicated through logic inconsistencies due to cascading hallucinations caused by naively chaining LLMs. Here we introduce MetaGPT, an innovative meta-programming framework incorporating efficient human workflows into LLM-based multi-agent collaborations. MetaGPT encodes Standardized Operating Procedures (SOPs) into prompt sequences for more streamlined workflows, thus allowing agents with human-like domain expertise to verify intermediate results and reduce errors. MetaGPT utilizes an assembly line paradigm to assign diverse roles to various agents, efficiently breaking down complex tasks into subtasks involving many agents working together. On collaborative software engineering benchmarks, MetaGPT generates more coherent solutions than previous chat-based multi-agent systems. Our project can be found at https://github.com/geekan/MetaGPT",
+  "categories": [
+    "cs.AI",
+    "cs.MA"
+  ],
+  "primary_category": "cs.AI",
+  "published": "2023-08-01T07:49:10+00:00",
+  "updated": "2024-11-01T14:36:52+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/2308.00352v7.pdf"
+}

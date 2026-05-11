@@ -1,0 +1,23 @@
+{
+  "arxiv_id": "1408.2873v2",
+  "title": "First-Pass Large Vocabulary Continuous Speech Recognition using Bi-Directional Recurrent DNNs",
+  "authors": [
+    "Awni Y. Hannun",
+    "Andrew L. Maas",
+    "Daniel Jurafsky",
+    "Andrew Y. Ng"
+  ],
+  "abstract": "We present a method to perform first-pass large vocabulary continuous speech recognition using only a neural network and language model. Deep neural network acoustic models are now commonplace in HMM-based speech recognition systems, but building such systems is a complex, domain-specific task. Recent work demonstrated the feasibility of discarding the HMM sequence modeling framework by directly predicting transcript text from audio. This paper extends this approach in two ways. First, we demonstrate that a straightforward recurrent neural network architecture can achieve a high level of accuracy. Second, we propose and evaluate a modified prefix-search decoding algorithm. This approach to decoding enables first-pass speech recognition with a language model, completely unaided by the cumbersome infrastructure of HMM-based systems. Experiments on the Wall Street Journal corpus demonstrate fairly competitive word error rates, and the importance of bi-directional network recurrence.",
+  "categories": [
+    "cs.CL",
+    "cs.LG",
+    "cs.NE"
+  ],
+  "primary_category": "cs.CL",
+  "published": "2014-08-12T22:40:21+00:00",
+  "updated": "2014-12-08T20:21:52+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": null,
+  "pdf_url": "https://arxiv.org/pdf/1408.2873v2.pdf"
+}

@@ -1,0 +1,25 @@
+{
+  "arxiv_id": "2508.00007v1",
+  "title": "Agent Network Protocol Technical White Paper",
+  "authors": [
+    "Gaowei Chang",
+    "Eidan Lin",
+    "Chengxuan Yuan",
+    "Rizhao Cai",
+    "Binbin Chen",
+    "Xuan Xie",
+    "Yin Zhang"
+  ],
+  "abstract": "With the development of large models and autonomous decision-making AI, agents are rapidly becoming the new entities of the internet, following mobile apps. However, existing internet infrastructure is primarily designed for human interaction, creating data silos, unfriendly interfaces, and high collaboration costs among agents, making it difficult to support the needs for large-scale agent interconnection and collaboration. The internet is undergoing a profound transformation, showing four core trends: agents replacing traditional software, universal agent interconnection, native protocol-based connections, and autonomous agent organization and collaboration. To align with these trends, Agent Network Protocol (ANP) proposes a new generation of communication protocols for the Agentic Web. ANP adheres to AI-native design, maintains compatibility with existing internet protocols, adopts a modular composable architecture, follows minimalist yet extensible principles, and enables rapid deployment based on existing infrastructure. Through a three-layer protocol system--identity and encrypted communication layer, meta-protocol negotiation layer, and application protocol layer--ANP. systematically solves the problems of agent identity authentication, dynamic negotiation, and capability discovery interoperability.",
+  "categories": [
+    "cs.NI",
+    "cs.AI"
+  ],
+  "primary_category": "cs.NI",
+  "published": "2025-07-18T05:04:43+00:00",
+  "updated": "2025-07-18T05:04:43+00:00",
+  "doi": null,
+  "journal_ref": null,
+  "comment": "This white paper is a reformatted version of the open-source community edition previously released by the ANP Open Source Technology Community(https://github.com/agent-network-protocol)",
+  "pdf_url": "https://arxiv.org/pdf/2508.00007v1.pdf"
+}
