@@ -1,493 +1,26 @@
 """
-Notion 块转换模块
-职责：将论文内容转换为丰富的 Notion blocks
-遵循 CleanRL 设计原则：单一职责、显式依赖、易于测试
-
-支持的 Notion 元素：
-- heading_1/2/3: 标题
-- paragraph: 段落（支持富文本）
-- callout: 提示框（摘要、警告等）
-- quote: 引用
-- code: 代码块
-- equation: 数学公式
-- table: 表格
-- bulleted_list_item: 无序列表
-- numbered_list_item: 有序列表
-- divider: 分隔线
-- toggle: 可折叠内容
-- image: 图片
-- bookmark: 链接预览
+Notion 内容转换模块
+职责：将论文内容转换为丰富的 Notion blocks（Academic Premium 布局）
 """
-import re
-import sys
-import traceback
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
 
 from loguru import logger
 
-from models import (
-    PaperData,
-    ArxivMetadata,
-    Ar5ivContent,
-    Section,
-    Figure,
-    Table,
-    Equation,
-    Reference,
-    NotionBlockData,
-)
+from models import PaperData, ArxivMetadata, Section, Reference, ParagraphAnnotation
 from utils import (
     format_exception,
-    clean_text,
     truncate_text,
     format_authors,
     format_date,
     build_arxiv_url,
     get_category_emoji,
 )
-
-
-class NotionBlockBuilder:
-    """
-    Notion Block 构建器
-    
-    提供构建各种 Notion block 的静态方法
-    """
-    
-    # Notion rich_text 最大长度
-    MAX_TEXT_LENGTH = 2000
-    
-    @staticmethod
-    def rich_text(
-        text: str,
-        bold: bool = False,
-        italic: bool = False,
-        strikethrough: bool = False,
-        underline: bool = False,
-        code: bool = False,
-        color: str = "default",
-        link: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """创建富文本对象"""
-        if len(text) > NotionBlockBuilder.MAX_TEXT_LENGTH:
-            text = text[:NotionBlockBuilder.MAX_TEXT_LENGTH - 3] + "..."
-        
-        result = {
-            "type": "text",
-            "text": {"content": text}
-        }
-        
-        if link:
-            result["text"]["link"] = {"url": link}
-        
-        annotations = {}
-        if bold:
-            annotations["bold"] = True
-        if italic:
-            annotations["italic"] = True
-        if strikethrough:
-            annotations["strikethrough"] = True
-        if underline:
-            annotations["underline"] = True
-        if code:
-            annotations["code"] = True
-        if color != "default":
-            annotations["color"] = color
-        
-        if annotations:
-            result["annotations"] = annotations
-        
-        return result
-    
-    @staticmethod
-    def heading(text: str, level: int = 1, color: str = "default") -> Dict[str, Any]:
-        """创建标题 block"""
-        level = max(1, min(3, level))  # Notion 只支持 1-3
-        block_type = f"heading_{level}"
-        
-        return {
-            "object": "block",
-            "type": block_type,
-            block_type: {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
-                "color": color
-            }
-        }
-    
-    @staticmethod
-    def paragraph(
-        text: str,
-        bold: bool = False,
-        italic: bool = False,
-        color: str = "default"
-    ) -> Dict[str, Any]:
-        """创建段落 block"""
-        return {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [NotionBlockBuilder.rich_text(text, bold=bold, italic=italic)],
-                "color": color
-            }
-        }
-    
-    @staticmethod
-    def paragraph_with_rich_text(rich_texts: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """创建带富文本的段落"""
-        return {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": rich_texts
-            }
-        }
-    
-    @staticmethod
-    def callout(
-        text: str,
-        icon: str = "💡",
-        color: str = "gray_background"
-    ) -> Dict[str, Any]:
-        """创建提示框 block"""
-        return {
-            "object": "block",
-            "type": "callout",
-            "callout": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
-                "icon": {"emoji": icon},
-                "color": color
-            }
-        }
-    
-    @staticmethod
-    def quote(text: str, color: str = "default") -> Dict[str, Any]:
-        """创建引用 block"""
-        return {
-            "object": "block",
-            "type": "quote",
-            "quote": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
-                "color": color
-            }
-        }
-    
-    @staticmethod
-    def code(text: str, language: str = "plain text") -> Dict[str, Any]:
-        """创建代码 block"""
-        return {
-            "object": "block",
-            "type": "code",
-            "code": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
-                "language": language
-            }
-        }
-    
-    @staticmethod
-    def equation(latex: str) -> Dict[str, Any]:
-        """创建公式 block"""
-        return {
-            "object": "block",
-            "type": "equation",
-            "equation": {
-                "expression": latex
-            }
-        }
-    
-    @staticmethod
-    def bulleted_list_item(text: str, children: Optional[List[Dict]] = None) -> Dict[str, Any]:
-        """创建无序列表项"""
-        block = {
-            "object": "block",
-            "type": "bulleted_list_item",
-            "bulleted_list_item": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)]
-            }
-        }
-        if children:
-            block["bulleted_list_item"]["children"] = children
-        return block
-    
-    @staticmethod
-    def numbered_list_item(text: str, children: Optional[List[Dict]] = None) -> Dict[str, Any]:
-        """创建有序列表项"""
-        block = {
-            "object": "block",
-            "type": "numbered_list_item",
-            "numbered_list_item": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)]
-            }
-        }
-        if children:
-            block["numbered_list_item"]["children"] = children
-        return block
-    
-    @staticmethod
-    def divider() -> Dict[str, Any]:
-        """创建分隔线"""
-        return {
-            "object": "block",
-            "type": "divider",
-            "divider": {}
-        }
-    
-    @staticmethod
-    def toggle(text: str, children: Optional[List[Dict]] = None) -> Dict[str, Any]:
-        """创建可折叠内容"""
-        block = {
-            "object": "block",
-            "type": "toggle",
-            "toggle": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)]
-            }
-        }
-        if children:
-            block["toggle"]["children"] = children
-        return block
-    
-    @staticmethod
-    def image(url: str, caption: Optional[str] = None) -> Dict[str, Any]:
-        """创建图片 block"""
-        block = {
-            "object": "block",
-            "type": "image",
-            "image": {
-                "type": "external",
-                "external": {"url": url}
-            }
-        }
-        if caption:
-            block["image"]["caption"] = [NotionBlockBuilder.rich_text(caption)]
-        return block
-    
-    @staticmethod
-    def bookmark(url: str, caption: Optional[str] = None) -> Dict[str, Any]:
-        """创建书签 block"""
-        block = {
-            "object": "block",
-            "type": "bookmark",
-            "bookmark": {
-                "url": url
-            }
-        }
-        if caption:
-            block["bookmark"]["caption"] = [NotionBlockBuilder.rich_text(caption)]
-        return block
-    
-    @staticmethod
-    def table(headers: List[str], rows: List[List[str]]) -> Dict[str, Any]:
-        """创建表格 block"""
-        table_width = len(headers) if headers else (len(rows[0]) if rows else 0)
-        
-        # 构建表格行
-        table_rows = []
-        
-        # 表头行
-        if headers:
-            table_rows.append({
-                "type": "table_row",
-                "table_row": {
-                    "cells": [
-                        [NotionBlockBuilder.rich_text(cell)] for cell in headers
-                    ]
-                }
-            })
-        
-        # 数据行
-        for row in rows:
-            # 确保每行有相同的列数
-            padded_row = row + [""] * (table_width - len(row))
-            table_rows.append({
-                "type": "table_row",
-                "table_row": {
-                    "cells": [
-                        [NotionBlockBuilder.rich_text(cell)] for cell in padded_row[:table_width]
-                    ]
-                }
-            })
-        
-        return {
-            "object": "block",
-            "type": "table",
-            "table": {
-                "table_width": table_width,
-                "has_column_header": bool(headers),
-                "has_row_header": False,
-                "children": table_rows
-            }
-        }
-    
-    @staticmethod
-    def table_of_contents() -> Dict[str, Any]:
-        """创建目录 block"""
-        return {
-            "object": "block",
-            "type": "table_of_contents",
-            "table_of_contents": {
-                "color": "default"
-            }
-        }
-
-    @staticmethod
-    def equation_rich_text(latex: str) -> Dict[str, Any]:
-        """Create an inline equation rich_text element (KaTeX rendered inline)."""
-        return {
-            "type": "equation",
-            "equation": {"expression": latex},
-        }
-
-
-# ── LaTeX cleanup for KaTeX ───────────────────────────────────────────────────
-
-# Macros unsupported by KaTeX that have simple replacements
-_LATEX_REPLACEMENTS = [
-    (r"\\bm\{", r"\\boldsymbol{"),          # \bm → \boldsymbol
-    (r"\\mbox\{([^}]*)\}", r"\\text{\1}"),   # \mbox → \text
-    (r"\\hbox\{([^}]*)\}", r"\\text{\1}"),   # \hbox → \text
-    (r"\\rm\b", r"\\mathrm"),                # \rm → \mathrm
-    (r"\\bf\b", r"\\mathbf"),                # \bf → \mathbf
-]
-
-_LATEX_STRIP_PATTERNS = [
-    r"\\label\{[^}]*\}",       # \label{...} — KaTeX ignores labels
-    r"\\tag\*?\{[^}]*\}",      # \tag{1} — strip equation numbers
-    r"\\notag\b",              # \notag
-    r"\\nonumber\b",           # \nonumber
-]
-
-
-def _clean_latex(latex: str) -> str:
-    """
-    Clean LaTeX extracted from ar5iv for KaTeX rendering in Notion.
-
-    Strips labels/tags and replaces macros KaTeX doesn't support.
-    """
-    for pat in _LATEX_STRIP_PATTERNS:
-        latex = re.sub(pat, "", latex)
-    for pat, repl in _LATEX_REPLACEMENTS:
-        latex = re.sub(pat, repl, latex)
-    return latex.strip()
-
-
-# ── Paragraph → Notion blocks ─────────────────────────────────────────────────
-
-# Matches $$...$$ (display/block equations) — non-greedy, allows newlines
-_BLOCK_MATH_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
-# Matches $...$ (inline equations) — does NOT span newlines, avoids false positives
-_INLINE_MATH_RE = re.compile(r"\$([^$\n]+?)\$")
-
-
-def _para_to_notion_blocks(
-    para_text: str,
-    builder: "NotionBlockBuilder",
-    max_text_length: int = 2000,
-) -> List[Dict[str, Any]]:
-    """
-    Convert a paragraph string (possibly containing $...$ and $$...$$) to
-    a list of Notion blocks:
-    - $$latex$$ → standalone equation block
-    - $latex$ within text → paragraph block with inline equation rich_text
-    - plain text → paragraph block(s) split at Notion's 2000-char limit
-    """
-    blocks: List[Dict[str, Any]] = []
-
-    # Split on $$...$$ first to separate display equations from prose
-    display_parts = _BLOCK_MATH_RE.split(para_text)
-
-    for i, part in enumerate(display_parts):
-        if i % 2 == 1:
-            # Odd indices = content captured by the $$...$$ group
-            latex = _clean_latex(part.strip())
-            if latex:
-                blocks.append({
-                    "object": "block",
-                    "type": "equation",
-                    "equation": {"expression": latex},
-                })
-        else:
-            # Even indices = prose (may contain $...$)
-            if not part.strip():
-                continue
-            rich_texts = _text_to_rich_texts(part, builder, max_text_length)
-            if rich_texts:
-                blocks.append({
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {"rich_text": rich_texts},
-                })
-
-    return blocks
-
-
-def _text_to_rich_texts(
-    text: str,
-    builder: "NotionBlockBuilder",
-    max_text_length: int = 2000,
-) -> List[Dict[str, Any]]:
-    """
-    Convert plain text (possibly containing $...$ inline math) to a list of
-    Notion rich_text objects: text runs and inline equation elements interleaved.
-    """
-    rich_texts: List[Dict[str, Any]] = []
-
-    # Split on $...$ to find inline equations
-    inline_parts = _INLINE_MATH_RE.split(text)
-
-    for j, chunk in enumerate(inline_parts):
-        if j % 2 == 1:
-            # Odd = inline equation latex
-            latex = _clean_latex(chunk.strip())
-            if latex:
-                rich_texts.append(builder.equation_rich_text(latex))
-        else:
-            # Even = plain text — split into ≤ max_text_length chunks
-            if not chunk:
-                continue
-            remaining = chunk
-            while remaining:
-                if len(remaining) <= max_text_length:
-                    rich_texts.append(builder.rich_text(remaining))
-                    break
-                # Try to break at a word boundary
-                cut = remaining.rfind(" ", 0, max_text_length)
-                cut = cut if cut > 0 else max_text_length
-                rich_texts.append(builder.rich_text(remaining[:cut]))
-                remaining = remaining[cut:].lstrip()
-
-    return rich_texts
-
-
-# ── Section heading emoji mapping ─────────────────────────────────────────────
-
-_SECTION_EMOJIS = {
-    "introduction": "📌",
-    "background": "📚",
-    "related": "📚",
-    "method": "🔬",
-    "model": "🔬",
-    "architecture": "🔬",
-    "approach": "🔬",
-    "framework": "🔬",
-    "experiment": "📊",
-    "result": "📊",
-    "evaluation": "📊",
-    "analysis": "📊",
-    "ablation": "📊",
-    "conclusion": "💡",
-    "discussion": "💡",
-    "limitation": "💡",
-    "future": "💡",
-}
-
-
-def _section_emoji(title: str) -> str:
-    """Return an emoji prefix for a section title based on keywords."""
-    lower = title.lower()
-    for keyword, emoji in _SECTION_EMOJIS.items():
-        if keyword in lower:
-            return emoji
-    return "📄"
+from notion.blocks import (
+    NotionBlockBuilder,
+    _clean_latex,
+    _para_to_notion_blocks,
+    _section_emoji,
+)
 
 
 class NotionConverter:
@@ -536,18 +69,22 @@ class NotionConverter:
         blocks = []
         try:
             blocks.extend(self._create_header(paper))
-            blocks.extend(self._create_abstract(paper, tldr=tldr))
 
-            blocks.append(self.builder.divider())
-            blocks.append(self.builder.heading("📑 Contents", level=2))
-            blocks.append(self.builder.table_of_contents())
-            blocks.append(self.builder.divider())
+            if self._content_is_effectively_empty(paper.content):
+                blocks.extend(self._create_ar5iv_fallback(paper))
+            else:
+                blocks.extend(self._create_abstract(paper, tldr=tldr))
 
-            if paper.content and paper.content.sections:
-                blocks.extend(self._convert_sections(paper.content.sections, annotations))
+                blocks.append(self.builder.divider())
+                blocks.append(self.builder.heading("📑 Contents", level=2))
+                blocks.append(self.builder.table_of_contents())
+                blocks.append(self.builder.divider())
 
-            if paper.content and paper.content.references:
-                blocks.extend(self._create_references_section(paper.content.references))
+                if paper.content.sections:
+                    blocks.extend(self._convert_sections(paper.content.sections, annotations))
+
+                if paper.content.references:
+                    blocks.extend(self._create_references_section(paper.content.references))
 
             logger.debug(f"Converted paper to {len(blocks)} blocks")
         except Exception:
@@ -588,6 +125,14 @@ class NotionConverter:
                     f"👥 Authors: {format_authors(paper.content.authors)}",
                     icon="📄",
                     color="blue_background",
+                )
+            )
+        else:
+            blocks.append(
+                self.builder.callout(
+                    f"arXiv: {paper.arxiv_id}\nℹ️ 元数据和完整内容均不可用",
+                    icon="📄",
+                    color="gray_background",
                 )
             )
 
@@ -639,6 +184,45 @@ class NotionConverter:
 
         return blocks
 
+    # ── ar5iv Fallback ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _content_is_effectively_empty(content) -> bool:
+        """Treat content as empty when it has no sections and no abstract."""
+        if content is None:
+            return True
+        has_sections = bool(content.sections)
+        has_abstract = bool(content.abstract and content.abstract.strip())
+        return not has_sections and not has_abstract
+
+    def _create_ar5iv_fallback(self, paper: "PaperData") -> List[Dict[str, Any]]:
+        """Fallback layout when ar5iv content extraction fails or returns empty."""
+        blocks = []
+
+        if paper.content is None:
+            reason = "ar5iv 请求失败（网络错误、超时或页面不存在）"
+        else:
+            reason = "ar5iv 页面可访问，但无法解析出有效的章节和摘要内容"
+
+        blocks.append(
+            self.builder.callout(
+                f"⚠️ 无法提取完整内容：{reason}。\n下方可直接浏览 arXiv PDF，无需下载。",
+                icon="⚠️",
+                color="yellow_background",
+            )
+        )
+
+        pdf_url = build_arxiv_url(paper.arxiv_id, "pdf")
+        blocks.append(self.builder.embed(pdf_url))
+        blocks.append(self.builder.bookmark(pdf_url, "📄 在 arXiv 查看 PDF"))
+
+        if paper.metadata and paper.metadata.abstract:
+            blocks.append(self.builder.divider())
+            blocks.append(self.builder.heading("📝 Abstract", level=2))
+            blocks.append(self.builder.quote(paper.metadata.abstract))
+
+        return blocks
+
     # ── Sections ──────────────────────────────────────────────────────────────
 
     def _convert_sections(
@@ -670,11 +254,9 @@ class NotionConverter:
         level = min(section.level, 3)
         blocks.append(self.builder.heading(f"{emoji} {section.title}", level=level))
 
-        # Build annotation lookup: (section_title, para_idx) → annotation
         ann_map = {(a.section_title, a.para_idx): a for a in annotations}
 
         if section.ordered_content:
-            # Render content in document order (paragraphs, figures, tables, equations interleaved)
             para_idx = 0
             for item in section.ordered_content:
                 itype = item["type"]
@@ -683,7 +265,6 @@ class NotionConverter:
                     para_text = item["data"]
                     para_blocks = _para_to_notion_blocks(para_text, self.builder, self.max_text_length)
                     blocks.extend(para_blocks)
-                    # Add AI reading notes toggle
                     ann = ann_map.get((section.title, para_idx))
                     if ann and ann.plain_explanation and ann.plain_explanation not in (
                         "（段落过短，跳过注释）", "（注释生成失败）"
@@ -712,7 +293,6 @@ class NotionConverter:
                         blocks.append(self.builder.equation(latex))
 
         else:
-            # Fallback: old approach for cached content without ordered_content
             for idx, para in enumerate(section.paragraphs):
                 para_blocks = _para_to_notion_blocks(para, self.builder, self.max_text_length)
                 blocks.extend(para_blocks)
@@ -759,26 +339,6 @@ class NotionConverter:
 
         return self.builder.toggle("🤖 AI 阅读笔记", children=inner_blocks)
 
-    # ── Figures ───────────────────────────────────────────────────────────────
-
-    def _create_figures_section(self, figures: List["Figure"]) -> List[Dict[str, Any]]:
-        blocks = [self.builder.divider(), self.builder.heading("🖼️ Figures", level=2)]
-        for i, fig in enumerate(figures[:20]):
-            if fig.src and fig.src.startswith("http"):
-                blocks.append(self.builder.image(fig.src, fig.caption or f"Figure {i + 1}"))
-        return blocks
-
-    # ── Tables ────────────────────────────────────────────────────────────────
-
-    def _create_tables_section(self, tables: List["Table"]) -> List[Dict[str, Any]]:
-        blocks = [self.builder.divider(), self.builder.heading("📊 Tables", level=2)]
-        for tbl in tables[:10]:
-            if tbl.caption:
-                blocks.append(self.builder.paragraph(tbl.caption, bold=True))
-            if tbl.headers or tbl.rows:
-                blocks.append(self.builder.table(tbl.headers, tbl.rows[:30]))
-        return blocks
-
     # ── References ────────────────────────────────────────────────────────────
 
     def _create_references_section(self, references: List["Reference"]) -> List[Dict[str, Any]]:
@@ -818,6 +378,7 @@ class NotionConverter:
     def _format_arxiv_reference(self, ref: "Reference") -> Dict[str, Any]:
         """Format a single arXiv reference as a paragraph with rich text."""
         from process.reference_resolver import ReferenceExtractor
+
         extractor = ReferenceExtractor()
         ref = extractor.extract_info(ref)
 
@@ -889,24 +450,3 @@ class NotionConverter:
                 )
 
         return blocks
-
-    # ── Text splitting ────────────────────────────────────────────────────────
-
-    def _split_text(self, text: str) -> List[str]:
-        if len(text) <= self.max_text_length:
-            return [text]
-        chunks, remaining = [], text
-        while remaining:
-            if len(remaining) <= self.max_text_length:
-                chunks.append(remaining)
-                break
-            chunk = remaining[: self.max_text_length]
-            last_break = max(
-                chunk.rfind(". "), chunk.rfind("。"),
-                chunk.rfind("! "), chunk.rfind("? ")
-            )
-            if last_break > self.max_text_length * 0.5:
-                chunk = chunk[: last_break + 1]
-            chunks.append(chunk.strip())
-            remaining = remaining[len(chunk):].strip()
-        return chunks

@@ -1,6 +1,6 @@
 """Tests for NotionConverter Academic Premium layout."""
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict
 
 import pytest
 

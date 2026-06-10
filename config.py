@@ -5,7 +5,7 @@
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional
 
 from dotenv import load_dotenv
 

@@ -5,20 +5,17 @@
 """
 import asyncio
 import re
-import sys
-import traceback
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict
 
 from loguru import logger
 
 from config import ReferenceConfig
-from models import Reference, ArxivMetadata
-from fetch.arxiv_api import ArxivApiClient
+from models import Reference
+from fetch import ArxivApiClient
 from utils import (
     extract_arxiv_ids,
     calculate_similarity,
     format_exception,
-    clean_text,
 )
 
 

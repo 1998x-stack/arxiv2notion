@@ -4,9 +4,7 @@ Notion 页面创建模块
 遵循 CleanRL 设计原则：单一职责、显式依赖、易于测试
 """
 import asyncio
-import sys
 import time
-import traceback
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable
 
@@ -22,7 +20,7 @@ from models import (
     ProcessingStats,
     ArxivMetadata,
 )
-from notion.converter import NotionConverter
+from notion import NotionConverter
 from utils import format_exception, get_category_emoji, truncate_text
 
 

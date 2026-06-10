@@ -1,6 +1,5 @@
 """Unit tests for QwenAnnotator — all Qwen API calls are mocked."""
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

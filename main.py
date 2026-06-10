@@ -13,23 +13,18 @@ import sys
 import asyncio
 import argparse
 from pathlib import Path
-from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Dict
 
 from dotenv import load_dotenv
 from loguru import logger
-from tqdm import tqdm
 
-from config import AppConfig, NotionConfig, CacheConfig, ReferenceConfig
-from models import PaperData, PaperStatus, Reference
-from fetch.arxiv_api import ArxivApiClient
-from fetch.ar5iv_extractor import Ar5ivExtractor
-from process.reference_resolver import ReferenceResolver
-from notion.converter import NotionConverter
-from notion.creator import NotionCreator
+from config import AppConfig
+from models import PaperData, PaperStatus
+from fetch import ArxivApiClient, Ar5ivExtractor
+from process import ReferenceResolver, QwenAnnotator
+from notion import NotionConverter, NotionCreator
+from storage import FileManager
 from utils import setup_logging, normalize_arxiv_id, format_exception
-from storage.file_manager import FileManager
-from process.qwen_annotator import QwenAnnotator
 
 
 def _detect_category(primary_category: str) -> str:

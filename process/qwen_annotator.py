@@ -14,7 +14,7 @@ from loguru import logger
 from tqdm.asyncio import tqdm as async_tqdm
 
 from config import QwenConfig
-from storage.file_manager import FileManager
+from storage import FileManager
 from models import Ar5ivContent, ParagraphAnnotation
 
 

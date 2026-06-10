@@ -1,9 +1,5 @@
 """Tests for the 5 confirmed bug fixes."""
-import sys
-import traceback
 from pathlib import Path
-
-import pytest
 
 
 class TestFormatException:
@@ -48,7 +44,6 @@ class TestClientTimeout:
     def test_fetch_page_uses_client_timeout_object(self):
         """_fetch_page must pass a ClientTimeout object, not a raw int."""
         import inspect
-        import aiohttp
         from fetch.ar5iv_extractor import Ar5ivExtractor
         source = inspect.getsource(Ar5ivExtractor._fetch_page)
         assert "ClientTimeout" in source, "_fetch_page must use aiohttp.ClientTimeout"

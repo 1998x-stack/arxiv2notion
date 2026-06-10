@@ -5,10 +5,8 @@ ar5iv 内容提取模块
 """
 import asyncio
 import re
-import sys
-import traceback
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 
 import aiohttp
 from bs4 import BeautifulSoup, Tag

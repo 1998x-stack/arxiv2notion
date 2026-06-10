@@ -5,10 +5,8 @@ arXiv API 交互模块
 """
 import asyncio
 import re
-import sys
-import traceback
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from xml.etree import ElementTree as ET
 
 import aiohttp
@@ -201,7 +199,7 @@ class ArxivApiClient:
                 if elem is not None and elem.text:
                     try:
                         return datetime.fromisoformat(elem.text.replace('Z', '+00:00'))
-                    except:
+                    except Exception:
                         pass
                 return datetime.now()
             
