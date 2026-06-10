@@ -38,6 +38,7 @@
 - **Full paper extraction** — fetches metadata from the arXiv API and full structured content (sections, figures, tables, equations, references) from ar5iv (the HTML version of arXiv papers)
 - **AI reading notes** — annotates every substantive paragraph in Chinese using Qwen3 LLM via DashScope, embedded as collapsible toggles in Notion
 - **Rich Notion layout** — creates pages with an Academic Premium structure: blue info callout, table of contents, quote-style abstract, section headings, and reference sub-pages
+- **Resilient fallback** — when ar5iv content extraction fails, automatically creates a clean page with an embedded arXiv PDF viewer and metadata abstract so nothing is lost
 - **Reference sub-pages** — automatically resolves arXiv IDs from the reference list and creates linked child pages with metadata and abstracts
 - **Local file cache** — saves all content to `papers/{category}/{arxiv_id}/` and caches HTTP responses; re-importing a paper reuses the cache and skips redundant LLM calls
 - **60 curated examples** — ready-to-import paper lists covering deep learning, reinforcement learning, and AI agents
@@ -170,7 +171,7 @@ arxiv2notion/
 ├── main.py                  # Entry point; Ar5ivToNotion orchestrator
 ├── config.py                # Config dataclasses (NotionConfig, QwenConfig, ...)
 ├── models.py                # Data models (PaperData, ParagraphAnnotation, ...)
-├── utils.py                 # Logging setup, ID normalisation helpers
+├── utils.py                 # Logging setup, ID normalisation, URL builders
 ├── fetch/
 │   ├── arxiv_api.py         # arXiv API client (metadata, batch queries)
 │   └── ar5iv_extractor.py   # ar5iv HTML extractor (sections, figures, tables)
@@ -180,6 +181,7 @@ arxiv2notion/
 ├── storage/
 │   └── file_manager.py        # papers/ tree and logs/ JSONL writer
 ├── notion/
+│   ├── blocks.py              # NotionBlockBuilder + LaTeX/paragraph helpers
 │   ├── converter.py           # Paper content → Notion block trees
 │   └── creator.py             # Notion API page creation (batched)
 ├── examples/
