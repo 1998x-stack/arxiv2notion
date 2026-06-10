@@ -1,9 +1,26 @@
 .env
 .env.local
-__pycache__
-*/__pycache__
-.claude/
-.pytest_cache
-.ruff_cachecache/
+__pycache__/
 *.pyc
+*.pyo
 .DS_Store
+
+# Cache & generated
+cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local output
+papers/
+logs/
+*.log
+
+# IDE / tools
+.claude/
+docs/superpowers/
+
+# Packaging
+*.egg-info/
+dist/
+build/
