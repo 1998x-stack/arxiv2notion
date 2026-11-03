@@ -227,8 +227,8 @@ read-only and cannot write to Notion.
 ### Durable sync (requires a configured Notion integration)
 
 ```bash
-NOTION_SYNC_ENABLED=true
-IMPORT_STATE_DB=./data/imports.sqlite3
+export NOTION_SYNC_ENABLED=true
+export IMPORT_STATE_DB=./data/imports.sqlite3
 python main.py 1706.03762
 python verify_notion.py --remote
 ```
