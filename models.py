@@ -318,6 +318,7 @@ class ParagraphAnnotation:
     plain_explanation: str  # Chinese plain-language summary
     key_points: List[str]   # 2-3 Chinese bullet points
     cached: bool = False    # True if loaded from disk, not generated via API
+    node_id: Optional[str] = None  # M01: canonical paragraph identity
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -327,6 +328,7 @@ class ParagraphAnnotation:
             "plain_explanation": self.plain_explanation,
             "key_points": self.key_points,
             "cached": self.cached,
+            "node_id": self.node_id,
         }
 
     @classmethod
@@ -338,4 +340,5 @@ class ParagraphAnnotation:
             plain_explanation=d["plain_explanation"],
             key_points=d["key_points"],
             cached=d.get("cached", True),
+            node_id=d.get("node_id"),
         )

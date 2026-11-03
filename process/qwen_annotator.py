@@ -3,6 +3,8 @@ Qwen paragraph annotation module.
 Responsibility: Call Qwen via DashScope to generate Chinese reading notes for each paragraph.
 """
 import asyncio
+import hashlib
+import json
 import re
 import time
 from typing import TYPE_CHECKING, List, Tuple
@@ -15,7 +17,8 @@ from tqdm.asyncio import tqdm as async_tqdm
 
 from config import QwenConfig
 from storage import FileManager
-from models import Ar5ivContent, ParagraphAnnotation
+from models import Ar5ivContent, PaperData, ParagraphAnnotation
+from domain.paper_document import build_paper_document, iter_paragraph_refs
 
 
 SYSTEM_PROMPT = (
@@ -56,6 +59,27 @@ class QwenAnnotator:
         self.config = config
         self.fm = file_manager
         self._client = None  # lazy init
+
+    def cache_fingerprint(self, content: Ar5ivContent, arxiv_id: str = "") -> str:
+        """Invalidate annotations on source, model, prompt or config changes."""
+        doc = build_paper_document(PaperData(
+            arxiv_id=arxiv_id or content.paper_id, content=content,
+        ))
+        material = {
+            "schema_version": 1,
+            "content_hash": doc.content_hash,
+            "model": self.config.model,
+            "base_url": self.config.base_url,
+            "system_prompt": SYSTEM_PROMPT,
+            "user_template": USER_TEMPLATE,
+            "min_para_length": self.config.min_para_length,
+            "max_para_length": self.config.max_para_length,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+        return hashlib.sha256(
+            json.dumps(material, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
 
     def _get_client(self):
         """Lazy-initialize the OpenAI client (DashScope-compatible)."""
@@ -120,6 +144,7 @@ class QwenAnnotator:
     async def annotate_paragraph(
         self, text: str, section_title: str, para_idx: int,
         paper_title: str = "", paper_abstract: str = "",
+        node_id: str | None = None,
     ) -> ParagraphAnnotation:
         """
         Annotate a single paragraph. Returns a placeholder annotation if the
@@ -135,6 +160,7 @@ class QwenAnnotator:
                 para_text=para_text_preview,
                 plain_explanation="（段落过短，跳过注释）",
                 key_points=[],
+                node_id=node_id,
             )
 
         # Truncate long input
@@ -175,6 +201,7 @@ class QwenAnnotator:
                 para_text=para_text_preview,
                 plain_explanation=explanation,
                 key_points=key_points,
+                node_id=node_id,
             )
 
         except Exception as e:
@@ -185,6 +212,7 @@ class QwenAnnotator:
                 para_text=para_text_preview,
                 plain_explanation="（注释生成失败）",
                 key_points=[],
+                node_id=node_id,
             )
 
     async def annotate_paper(
@@ -199,26 +227,30 @@ class QwenAnnotator:
         Cache-first: if annotations exist on disk, loads and returns immediately.
         Otherwise annotates concurrently (up to 3 at a time) with a tqdm bar.
         """
-        # Cache hit — skip all API calls
-        if self.fm.has_annotations(arxiv_id, category):
-            logger.info(f"Loading cached annotations for {arxiv_id}")
-            return self.fm.load_annotations(arxiv_id, category)
+        fingerprint = self.cache_fingerprint(content, arxiv_id)
+        if self.fm.has_annotations(arxiv_id, category, fingerprint=fingerprint):
+            cached = self.fm.load_annotations(arxiv_id, category)
+            logger.info(f"Loading validated annotation cache for {arxiv_id}")
+            return cached
 
         paper_title = content.title or arxiv_id
         paper_abstract = content.abstract or ""
 
         logger.info(f"Annotating {arxiv_id} with Qwen ({self.config.model})...")
 
-        # Collect all annotation tasks: (section_title, para_idx, text)
+        # Every task references a canonical node ID; duplicate section names
+        # cannot alias one another.
         tasks: List[tuple] = []
+        canonical = build_paper_document(PaperData(arxiv_id=arxiv_id, content=content))
 
         # TL;DR from abstract
         if paper_abstract and len(paper_abstract) >= self.config.min_para_length:
-            tasks.append(("__abstract__", -1, paper_abstract))
+            abstract_node = next(n for n in canonical.nodes if n.kind == "abstract")
+            tasks.append(("__abstract__", -1, paper_abstract, abstract_node.node_id))
 
-        # Per-section, per-paragraph
-        for section in content.sections:
-            self._collect_tasks(section, tasks)
+        # Per-section, per-paragraph, preserving canonical identities.
+        for ref in iter_paragraph_refs(content):
+            tasks.append((ref.section.title, ref.para_idx, ref.text, ref.node_id))
 
         if not tasks:
             logger.info(f"No paragraphs to annotate for {arxiv_id}")
@@ -228,7 +260,8 @@ class QwenAnnotator:
         semaphore = asyncio.Semaphore(3)
         annotations: List[ParagraphAnnotation] = []
 
-        async def _bounded_annotate(section_title: str, para_idx: int, text: str) -> ParagraphAnnotation:
+        async def _bounded_annotate(section_title: str, para_idx: int, text: str,
+                                    node_id: str) -> ParagraphAnnotation:
             async with semaphore:
                 return await self.annotate_paragraph(
                     text=text,
@@ -236,18 +269,23 @@ class QwenAnnotator:
                     para_idx=para_idx,
                     paper_title=paper_title,
                     paper_abstract=paper_abstract,
+                    node_id=node_id,
                 )
 
         desc = f"Annotating {arxiv_id}"
         results = await async_tqdm.gather(
-            *[_bounded_annotate(s, i, t) for s, i, t in tasks],
+            *[_bounded_annotate(s, i, t, node) for s, i, t, node in tasks],
             desc=desc,
             total=len(tasks),
         )
         annotations = list(results)
 
-        # Save to disk
-        self.fm.save_annotations(arxiv_id, category, annotations)
+        # An API failure is not a successful cache entry. Retry on next run.
+        if any(a.plain_explanation == "（注释生成失败）" for a in annotations):
+            logger.warning("Incomplete LLM annotation: cache not marked valid")
+        else:
+            self.fm.save_annotations(arxiv_id, category, annotations,
+                                     fingerprint=fingerprint)
         logger.info(f"Annotated {len(annotations)} paragraphs for {arxiv_id}")
         return annotations
 

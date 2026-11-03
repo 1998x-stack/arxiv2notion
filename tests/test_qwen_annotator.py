@@ -87,13 +87,17 @@ class TestQwenAnnotatorAPI:
 
         fm = FileManager(base_dir=tmp_path)
         # Pre-populate cache
-        fm.save_annotations("1706.03762", "deep_learning", [sample_annotation])
-
-        annotator = QwenAnnotator(config=qwen_config, file_manager=fm)
+        # Version-aware cache must include a manifest. Legacy unversioned
+        # files are deliberately invalidated.
         content = Ar5ivContent(
             paper_id="1706.03762",
             title="Test",
             sections=[Section(title="Introduction", level=2, paragraphs=["Some text."])],
+        )
+        annotator = QwenAnnotator(config=qwen_config, file_manager=fm)
+        fm.save_annotations(
+            "1706.03762", "deep_learning", [sample_annotation],
+            fingerprint=annotator.cache_fingerprint(content, "1706.03762"),
         )
 
         with patch.object(annotator, "annotate_paragraph") as mock_para:

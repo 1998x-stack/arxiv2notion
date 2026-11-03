@@ -3,6 +3,7 @@ File system manager.
 Responsibility: All paper content I/O and structured JSONL logging.
 """
 import json
+import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
@@ -97,19 +98,55 @@ class FileManager:
     def _annotation_path(self, arxiv_id: str, category: str) -> Path:
         return self.get_paper_dir(arxiv_id, category) / "llm_annotations.jsonl"
 
-    def has_annotations(self, arxiv_id: str, category: str) -> bool:
-        """Return True if annotations file exists and is non-empty."""
+    def has_annotations(
+        self, arxiv_id: str, category: str, fingerprint: str | None = None
+    ) -> bool:
+        """Verify cache identity AND bytes when a fingerprint is requested."""
         p = self._annotation_path(arxiv_id, category)
-        return p.exists() and p.stat().st_size > 0
+        if not p.exists() or p.stat().st_size == 0:
+            return False
+        if fingerprint is None:  # Backwards-compatible low-level file check.
+            return True
+        manifest_path = p.with_name("llm_annotations.manifest.json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            body = p.read_bytes()
+            return (
+                manifest.get("schema_version") == 1
+                and manifest.get("fingerprint") == fingerprint
+                and manifest.get("sha256") == hashlib.sha256(body).hexdigest()
+                and manifest.get("count") == len(body.splitlines())
+            )
+        except (OSError, ValueError, TypeError):
+            return False
 
     def save_annotations(
-        self, arxiv_id: str, category: str, annotations: List[ParagraphAnnotation]
+        self, arxiv_id: str, category: str, annotations: List[ParagraphAnnotation],
+        fingerprint: str | None = None,
     ) -> None:
-        """Write annotations as JSONL (one dict per line)."""
+        """Atomically replace JSONL then publish a matching version manifest."""
         path = self._annotation_path(arxiv_id, category)
-        with path.open("w", encoding="utf-8") as f:
-            for ann in annotations:
-                f.write(json.dumps(ann.to_dict(), ensure_ascii=False) + "\n")
+        manifest = path.with_name("llm_annotations.manifest.json")
+        # Invalidate stale manifests BEFORE replacing the data. An interrupted
+        # update must never make old cache metadata validate new data.
+        manifest.unlink(missing_ok=True)
+        body = "".join(json.dumps(a.to_dict(), ensure_ascii=False) + "\n"
+                       for a in annotations)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(body, encoding="utf-8")
+        tmp.replace(path)
+        if fingerprint:
+            meta = {
+                "schema_version": 1,
+                "fingerprint": fingerprint,
+                "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                "count": len(annotations),
+            }
+            tmp_manifest = manifest.with_name(manifest.name + ".tmp")
+            tmp_manifest.write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            tmp_manifest.replace(manifest)
         logger.debug(f"Saved {len(annotations)} annotations: {path}")
 
     def load_annotations(self, arxiv_id: str, category: str) -> List[ParagraphAnnotation]:
