@@ -233,8 +233,8 @@ class Ar5ivExtractor:
         
         title = clean_text(title_elem.get_text())
         
-        # 跳过参考文献和附录标题
-        if re.match(r"^(references|bibliography)\\b", title, re.I):
+        # Bibliography is parsed separately; keep appendices in the section tree.
+        if re.match(r"^(references|bibliography)\b", title, re.I):
             return None
         
         # Collect content in document order by iterating direct children
