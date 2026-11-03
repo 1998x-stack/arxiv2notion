@@ -27,6 +27,7 @@ from notion import NotionConverter, NotionCreator
 from storage import FileManager
 from storage.import_journal import ImportJournal
 from research.catalog import PaperCatalog
+from research.evidence import derive_candidates, save_candidates
 from utils import setup_logging, normalize_arxiv_id, is_valid_arxiv_id, format_exception
 
 
@@ -154,6 +155,14 @@ class Ar5ivToNotion:
                 _do_annotation(), _do_resolve_refs()
             )
             paper.resolved_references = resolved_refs
+            # Persist source-bound reading candidates; NEVER auto-approve LLM conclusions.
+            claim_candidates = derive_candidates(
+                document.to_dict(), [annotation.to_dict() for annotation in annotations],
+            )
+            save_candidates(
+                self.file_manager.get_paper_dir(arxiv_id, category) / "claim_candidates.json",
+                claim_candidates,
+            )
             # Index source evidence independently of Notion write success.
             resolved_payload = (
                 [r.to_dict() for r in resolved_refs]
