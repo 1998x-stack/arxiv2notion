@@ -79,6 +79,7 @@ class PaperDocument:
     quality: ParseQuality
     content_hash: str
     source: str
+    title: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,6 +93,7 @@ class PaperDocument:
             "quality": self.quality.to_dict(),
             "content_hash": self.content_hash,
             "source": self.source,
+            "title": self.title,
         }
 
 
@@ -230,6 +232,7 @@ def build_paper_document(paper: PaperData) -> PaperDocument:
     # Exclude timestamps, transient status and positional ordinals from content identity.
     hash_material = {
         "schema": SCHEMA_VERSION, "arxiv_id": paper.arxiv_id,
+        "title": paper.title,
         "metadata": metadata,
         "nodes": [
             [n.node_id, n.kind, n.text, n.payload, n.source_anchor]
@@ -240,7 +243,7 @@ def build_paper_document(paper: PaperData) -> PaperDocument:
     return PaperDocument(
         SCHEMA_VERSION, paper.arxiv_id, base_id, revision, metadata,
         tuple(nodes), references, quality, _digest(hash_material),
-        "ar5iv" if paper.content else "arxiv_metadata",
+        "ar5iv" if paper.content else "arxiv_metadata", paper.title,
     )
 
 
