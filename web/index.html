@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>arxiv2notion · Research Workspace</title>
+<link rel="stylesheet" href="/style.css">
+<script defer src="/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+ <div><span class="eyebrow">LOCAL RESEARCH WORKSPACE</span>
+ <h1>arxiv2notion</h1><p>Explore papers, citations, and source-bound AI notes.</p></div>
+ <span id="status" role="status" aria-live="polite">Loading catalog…</span>
+</header>
+<main class="layout">
+ <aside class="sidebar" aria-label="Paper navigation">
+  <form id="search-form" role="search">
+   <label for="query">Search your library</label>
+   <div class="searchbox"><input id="query" type="search" maxlength="250" placeholder="Title, abstract, or arXiv ID" autocomplete="off"><button type="submit">Search</button></div>
+  </form>
+  <p class="hint">Search uses the offline SQLite catalog. No data is sent to a cloud service.</p>
+  <h2>Paper results <span id="count"></span></h2>
+  <ol id="results" class="result-list" aria-label="Search results"></ol>
+ </aside>
+ <section class="document" id="detail" aria-label="Paper detail" tabindex="-1">
+  <div class="empty"><h2>Choose a paper</h2>
+   <p>Browse the current document structure, its citation graph and evidence review status.</p></div>
+ </section>
+</main>
+<footer>Read-only browser · Human review decisions are recorded through the CLI · <a href="https://arxiv.org/" rel="noreferrer">arXiv</a></footer>
+</body>
+</html>
