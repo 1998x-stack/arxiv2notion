@@ -239,6 +239,19 @@ class DurableNotionWriter:
                         "no marked page was found; do not create another"
                     )
             if not page_id:
+                # M02.1 safety: never silently create another copy of a legacy
+                # page with the same visible title. Do not auto-adopt it either.
+                legacy_matches = [
+                    item for item in self._list_children(parent_id)
+                    if item.get("type") == "child_page"
+                    and (item.get("child_page") or {}).get("title", "").strip().casefold()
+                    in (title.strip().casefold(), title[:100].strip().casefold())
+                ]
+                if legacy_matches:
+                    raise ImportConflict(
+                        "Existing unmarked legacy Notion page with matching title; "
+                        "manual migration required before importing"
+                    )
                 first_batch = blocks[:self.batch_size]
                 self.journal.batch_intent(
                     key, owner, 0, len(first_batch),

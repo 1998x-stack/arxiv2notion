@@ -80,6 +80,7 @@ class ImportJournal:
         db.row_factory = sqlite3.Row
         try:
             db.execute("PRAGMA busy_timeout=15000")
+            db.execute("PRAGMA synchronous=FULL")
             db.execute("PRAGMA foreign_keys=ON")
             db.execute("BEGIN IMMEDIATE")
             yield db

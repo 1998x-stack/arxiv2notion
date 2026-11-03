@@ -61,7 +61,8 @@ function nodeList(parent, nodes, paperId) {
     } else {
       add(entry, "span", node.kind, "chip");
       if (node.section_title) add(entry, "span", node.section_title, "chip");
-      if (node.kind === "figure" && node.payload && node.payload.src) {
+      if (node.kind === "figure" && node.payload && node.payload.src &&
+          /^https?:\/\//i.test(node.payload.src)) {
         const link = add(entry, "a", "Figure source");
         link.href = node.payload.src;
         link.target = "_blank";
