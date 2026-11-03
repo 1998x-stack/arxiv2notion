@@ -26,6 +26,7 @@ from process import ReferenceResolver, QwenAnnotator
 from notion import NotionConverter, NotionCreator
 from storage import FileManager
 from storage.import_journal import ImportJournal
+from research.catalog import PaperCatalog
 from utils import setup_logging, normalize_arxiv_id, is_valid_arxiv_id, format_exception
 
 
@@ -63,6 +64,7 @@ class Ar5ivToNotion:
 
         # File manager and annotator (new)
         self.file_manager = FileManager(base_dir=Path("."))
+        self.paper_catalog = PaperCatalog(os.getenv("CATALOG_DB", "./data/catalog.sqlite3"))
         self.annotator = QwenAnnotator(config=config.qwen, file_manager=self.file_manager)
 
         self.converter = NotionConverter(
@@ -152,6 +154,13 @@ class Ar5ivToNotion:
                 _do_annotation(), _do_resolve_refs()
             )
             paper.resolved_references = resolved_refs
+            # Index source evidence independently of Notion write success.
+            resolved_payload = (
+                [r.to_dict() for r in resolved_refs]
+                if resolved_refs and len(resolved_refs) == len(document.references)
+                else None
+            )
+            self.paper_catalog.upsert(document, references=resolved_payload)
 
             # 4. Save to file system (after annotation so annotations are available)
             if paper.metadata:
