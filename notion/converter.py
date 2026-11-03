@@ -89,6 +89,7 @@ class NotionConverter:
             logger.debug(f"Converted paper to {len(blocks)} blocks")
         except Exception:
             logger.error(f"Conversion failed: {format_exception()}")
+            raise
 
         return blocks
 
@@ -350,7 +351,7 @@ class NotionConverter:
         if arxiv_refs:
             blocks.append(
                 self.builder.callout(
-                    f"✅ 找到 {len(arxiv_refs)} 篇 arXiv 论文，已创建子页面",
+                    f"找到 {len(arxiv_refs)} 篇 arXiv 参考文献",
                     icon="✅",
                     color="green_background",
                 )

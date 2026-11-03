@@ -21,6 +21,7 @@ from models import (
     ArxivMetadata,
 )
 from notion import NotionConverter
+from notion.validator import validate_notion_blocks
 from utils import format_exception, get_category_emoji, truncate_text
 
 
@@ -117,9 +118,10 @@ class NotionCreator:
                     time.sleep(wait_time)
                     continue
                 
-                if e.code == "validation_error" and blocks:
-                    logger.warning("验证错误，尝试不带 blocks 创建...")
-                    return self._create_page_sync(parent_id, title, icon, None)
+                if e.code == "validation_error":
+                    logger.error("Initial blocks rejected; refusing to create an empty page")
+                    return CreationResult(success=False, title=title,
+                                          error=f"{e.code}: {e.message}")
                 
                 return CreationResult(
                     success=False,
@@ -129,9 +131,11 @@ class NotionCreator:
                 
             except Exception:
                 error_message = format_exception()
-                logger.warning(f"请求失败 (尝试 {attempt+1}/{self.config.max_retries}): {error_message}")
-                time.sleep(1)
-                continue
+                logger.error(f"Page creation outcome uncertain, no blind retry: {error_message}")
+                return CreationResult(
+                    success=False, title=title,
+                    error="Page creation outcome uncertain; reconcile remote page before retry",
+                )
         
         return CreationResult(
             success=False,
@@ -173,9 +177,8 @@ class NotionCreator:
                     
             except Exception:
                 error_message = format_exception()
-                logger.warning(f"追加失败 (尝试 {attempt+1}): {error_message}")
-                time.sleep(1)
-                continue
+                logger.error(f"Append outcome uncertain, no blind retry: {error_message}")
+                return False
         
         return False
     
@@ -228,6 +231,7 @@ class NotionCreator:
         try:
             # 转换内容
             blocks = self.converter.convert_paper(paper, annotations=annotations)
+            validate_notion_blocks(blocks)
             logger.debug(f"转换完成: {len(blocks)} blocks")
             
             # 确定图标
@@ -254,7 +258,15 @@ class NotionCreator:
                 remaining = blocks[self.MAX_BLOCKS_PER_REQUEST:]
                 appended = self._append_blocks_batched(result.page_id, remaining)
                 result.blocks_created += appended
-            
+                if appended != len(remaining):
+                    result.success = False
+                    result.error = (
+                        f"Partial Notion import: confirmed {result.blocks_created}/"
+                        f"{len(blocks)} blocks; page_id={result.page_id}"
+                    )
+                    logger.error(result.error)
+                    return result
+
             logger.info(f"论文页面创建成功: {result.page_id} ({result.blocks_created} blocks)")
             
             self.stats.created_pages += 1
@@ -329,6 +341,7 @@ class NotionCreator:
         ref_metadata: Optional[Dict[str, ArxivMetadata]] = None,
         max_ref_pages: int = 20,
         annotations: Optional[list] = None,
+        with_references: bool = True,
     ) -> CreationResult:
         """
         创建论文页面并为引用创建子页面
@@ -352,13 +365,16 @@ class NotionCreator:
         
         if not main_result.success:
             return main_result
-        
+
+        if not with_references or max_ref_pages <= 0:
+            self.stats.end_time = datetime.now()
+            return main_result
+
         # 2. 获取有 arXiv ID 的参考文献
-        arxiv_refs = []
-        if paper.content and paper.content.references:
-            arxiv_refs = [r for r in paper.content.references if r.arxiv_id]
-        elif paper.resolved_references:
-            arxiv_refs = [r for r in paper.resolved_references if r.arxiv_id]
+        reference_source = paper.resolved_references
+        if not reference_source and paper.content:
+            reference_source = paper.content.references
+        arxiv_refs = [r for r in reference_source if r.arxiv_id]
         
         if not arxiv_refs:
             logger.info("没有找到有 arXiv ID 的参考文献")
@@ -372,6 +388,7 @@ class NotionCreator:
         self.stats.total_references = len(arxiv_refs)
         
         # 3. 创建参考文献子页面
+        failed_references = []
         for i, ref in enumerate(arxiv_refs):
             self._report_progress(
                 f"创建参考文献 [{i+1}/{len(arxiv_refs)}]: {ref.arxiv_id}",
@@ -391,8 +408,17 @@ class NotionCreator:
                 main_result.children_pages += 1
                 self.stats.resolved_references += 1
             else:
+                failed_references.append(ref.arxiv_id)
                 logger.warning(f"参考文献页面创建失败: {ref.arxiv_id}")
-        
+
+        if failed_references:
+            main_result.success = False
+            main_result.error = (
+                f"Partial reference import: {len(failed_references)} failed; "
+                f"main page_id={main_result.page_id}; "
+                f"failed IDs={', '.join(failed_references)}"
+            )
+
         self.stats.end_time = datetime.now()
         
         logger.info(
