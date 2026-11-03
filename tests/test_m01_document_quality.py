@@ -275,3 +275,50 @@ async def test_failed_annotation_does_not_poison_cache(tmp_path):
     assert not fm.has_annotations(
         "1706.03762", "other", annotator.cache_fingerprint(content, "1706.03762")
     )
+
+
+def test_long_rich_text_blocks_are_lossless():
+    from notion.blocks import NotionBlockBuilder as Builder
+    text = "English " + ("数" * 4105) + " last"
+    for rendered, key in (
+        (Builder.quote(text), "quote"),
+        (Builder.callout(text), "callout"),
+        (Builder.paragraph(text), "paragraph"),
+    ):
+        parts = rendered[key]["rich_text"]
+        assert "".join(x["text"]["content"] for x in parts) == text
+        assert all(len(x["text"]["content"]) <= 2000 for x in parts)
+    table = Builder.table(["column"], [[text]])
+    cell = table["table"]["children"][1]["table_row"]["cells"][0]
+    assert "".join(x["text"]["content"] for x in cell) == text
+
+
+def test_paragraph_chunker_does_not_lose_spaces():
+    from notion.blocks import NotionBlockBuilder, _text_to_rich_texts
+    source = "  " + ("a" * 2030) + "   " + ("b" * 2050) + "   "
+    rich_text = _text_to_rich_texts(source, NotionBlockBuilder, 2000)
+    assert "".join(x["text"]["content"] for x in rich_text) == source
+
+
+def test_rendering_unrenderable_equation_fails_explicitly():
+    section = Section(
+        title="Proof", level=2,
+        ordered_content=[{"type": "equation", "data": {
+            "latex": "", "mathml": "<math><mi>x</mi></math>"
+        }}],
+    )
+    with pytest.raises(ValueError, match="LaTeX"):
+        NotionConverter()._convert_section(section, [])
+
+
+def test_validator_rejects_too_many_rich_text_elements():
+    from notion.validator import NotionPayloadError, validate_notion_blocks
+    block = {
+        "type": "paragraph",
+        "paragraph": {"rich_text": [
+            {"type": "text", "text": {"content": "small"}}
+            for _ in range(101)
+        ]},
+    }
+    with pytest.raises(NotionPayloadError, match="100 elements"):
+        validate_notion_blocks([block])
