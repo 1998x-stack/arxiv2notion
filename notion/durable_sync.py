@@ -222,10 +222,14 @@ class DurableNotionWriter:
                 expected_blocks=len(blocks),
             )
             page_id = job["page_id"]
+            # Detect duplicates even if this process already knows a page ID.
+            # Otherwise an old duplicate could be silently treated as success.
+            found = self._lookup(parent_id, marker)
+            if len(found) > 1:
+                raise ImportConflict("Multiple marked Notion pages; manual deduplication required")
+            if page_id and found and page_id != found[0]:
+                raise ImportConflict("Journal page ID differs from marked Notion page")
             if not page_id:
-                found = self._lookup(parent_id, marker)
-                if len(found) > 1:
-                    raise ImportConflict("Multiple marked Notion pages; cannot choose one")
                 if found:
                     page_id = found[0]
                     self.journal.update(key, owner, status="discovered", page_id=page_id)

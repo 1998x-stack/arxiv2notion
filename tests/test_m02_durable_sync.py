@@ -341,3 +341,33 @@ def test_duplicate_reference_citations_do_not_create_duplicate_pages(
     assert result.success
     assert result.children_pages == 1
     assert len(remote.tree["root"]) == 1
+
+
+
+def test_duplicate_marked_remote_pages_block_resumption(remote, config, journal):
+    first = sync(remote, config, journal, count=2)
+    assert first.success
+    key = ImportJournal.key("root", "paper", "1706.03762")
+    marker = f"A Paper ⟦A2N:{key[:16]}⟧"
+    remote.create(
+        parent={"page_id": "root"}, icon={"emoji": "📄"},
+        properties={"title": [{"text": {"content": marker}}]},
+        children=[paragraph("0"), paragraph("1")],
+    )
+    result = sync(remote, config, journal, count=2)
+    assert not result.success
+    assert "Multiple marked" in result.error
+    assert len(remote.tree["root"]) == 2
+
+
+def test_mismatched_known_page_and_marked_remote_page_is_rejected(
+    remote, config, journal
+):
+    first = sync(remote, config, journal, count=1)
+    assert first.success
+    key = job(journal)["job_key"]
+    with journal._transaction() as db:
+        db.execute("UPDATE import_jobs SET page_id=? WHERE job_key=?", ("fake-page", key))
+    result = sync(remote, config, journal, count=1)
+    assert not result.success
+    assert "differs" in result.error
