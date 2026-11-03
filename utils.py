@@ -141,6 +141,17 @@ def normalize_arxiv_id(arxiv_id: str) -> str:
     return arxiv_id.strip()
 
 
+def is_valid_arxiv_id(arxiv_id: str) -> bool:
+    """Validate modern and legacy arXiv identifiers before URL or file use."""
+    if not isinstance(arxiv_id, str):
+        return False
+    return re.fullmatch(
+        r"(?:[0-9]{4}\.[0-9]{4,5}|[A-Za-z][A-Za-z0-9.-]*/[0-9]{7})(?:v[1-9][0-9]*)?",
+        arxiv_id,
+        flags=re.IGNORECASE,
+    ) is not None
+
+
 def extract_arxiv_ids(text: str) -> List[str]:
     """
     从文本中提取所有 arXiv ID

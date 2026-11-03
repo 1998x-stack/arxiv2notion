@@ -24,7 +24,7 @@ from fetch import ArxivApiClient, Ar5ivExtractor
 from process import ReferenceResolver, QwenAnnotator
 from notion import NotionConverter, NotionCreator
 from storage import FileManager
-from utils import setup_logging, normalize_arxiv_id, format_exception
+from utils import setup_logging, normalize_arxiv_id, is_valid_arxiv_id, format_exception
 
 
 def _detect_category(primary_category: str) -> str:
@@ -83,6 +83,9 @@ class Ar5ivToNotion:
     ) -> PaperData:
         import time as _time
         arxiv_id = normalize_arxiv_id(arxiv_id)
+        if not is_valid_arxiv_id(arxiv_id):
+            return PaperData(arxiv_id=arxiv_id, status=PaperStatus.FAILED,
+                             error=f"Invalid arXiv ID: {arxiv_id!r}")
         logger.info(f"Processing: {arxiv_id}")
 
         paper = PaperData(arxiv_id=arxiv_id, status=PaperStatus.FETCHING)
@@ -150,7 +153,8 @@ class Ar5ivToNotion:
             # 6. Create Notion pages
             paper.status = PaperStatus.CREATING
             result = self.notion_creator.create_paper_with_references(
-                paper, ref_metadata, max_ref_pages, annotations=annotations
+                paper, ref_metadata, max_ref_pages, annotations=annotations,
+                with_references=with_references and self.config.reference.create_ref_pages,
             )
 
             if result.success:
@@ -287,6 +291,10 @@ async def main_async(args):
         args.no_annotate = not opts.get("annotate", True)
         args.max_refs = opts.get("max_refs", args.max_refs)
 
+    # Explicit CLI opt-out takes precedence over file configuration.
+    if args.no_refs:
+        args.with_refs = False
+
     # 规范化 arXiv IDs
     arxiv_ids = [normalize_arxiv_id(id_) for id_ in args.arxiv_ids]
     arxiv_ids = [id_ for id_ in arxiv_ids if id_]
@@ -336,8 +344,8 @@ async def main_async(args):
         logger.info(f"\n统计信息: {processor.get_stats()}")
 
 
-def main():
-    """主函数入口"""
+def build_parser():
+    """Return the argument parser for CLI use and unit tests."""
     parser = argparse.ArgumentParser(
         description="将 arXiv 论文导入 Notion",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -356,7 +364,7 @@ def main():
     
     parser.add_argument(
         "arxiv_ids",
-        nargs="+",
+        nargs="*",
         help="arXiv ID（如 1706.03762, 2301.08362）"
     )
     
@@ -423,8 +431,13 @@ def main():
         help="Load paper config from a JSON file (see examples/single/)",
     )
 
-    args = parser.parse_args()
-    
+    return parser
+
+
+def main():
+    """CLI entry point."""
+    args = build_parser().parse_args()
+
     # 处理 --no-refs 参数
     if args.no_refs:
         args.with_refs = False
