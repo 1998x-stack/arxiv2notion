@@ -31,6 +31,11 @@ class ImportJournal:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lease_seconds = lease_seconds
+        # WAL permits readers during a writer transaction. Journal mode must
+        # be set outside BEGIN IMMEDIATE (SQLite rejects changing it inside).
+        with sqlite3.connect(str(self.path), timeout=15) as setup:
+            setup.execute("PRAGMA journal_mode=WAL")
+            setup.execute("PRAGMA synchronous=FULL")
         with self._transaction() as db:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS import_jobs (

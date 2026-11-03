@@ -308,3 +308,36 @@ def test_paginated_remote_readback(remote, config, journal):
     assert sync(remote, config, journal, count=235).success
     assert sync(remote, config, journal, count=235).success
     assert remote.append_count == 2
+
+
+
+def test_sqlite_uses_wal_mode_and_foreign_keys(journal):
+    import sqlite3
+    with sqlite3.connect(journal.path) as db:
+        mode = db.execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode == "wal"
+    assert journal.path.exists()
+
+
+def test_duplicate_reference_citations_do_not_create_duplicate_pages(
+    remote, config, journal
+):
+    from models import Ar5ivContent, PaperData
+    from unittest.mock import Mock
+
+    creator = NotionCreator(config, journal=journal)
+    creator.client = remote
+    creator.create_paper_page = Mock(return_value=CreationResult(
+        success=True, page_id="root", blocks_created=1,
+    ))
+    ref_a = Reference(raw_text="A", arxiv_id="2401.00123")
+    ref_b = Reference(raw_text="B", arxiv_id="2401.00123")
+    paper = PaperData(
+        arxiv_id="1706.03762",
+        content=Ar5ivContent(paper_id="1706.03762", title="Test",
+                             references=[ref_a, ref_b]),
+    )
+    result = creator.create_paper_with_references(paper, with_references=True)
+    assert result.success
+    assert result.children_pages == 1
+    assert len(remote.tree["root"]) == 1

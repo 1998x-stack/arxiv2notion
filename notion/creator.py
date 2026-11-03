@@ -407,7 +407,12 @@ class NotionCreator:
         reference_source = paper.resolved_references
         if not reference_source and paper.content:
             reference_source = paper.content.references
-        arxiv_refs = [r for r in reference_source if r.arxiv_id]
+        # One Notion child page per arXiv ID; repeated citations share identity.
+        deduplicated = {}
+        for reference in reference_source:
+            if reference.arxiv_id and reference.arxiv_id not in deduplicated:
+                deduplicated[reference.arxiv_id] = reference
+        arxiv_refs = list(deduplicated.values())
         
         if not arxiv_refs:
             logger.info("没有找到有 arXiv ID 的参考文献")
