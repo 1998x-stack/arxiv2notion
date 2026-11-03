@@ -153,8 +153,8 @@ class PaperCatalog:
 
     def search(self, text: str, limit: int = 20) -> list[dict]:
         limit = max(1, min(100, int(limit)))
-        escaped = (text.strip().replace("\\", "\\\\")
-                   .replace("%", "\\%").replace("_", "\\_"))
+        escaped = (text.strip().replace("!", "!!")
+                   .replace("%", "!%").replace("_", "!_"))
         with self._db() as db:
             rows = db.execute("""
                 SELECT arxiv_id, title, quality, content_hash
