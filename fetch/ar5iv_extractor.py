@@ -193,7 +193,10 @@ class Ar5ivExtractor:
         sections = []
         
         # 查找所有顶级章节
-        for section in soup.select("section.ltx_section"):
+        for section in soup.select("section.ltx_section, section.ltx_appendix"):
+            # A section nested in another top-level section is handled recursively.
+            if section.find_parent("section", class_=["ltx_section", "ltx_appendix"]):
+                continue
             section_data = self._parse_section(section, level=2)
             if section_data:
                 sections.append(section_data)
@@ -231,7 +234,7 @@ class Ar5ivExtractor:
         title = clean_text(title_elem.get_text())
         
         # 跳过参考文献和附录标题
-        if re.match(r"^(references|bibliography|appendix|acknowledgement)", title, re.I):
+        if re.match(r"^(references|bibliography)\\b", title, re.I):
             return None
         
         # Collect content in document order by iterating direct children
@@ -465,7 +468,9 @@ class Ar5ivExtractor:
         rows = []
         tbody = table.select_one("tbody") or table
         for tr in tbody.select("tr"):
-            row = [clean_text(td.get_text()) for td in tr.select("td")]
+            if tr.find_parent("thead") is not None:
+                continue
+            row = [clean_text(td.get_text()) for td in tr.select("td, th")]
             if row and any(row):  # 至少有一个非空单元格
                 rows.append(row)
         

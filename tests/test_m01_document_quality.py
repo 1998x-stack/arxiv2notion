@@ -367,3 +367,34 @@ def test_markdown_keeps_equation_mathml_fallback(tmp_path):
     text = (tmp_path / "papers" / "other" /
             "1706.03762" / "content.md").read_text()
     assert "<math><mi>x</mi></math>" in text
+
+
+def test_appendix_sections_are_preserved():
+    html = (
+        '<section class="ltx_section" id="S1">'
+        '<h2 class="ltx_title">Main</h2>'
+        '<div class="ltx_para"><p class="ltx_p">Main content paragraph.</p></div>'
+        '</section>'
+        '<section class="ltx_appendix" id="A1">'
+        '<h2 class="ltx_title">Appendix A: Details</h2>'
+        '<div class="ltx_para"><p class="ltx_p">Proof details are preserved.</p></div>'
+        '</section>'
+    )
+    soup = BeautifulSoup(html, "lxml")
+    sections = Ar5ivExtractor()._extract_sections(soup)
+    assert [x.title for x in sections] == ["Main", "Appendix A: Details"]
+    assert sections[1].source_anchor == "A1"
+    assert "Proof details" in sections[1].paragraphs[0]
+
+
+def test_table_header_not_duplicated_and_row_headings_preserved():
+    html = (
+        '<table class="ltx_tabular">'
+        '<thead><tr><th>Method</th><th>Score</th></tr></thead>'
+        '<tbody><tr><th>Baseline</th><td>0.9</td></tr></tbody>'
+        '</table>'
+    )
+    element = BeautifulSoup(html, "lxml").select_one("table")
+    table = Ar5ivExtractor()._parse_table(element)
+    assert table.headers == ["Method", "Score"]
+    assert table.rows == [["Baseline", "0.9"]]
