@@ -5,6 +5,7 @@ ar5iv 内容提取模块
 """
 import asyncio
 import re
+from urllib.parse import urljoin
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -445,7 +446,9 @@ class Ar5ivExtractor:
         """解析表格"""
         # 提取标题
         caption = None
-        caption_elem = table.find_previous("figcaption") or table.find_previous(class_="ltx_caption")
+        wrapper = table.find_parent("figure")
+        caption_elem = ((wrapper.select_one("figcaption, .ltx_caption") if wrapper else None)
+                        or table.find("caption"))
         if caption_elem:
             caption = clean_text(caption_elem.get_text())
             # 移除 "Table X:" 前缀
@@ -480,6 +483,9 @@ class Ar5ivExtractor:
         math_elem = eq.select_one("math")
         if math_elem:
             latex = math_elem.get("alttext", "")
+            if not latex:
+                annotation = math_elem.select_one('annotation[encoding="application/x-tex"]')
+                latex = annotation.get_text(strip=True) if annotation else ""
             mathml = str(math_elem)
             
             # 提取标签
@@ -490,7 +496,7 @@ class Ar5ivExtractor:
             
             return Equation(
                 latex=latex,
-                mathml=mathml[:2000] if len(mathml) > 2000 else mathml,
+                mathml=mathml,
                 label=label,
                 inline=False
             )
@@ -627,7 +633,21 @@ class Ar5ivExtractor:
             equations = self._extract_equations(soup)
             references = self._extract_references(soup)
             full_text = self._extract_full_text(sections)
-            
+            base_url = build_ar5iv_url(paper_id)
+            def absolute(src):
+                return urljoin(base_url, src) if src else ""
+            for figure in figures:
+                figure.src = absolute(figure.src)
+            def normalize_sections(items):
+                for sec in items:
+                    for figure in sec.figures:
+                        figure.src = absolute(figure.src)
+                    for item in sec.ordered_content:
+                        if item.get("type") == "figure" and isinstance(item.get("data"), dict):
+                            item["data"]["src"] = absolute(item["data"].get("src", ""))
+                    normalize_sections(sec.subsections)
+            normalize_sections(sections)
+
             content = Ar5ivContent(
                 paper_id=paper_id,
                 title=title,

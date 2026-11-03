@@ -29,7 +29,7 @@ class NotionBlockBuilder:
     ) -> Dict[str, Any]:
         """创建富文本对象"""
         if len(text) > NotionBlockBuilder.MAX_TEXT_LENGTH:
-            text = text[: NotionBlockBuilder.MAX_TEXT_LENGTH - 3] + "..."
+            raise ValueError("Notion rich text exceeds 2000 characters; split before rendering")
 
         result = {"type": "text", "text": {"content": text}}
         if link:

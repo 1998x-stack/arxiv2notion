@@ -242,14 +242,7 @@ class NotionConverter:
         blocks = []
         for i, section in enumerate(sections):
             if i >= self.max_sections:
-                blocks.append(
-                    self.builder.callout(
-                        f"⚠️ Section limit ({self.max_sections}) reached — content truncated.",
-                        icon="⚠️",
-                        color="yellow_background",
-                    )
-                )
-                break
+                raise ValueError(f"Section limit ({self.max_sections}) exceeded; refusing silent truncation")
             blocks.extend(self._convert_section(section, annotations, paragraph_ids))
         return blocks
 
@@ -304,7 +297,7 @@ class NotionConverter:
                     if tbl.get("caption"):
                         blocks.append(self.builder.paragraph(tbl["caption"], bold=True))
                     if headers or rows:
-                        blocks.append(self.builder.table(headers, rows[:20]))
+                        blocks.append(self.builder.table(headers, rows))
 
                 elif itype == "equation" and self.include_equations:
                     latex = _clean_latex(item["data"].get("latex", ""))
@@ -322,18 +315,18 @@ class NotionConverter:
                     blocks.append(self._make_annotation_toggle(ann))
 
             if self.include_equations and section.equations:
-                for eq in section.equations[:10]:
+                for eq in section.equations:
                     latex = _clean_latex(eq.latex or "")
                     if latex:
                         blocks.append(self.builder.equation(latex))
 
             if self.include_figures and section.figures:
-                for fig in section.figures[:5]:
+                for fig in section.figures:
                     if fig.src and fig.src.startswith("http"):
                         blocks.append(self.builder.image(fig.src, fig.caption))
 
             if self.include_tables and section.tables:
-                for tbl in section.tables[:3]:
+                for tbl in section.tables:
                     if tbl.caption:
                         blocks.append(self.builder.paragraph(tbl.caption, bold=True))
                     if tbl.headers or tbl.rows:
@@ -375,12 +368,12 @@ class NotionConverter:
                 )
             )
 
-        for ref in arxiv_refs[:100]:
+        for ref in arxiv_refs:
             blocks.append(self._format_arxiv_reference(ref))
 
         if other_refs:
             other_items = []
-            for ref in other_refs[:100]:
+            for ref in other_refs:
                 text = truncate_text(ref.raw_text, 300)
                 other_items.append(
                     self.builder.bulleted_list_item(f"[{ref.citation_key or '?'}]  {text}")
