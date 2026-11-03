@@ -24,3 +24,9 @@ docs/superpowers/
 *.egg-info/
 dist/
 build/
+
+# SQLite import journal and WAL/SHM sidecars
+/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

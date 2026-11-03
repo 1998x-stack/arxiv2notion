@@ -118,6 +118,14 @@ class QwenConfig:
 
 
 @dataclass
+class SyncConfig:
+    """Durable Notion import settings (M02)."""
+    enabled: bool = True
+    db_path: Path = field(default_factory=lambda: Path("./data/imports.sqlite3"))
+    allow_uncertain_retry: bool = False
+
+
+@dataclass
 class AppConfig:
     """应用总配置"""
     notion: NotionConfig
@@ -126,6 +134,7 @@ class AppConfig:
     reference: ReferenceConfig = field(default_factory=ReferenceConfig)
     content: ContentConfig = field(default_factory=ContentConfig)
     qwen: QwenConfig = field(default_factory=QwenConfig)
+    sync: SyncConfig = field(default_factory=SyncConfig)
 
     # 日志配置
     log_level: str = "INFO"
@@ -163,6 +172,11 @@ class AppConfig:
                 api_key=os.getenv("DASHSCOPE_API_KEY", ""),
                 model=os.getenv("QWEN_MODEL", "qwen-plus"),
                 enabled=os.getenv("QWEN_ENABLED", "true").lower() == "true",
+            ),
+            sync=SyncConfig(
+                enabled=os.getenv("NOTION_SYNC_ENABLED", "true").lower() == "true",
+                db_path=Path(os.getenv("IMPORT_STATE_DB", "./data/imports.sqlite3")),
+                allow_uncertain_retry=False,
             ),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             verbose=os.getenv("VERBOSE", "false").lower() == "true"

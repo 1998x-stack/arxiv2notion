@@ -22,6 +22,8 @@ from models import (
 )
 from notion import NotionConverter
 from notion.validator import validate_notion_blocks
+from notion.durable_sync import DurableNotionWriter
+from storage.import_journal import ImportJournal
 from utils import format_exception, get_category_emoji, truncate_text
 
 
@@ -42,6 +44,8 @@ class NotionCreator:
         config: NotionConfig,
         converter: Optional[NotionConverter] = None,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
+        journal: Optional[ImportJournal] = None,
+        allow_uncertain_retry: bool = False,
     ):
         """
         初始化创建器
@@ -57,6 +61,8 @@ class NotionCreator:
         self.progress_callback = progress_callback
         
         self.stats = ProcessingStats()
+        self.journal = journal
+        self.allow_uncertain_retry = allow_uncertain_retry
     
     def _report_progress(self, message: str, current: int, total: int):
         """报告进度"""
@@ -233,7 +239,21 @@ class NotionCreator:
             blocks = self.converter.convert_paper(paper, annotations=annotations)
             validate_notion_blocks(blocks)
             logger.debug(f"转换完成: {len(blocks)} blocks")
-            
+
+            if self.journal is not None:
+                icon = get_category_emoji(paper.metadata.primary_category) if paper.metadata else "📄"
+                result = DurableNotionWriter(
+                    client=self.client, config=self.config, journal=self.journal,
+                    allow_uncertain_retry=self.allow_uncertain_retry,
+                ).sync_page(
+                    parent_id=parent_id, resource_id=paper.arxiv_id,
+                    kind="paper", title=paper.title, icon=icon, blocks=blocks,
+                )
+                if result.success:
+                    self.stats.created_pages += 1
+                    self.stats.created_blocks += result.blocks_created
+                return result
+
             # 确定图标
             icon = "📄"
             if paper.metadata:
@@ -308,17 +328,30 @@ class NotionCreator:
         
         try:
             blocks = self.converter.create_reference_page_blocks(ref, metadata)
-            
+            validate_notion_blocks(blocks)
+
             icon = "📎"
             if metadata:
                 icon = get_category_emoji(metadata.primary_category)
             
-            result = self._create_page_sync(
-                parent_id,
-                title[:100],  # Notion 标题限制
-                icon,
-                blocks
-            )
+            if self.journal is not None:
+                import hashlib
+                identity = (
+                    ref.arxiv_id or ref.doi or
+                    hashlib.sha256(ref.raw_text.encode("utf-8")).hexdigest()
+                )
+                result = DurableNotionWriter(
+                    client=self.client, config=self.config, journal=self.journal,
+                    allow_uncertain_retry=self.allow_uncertain_retry,
+                ).sync_page(
+                    parent_id=parent_id, resource_id=identity,
+                    kind="reference", title=title[:200],
+                    icon=icon, blocks=blocks,
+                )
+            else:
+                result = self._create_page_sync(
+                    parent_id, title[:100], icon, blocks,
+                )
             
             if result.success:
                 self.stats.created_pages += 1

@@ -25,6 +25,7 @@ from fetch import ArxivApiClient, Ar5ivExtractor
 from process import ReferenceResolver, QwenAnnotator
 from notion import NotionConverter, NotionCreator
 from storage import FileManager
+from storage.import_journal import ImportJournal
 from utils import setup_logging, normalize_arxiv_id, is_valid_arxiv_id, format_exception
 
 
@@ -71,7 +72,14 @@ class Ar5ivToNotion:
             include_tables=config.content.include_tables,
             max_sections=config.content.max_sections,
         )
-        self.notion_creator = NotionCreator(config=config.notion, converter=self.converter)
+        self.import_journal = (
+            ImportJournal(config.sync.db_path) if config.sync.enabled else None
+        )
+        self.notion_creator = NotionCreator(
+            config=config.notion, converter=self.converter,
+            journal=self.import_journal,
+            allow_uncertain_retry=config.sync.allow_uncertain_retry,
+        )
     
     async def process_paper(
         self,
@@ -168,9 +176,9 @@ class Ar5ivToNotion:
                 with_references=with_references and self.config.reference.create_ref_pages,
             )
 
+            paper.notion_page_id = result.page_id
             if result.success:
                 paper.status = PaperStatus.COMPLETED
-                paper.notion_page_id = result.page_id
                 logger.info(f"✅ Created: {result.url}  ({result.children_pages} ref pages)")
                 duration_ms = int(_time.time() * 1000) - start_ms
                 self.file_manager.log_import({
@@ -194,6 +202,7 @@ class Ar5ivToNotion:
                     "stage": "notion_create",
                     "error_type": "APIError",
                     "message": result.error or "",
+                    "notion_page_id": result.page_id,
                 })
 
             return paper
@@ -288,6 +297,7 @@ async def main_async(args):
         config.cache.enabled = not args.no_cache
         config.reference.create_ref_pages = args.with_refs
         config.reference.search_missing_ids = args.search_refs
+        config.sync.allow_uncertain_retry = getattr(args, "retry_uncertain", False)
     except Exception as e:
         logger.error(f"配置加载失败: {e}")
         sys.exit(1)
@@ -443,6 +453,14 @@ def build_parser():
         help="Load paper config from a JSON file (see examples/single/)",
     )
 
+    parser.add_argument(
+        "--retry-uncertain",
+        action="store_true",
+        help=(
+            "Re-attempt an unconfirmed append after remote reconciliation. "
+            "Use only after independently verifying Notion state; duplicate risk remains."
+        ),
+    )
     return parser
 
 
