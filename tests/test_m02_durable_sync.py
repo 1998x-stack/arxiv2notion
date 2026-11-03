@@ -398,3 +398,17 @@ def test_legacy_creator_does_not_change_its_sdk_retry_config(monkeypatch, config
     monkeypatch.setattr(creator_module, "Client", factory)
     NotionCreator(config)
     assert "retry" not in received
+
+
+
+def test_existing_legacy_page_blocks_duplicate_migration(remote, config, journal):
+    remote.create(
+        parent={"page_id": "root"},
+        icon={"emoji": "📄"},
+        properties={"title": [{"text": {"content": "A Paper"}}]},
+        children=[paragraph("legacy content")],
+    )
+    result = sync(remote, config, journal, count=2)
+    assert not result.success
+    assert "unmarked legacy" in result.error
+    assert len(remote.tree["root"]) == 1

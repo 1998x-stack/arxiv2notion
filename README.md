@@ -201,3 +201,47 @@ arxiv2notion/
 ## License
 
 MIT
+
+
+---
+
+## Core architecture (M00–M05)
+
+The next-generation pipeline includes canonical paper snapshots, parse quality,
+versioned Qwen caches, SQLite checkpoints, Notion read-back, citation provenance,
+evidence-bound reading notes, and a **local-only research browser**.
+
+### Offline catalog / workspace (no Notion credentials)
+
+```bash
+python -m research.cli index --papers-root ./papers
+python -m research.cli overview
+python -m research.cli search "transformer"
+python -m research.cli citations 1706.03762
+python -m research.web --host 127.0.0.1 --port 8765
+```
+
+Open http://127.0.0.1:8765. Content stays on your machine; the browser is
+read-only and cannot write to Notion.
+
+### Durable sync (requires a configured Notion integration)
+
+```bash
+export NOTION_SYNC_ENABLED=true
+export IMPORT_STATE_DB=./data/imports.sqlite3
+python main.py 1706.03762
+python verify_notion.py --remote
+```
+
+The SQLite journal and the paper catalog must be on persistent writable storage.
+Reusing an arXiv ID with *different* content requires explicit migration,
+not automatic overwrite. Network outcome uncertainty fails closed rather than
+blindly resending writes. Existing unmarked Notion pages are not auto-adopted;
+the importer checks for exact-title collisions and asks for manual migration.
+
+**Live write certification is outstanding.** All CI tests use simulated Notion
+responses; a disposable test workspace is required before production rollout.
+
+Further details: [M00](docs/M00.md), [M01](docs/M01.md),
+[M02](docs/M02.md), [M02.1](docs/M02.1.md), [M03](docs/M03.md),
+[M04](docs/M04.md), [M05](docs/M05.md).
