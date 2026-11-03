@@ -131,3 +131,14 @@ def test_empty_annotations_yield_empty_manifest():
     result = derive_candidates(doc, [])
     assert result["claims"] == []
     assert result["schema_version"] == "claim-candidates-v1"
+
+
+
+def test_tampered_claim_identity_and_excerpt_fail_closed():
+    doc, anns = sample()
+    claim = derive_candidates(doc, anns)["claims"][0]
+    with pytest.raises(ValueError, match="Candidate ID"):
+        check_binding(dict(claim, text="A different unsupported statement"), doc)
+    with pytest.raises(ValueError, match="excerpt"):
+        check_binding(dict(claim, quote=claim["quote"][1:], start=1,
+                           end=claim["end"]), doc)

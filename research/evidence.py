@@ -61,6 +61,7 @@ def derive_candidates(document: dict, annotations: list[dict]) -> dict:
                 "source_anchor": node.get("source_anchor"),
                 "section_title": node.get("section_title"),
                 "claim_type": "explanation" if ordinal == 0 else "key_point",
+                "ordinal": ordinal,
                 "text": candidate,
                 "quote": quote,
                 "start": 0, "end": len(quote),
@@ -88,18 +89,22 @@ def check_binding(claim: dict, document: dict) -> None:
         raise ValueError("Invalid source character span")
     if node["text"][start:end] != claim.get("quote"):
         raise ValueError("Claim quote not present at the declared source span")
-    if claim.get("claim_id") != (
-        "c_" + _hash([
-            claim["document_hash"], claim["source_node_id"],
-            0 if claim.get("claim_type") == "explanation" else
-            claim.get("ordinal", 1),
-            claim.get("text"),
-        ])[:24]
-    ):
-        # The id is stable proof of identity only for the authoring candidate.
-        # Per-key-point ordinals are embedded when deriving the candidate.
-        # The exact generated ID is validated from the saved manifest instead.
-        pass
+    ordinal = claim.get("ordinal")
+    if not isinstance(ordinal, int) or ordinal < 0:
+        raise ValueError("Invalid candidate ordinal")
+    expected_type = "explanation" if ordinal == 0 else "key_point"
+    if claim.get("claim_type") != expected_type:
+        raise ValueError("Candidate claim type/ordinal mismatch")
+    expected_id = "c_" + _hash([
+        claim["document_hash"], claim["source_node_id"],
+        ordinal, claim.get("text"),
+    ])[:24]
+    if claim.get("claim_id") != expected_id:
+        raise ValueError("Candidate ID does not match immutable source and text")
+    expected_quote = node["text"][:min(240, len(node["text"]))]
+    if start != 0 or end != len(expected_quote) or claim.get("quote") != expected_quote:
+        raise ValueError("Candidate evidence excerpt was altered")
+
 
 
 def save_candidates(path: str | Path, data: dict) -> None:
