@@ -3,6 +3,7 @@ File system manager.
 Responsibility: All paper content I/O and structured JSONL logging.
 """
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -10,6 +11,7 @@ from typing import List
 from loguru import logger
 
 from models import ArxivMetadata, Ar5ivContent, ParagraphAnnotation, Section
+from utils import is_valid_arxiv_id
 
 
 class FileManager:
@@ -38,7 +40,12 @@ class FileManager:
 
     def get_paper_dir(self, arxiv_id: str, category: str) -> Path:
         """Return (and create) the directory for a specific paper."""
-        p = self.papers_dir / category / arxiv_id
+        if not is_valid_arxiv_id(arxiv_id):
+            raise ValueError(f"Invalid arXiv ID: {arxiv_id!r}")
+        if not isinstance(category, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", category):
+            raise ValueError(f"Invalid paper category: {category!r}")
+        safe_id = arxiv_id.replace("/", "__")  # legacy IDs have an archive separator
+        p = self.papers_dir / category / safe_id
         p.mkdir(parents=True, exist_ok=True)
         return p
 
