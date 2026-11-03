@@ -322,3 +322,48 @@ def test_validator_rejects_too_many_rich_text_elements():
     }
     with pytest.raises(NotionPayloadError, match="100 elements"):
         validate_notion_blocks([block])
+
+
+def test_markdown_keeps_formula_table_figure_and_references_in_order(tmp_path):
+    from models import Reference
+    section = Section(
+        title="Results", level=2,
+        ordered_content=[
+            {"type": "para", "data": "Before formula"},
+            {"type": "equation", "data": {"latex": r"E=mc^2", "mathml": "<math/>"}},
+            {"type": "figure", "data": {"src": "https://example.org/img.png",
+                                       "alt": "plot", "caption": "Result plot"}},
+            {"type": "table", "data": {"headers": ["Method", "Score"],
+                                       "rows": [["A", "0.5"], ["B", "0.9"]]}},
+            {"type": "para", "data": "After table"},
+        ],
+    )
+    content = Ar5ivContent(
+        paper_id="1706.03762", title="Paper", sections=[section],
+        references=[Reference(raw_text="A. Author, Title (2024)")],
+    )
+    fm = FileManager(base_dir=tmp_path)
+    fm.save_content_md("1706.03762", "other", content)
+    markdown = (tmp_path / "papers" / "other" /
+                "1706.03762" / "content.md").read_text()
+    tokens = ["Before formula", "E=mc^2", "img.png", "| Method | Score |",
+              "| A | 0.5 |", "After table", "A. Author, Title (2024)"]
+    offsets = [markdown.index(t) for t in tokens]
+    assert offsets == sorted(offsets)
+
+
+def test_markdown_keeps_equation_mathml_fallback(tmp_path):
+    section = Section(
+        title="Proof", level=2,
+        ordered_content=[{"type": "equation", "data": {
+            "latex": "", "mathml": "<math><mi>x</mi></math>"
+        }}],
+    )
+    fm = FileManager(base_dir=tmp_path)
+    fm.save_content_md(
+        "1706.03762", "other",
+        Ar5ivContent(paper_id="1706.03762", title="Proof", sections=[section]),
+    )
+    text = (tmp_path / "papers" / "other" /
+            "1706.03762" / "content.md").read_text()
+    assert "<math><mi>x</mi></math>" in text

@@ -72,6 +72,10 @@ class FileManager:
             lines += ["## Abstract", "", content.abstract, ""]
         for section in content.sections:
             lines += _section_to_md(section)
+        if content.references:
+            lines += ["## References", ""]
+            for ref in content.references:
+                lines += [f"- {ref.raw_text}", ""]
         path.write_text("\n".join(lines), encoding="utf-8")
         logger.debug(f"Saved content.md: {path}")
 
@@ -192,11 +196,58 @@ class FileManager:
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _section_to_md(section: Section) -> List[str]:
-    """Recursively render a Section to Markdown lines."""
-    prefix = "#" * (section.level + 1)
+    """Render paragraphs, math, figures and tables in document order."""
+    prefix = "#" * max(1, min(section.level, 6))
     lines = [f"{prefix} {section.title}", ""]
-    for para in section.paragraphs:
-        lines += [para, ""]
+
+    def render_table(data: dict) -> list[str]:
+        headers = list(data.get("headers") or [])
+        rows = list(data.get("rows") or [])
+        width = max([len(headers)] + [len(row) for row in rows] + [0])
+        if not width:
+            return []
+        if not headers:
+            headers = [f"Column {idx + 1}" for idx in range(width)]
+        def cell(value) -> str:
+            return str(value).replace("|", r"\|").replace("\n", "<br>")
+        def markdown_row(values) -> str:
+            padded = list(values) + [""] * (width - len(values))
+            return "| " + " | ".join(cell(v) for v in padded[:width]) + " |"
+        result = [markdown_row(headers), markdown_row(["---"] * width)]
+        result.extend(markdown_row(row) for row in rows)
+        return result + [""]
+
+    if section.ordered_content:
+        items = section.ordered_content
+    else:
+        items = [{"type": "para", "data": paragraph}
+                 for paragraph in section.paragraphs]
+        items += [{"type": "equation", "data": eq.to_dict()}
+                  for eq in section.equations]
+        items += [{"type": "figure", "data": fig.to_dict()}
+                  for fig in section.figures]
+        items += [{"type": "table", "data": table.to_dict()}
+                  for table in section.tables]
+
+    for item in items:
+        kind = item.get("type")
+        data = item.get("data")
+        if kind == "para":
+            lines += [str(data), ""]
+        elif kind == "equation" and isinstance(data, dict):
+            if data.get("latex"):
+                lines += ["$$", data["latex"], "$$", ""]
+            elif data.get("mathml"):
+                lines += ["~~~xml", data["mathml"], "~~~", ""]
+        elif kind == "figure" and isinstance(data, dict):
+            lines += [f"![{data.get('alt') or ''}]({data.get('src') or ''})", ""]
+            if data.get("caption"):
+                lines += [f"*{data['caption']}*", ""]
+        elif kind == "table" and isinstance(data, dict):
+            if data.get("caption"):
+                lines += [f"*{data['caption']}*", ""]
+            lines += render_table(data)
+
     for sub in section.subsections:
         lines += _section_to_md(sub)
     return lines
