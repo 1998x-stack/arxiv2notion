@@ -3,6 +3,7 @@ File system manager.
 Responsibility: All paper content I/O and structured JSONL logging.
 """
 import json
+import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import List
 from loguru import logger
 
 from models import ArxivMetadata, Ar5ivContent, ParagraphAnnotation, Section
+from domain.paper_document import PaperDocument
 from utils import is_valid_arxiv_id
 
 
@@ -70,6 +72,10 @@ class FileManager:
             lines += ["## Abstract", "", content.abstract, ""]
         for section in content.sections:
             lines += _section_to_md(section)
+        if content.references:
+            lines += ["## References", ""]
+            for ref in content.references:
+                lines += [f"- {ref.raw_text}", ""]
         path.write_text("\n".join(lines), encoding="utf-8")
         logger.debug(f"Saved content.md: {path}")
 
@@ -81,24 +87,70 @@ class FileManager:
             encoding="utf-8",
         )
 
+    def save_document(self, arxiv_id: str, category: str, document: PaperDocument) -> None:
+        """Write the canonical structural snapshot for inspection and recovery."""
+        path = self.get_paper_dir(arxiv_id, category) / "document.json"
+        temp = path.with_suffix(".json.tmp")
+        temp.write_text(
+            json.dumps(document.to_dict(), ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        temp.replace(path)
+
     # ── Annotation persistence ───────────────────────────────────────────────
 
     def _annotation_path(self, arxiv_id: str, category: str) -> Path:
         return self.get_paper_dir(arxiv_id, category) / "llm_annotations.jsonl"
 
-    def has_annotations(self, arxiv_id: str, category: str) -> bool:
-        """Return True if annotations file exists and is non-empty."""
+    def has_annotations(
+        self, arxiv_id: str, category: str, fingerprint: str | None = None
+    ) -> bool:
+        """Verify cache identity AND bytes when a fingerprint is requested."""
         p = self._annotation_path(arxiv_id, category)
-        return p.exists() and p.stat().st_size > 0
+        if not p.exists() or p.stat().st_size == 0:
+            return False
+        if fingerprint is None:  # Backwards-compatible low-level file check.
+            return True
+        manifest_path = p.with_name("llm_annotations.manifest.json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            body = p.read_bytes()
+            return (
+                manifest.get("schema_version") == 1
+                and manifest.get("fingerprint") == fingerprint
+                and manifest.get("sha256") == hashlib.sha256(body).hexdigest()
+                and manifest.get("count") == len(body.splitlines())
+            )
+        except (OSError, ValueError, TypeError):
+            return False
 
     def save_annotations(
-        self, arxiv_id: str, category: str, annotations: List[ParagraphAnnotation]
+        self, arxiv_id: str, category: str, annotations: List[ParagraphAnnotation],
+        fingerprint: str | None = None,
     ) -> None:
-        """Write annotations as JSONL (one dict per line)."""
+        """Atomically replace JSONL then publish a matching version manifest."""
         path = self._annotation_path(arxiv_id, category)
-        with path.open("w", encoding="utf-8") as f:
-            for ann in annotations:
-                f.write(json.dumps(ann.to_dict(), ensure_ascii=False) + "\n")
+        manifest = path.with_name("llm_annotations.manifest.json")
+        # Invalidate stale manifests BEFORE replacing the data. An interrupted
+        # update must never make old cache metadata validate new data.
+        manifest.unlink(missing_ok=True)
+        body = "".join(json.dumps(a.to_dict(), ensure_ascii=False) + "\n"
+                       for a in annotations)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(body, encoding="utf-8")
+        tmp.replace(path)
+        if fingerprint:
+            meta = {
+                "schema_version": 1,
+                "fingerprint": fingerprint,
+                "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                "count": len(annotations),
+            }
+            tmp_manifest = manifest.with_name(manifest.name + ".tmp")
+            tmp_manifest.write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            tmp_manifest.replace(manifest)
         logger.debug(f"Saved {len(annotations)} annotations: {path}")
 
     def load_annotations(self, arxiv_id: str, category: str) -> List[ParagraphAnnotation]:
@@ -144,11 +196,58 @@ class FileManager:
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _section_to_md(section: Section) -> List[str]:
-    """Recursively render a Section to Markdown lines."""
-    prefix = "#" * (section.level + 1)
+    """Render paragraphs, math, figures and tables in document order."""
+    prefix = "#" * max(1, min(section.level, 6))
     lines = [f"{prefix} {section.title}", ""]
-    for para in section.paragraphs:
-        lines += [para, ""]
+
+    def render_table(data: dict) -> list[str]:
+        headers = list(data.get("headers") or [])
+        rows = list(data.get("rows") or [])
+        width = max([len(headers)] + [len(row) for row in rows] + [0])
+        if not width:
+            return []
+        if not headers:
+            headers = [f"Column {idx + 1}" for idx in range(width)]
+        def cell(value) -> str:
+            return str(value).replace("|", r"\|").replace("\n", "<br>")
+        def markdown_row(values) -> str:
+            padded = list(values) + [""] * (width - len(values))
+            return "| " + " | ".join(cell(v) for v in padded[:width]) + " |"
+        result = [markdown_row(headers), markdown_row(["---"] * width)]
+        result.extend(markdown_row(row) for row in rows)
+        return result + [""]
+
+    if section.ordered_content:
+        items = section.ordered_content
+    else:
+        items = [{"type": "para", "data": paragraph}
+                 for paragraph in section.paragraphs]
+        items += [{"type": "equation", "data": eq.to_dict()}
+                  for eq in section.equations]
+        items += [{"type": "figure", "data": fig.to_dict()}
+                  for fig in section.figures]
+        items += [{"type": "table", "data": table.to_dict()}
+                  for table in section.tables]
+
+    for item in items:
+        kind = item.get("type")
+        data = item.get("data")
+        if kind == "para":
+            lines += [str(data), ""]
+        elif kind == "equation" and isinstance(data, dict):
+            if data.get("latex"):
+                lines += ["$$", data["latex"], "$$", ""]
+            elif data.get("mathml"):
+                lines += ["~~~xml", data["mathml"], "~~~", ""]
+        elif kind == "figure" and isinstance(data, dict):
+            lines += [f"![{data.get('alt') or ''}]({data.get('src') or ''})", ""]
+            if data.get("caption"):
+                lines += [f"*{data['caption']}*", ""]
+        elif kind == "table" and isinstance(data, dict):
+            if data.get("caption"):
+                lines += [f"*{data['caption']}*", ""]
+            lines += render_table(data)
+
     for sub in section.subsections:
         lines += _section_to_md(sub)
     return lines

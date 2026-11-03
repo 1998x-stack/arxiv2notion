@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 
 from models import PaperData, ArxivMetadata, Section, Reference, ParagraphAnnotation
+from domain.paper_document import iter_paragraph_refs
 from utils import (
     format_exception,
     truncate_text,
@@ -81,7 +82,13 @@ class NotionConverter:
                 blocks.append(self.builder.divider())
 
                 if paper.content.sections:
-                    blocks.extend(self._convert_sections(paper.content.sections, annotations))
+                    paragraph_ids = {
+                        (id(ref.section), ref.para_idx): ref.node_id
+                        for ref in iter_paragraph_refs(paper.content)
+                    }
+                    blocks.extend(self._convert_sections(
+                        paper.content.sections, annotations, paragraph_ids
+                    ))
 
                 if paper.content.references:
                     blocks.extend(self._create_references_section(paper.content.references))
@@ -230,32 +237,36 @@ class NotionConverter:
         self,
         sections: List["Section"],
         annotations: List["ParagraphAnnotation"],
+        paragraph_ids: Optional[Dict[tuple, str]] = None,
     ) -> List[Dict[str, Any]]:
         blocks = []
         for i, section in enumerate(sections):
             if i >= self.max_sections:
-                blocks.append(
-                    self.builder.callout(
-                        f"⚠️ Section limit ({self.max_sections}) reached — content truncated.",
-                        icon="⚠️",
-                        color="yellow_background",
-                    )
-                )
-                break
-            blocks.extend(self._convert_section(section, annotations))
+                raise ValueError(f"Section limit ({self.max_sections}) exceeded; refusing silent truncation")
+            blocks.extend(self._convert_section(section, annotations, paragraph_ids))
         return blocks
 
     def _convert_section(
         self,
         section: "Section",
         annotations: List["ParagraphAnnotation"],
+        paragraph_ids: Optional[Dict[tuple, str]] = None,
     ) -> List[Dict[str, Any]]:
         blocks = []
+        paragraph_ids = paragraph_ids or {}
         emoji = _section_emoji(section.title)
         level = min(section.level, 3)
         blocks.append(self.builder.heading(f"{emoji} {section.title}", level=level))
 
-        ann_map = {(a.section_title, a.para_idx): a for a in annotations}
+        ann_map = {
+            (a.section_title, a.para_idx): a
+            for a in annotations if not a.node_id
+        }
+        by_node = {a.node_id: a for a in annotations if a.node_id}
+
+        def find_annotation(idx: int):
+            node_id = paragraph_ids.get((id(section), idx))
+            return by_node.get(node_id) or ann_map.get((section.title, idx))
 
         if section.ordered_content:
             para_idx = 0
@@ -266,7 +277,7 @@ class NotionConverter:
                     para_text = item["data"]
                     para_blocks = _para_to_notion_blocks(para_text, self.builder, self.max_text_length)
                     blocks.extend(para_blocks)
-                    ann = ann_map.get((section.title, para_idx))
+                    ann = find_annotation(para_idx)
                     if ann and ann.plain_explanation and ann.plain_explanation not in (
                         "（段落过短，跳过注释）", "（注释生成失败）"
                     ):
@@ -286,43 +297,45 @@ class NotionConverter:
                     if tbl.get("caption"):
                         blocks.append(self.builder.paragraph(tbl["caption"], bold=True))
                     if headers or rows:
-                        blocks.append(self.builder.table(headers, rows[:20]))
+                        blocks.append(self.builder.table(headers, rows))
 
                 elif itype == "equation" and self.include_equations:
                     latex = _clean_latex(item["data"].get("latex", ""))
-                    if latex:
-                        blocks.append(self.builder.equation(latex))
+                    if not latex:
+                        raise ValueError("Equation missing renderable LaTeX; canonical MathML retained")
+                    blocks.append(self.builder.equation(latex))
 
         else:
             for idx, para in enumerate(section.paragraphs):
                 para_blocks = _para_to_notion_blocks(para, self.builder, self.max_text_length)
                 blocks.extend(para_blocks)
-                ann = ann_map.get((section.title, idx))
+                ann = find_annotation(idx)
                 if ann and ann.plain_explanation and ann.plain_explanation not in (
                     "（段落过短，跳过注释）", "（注释生成失败）"
                 ):
                     blocks.append(self._make_annotation_toggle(ann))
 
             if self.include_equations and section.equations:
-                for eq in section.equations[:10]:
+                for eq in section.equations:
                     latex = _clean_latex(eq.latex or "")
-                    if latex:
-                        blocks.append(self.builder.equation(latex))
+                    if not latex:
+                        raise ValueError("Equation missing renderable LaTeX; canonical MathML retained")
+                    blocks.append(self.builder.equation(latex))
 
             if self.include_figures and section.figures:
-                for fig in section.figures[:5]:
+                for fig in section.figures:
                     if fig.src and fig.src.startswith("http"):
                         blocks.append(self.builder.image(fig.src, fig.caption))
 
             if self.include_tables and section.tables:
-                for tbl in section.tables[:3]:
+                for tbl in section.tables:
                     if tbl.caption:
                         blocks.append(self.builder.paragraph(tbl.caption, bold=True))
                     if tbl.headers or tbl.rows:
                         blocks.append(self.builder.table(tbl.headers, tbl.rows[:20]))
 
         for sub in section.subsections:
-            blocks.extend(self._convert_section(sub, annotations))
+            blocks.extend(self._convert_section(sub, annotations, paragraph_ids))
 
         return blocks
 
@@ -357,12 +370,12 @@ class NotionConverter:
                 )
             )
 
-        for ref in arxiv_refs[:100]:
+        for ref in arxiv_refs:
             blocks.append(self._format_arxiv_reference(ref))
 
         if other_refs:
             other_items = []
-            for ref in other_refs[:100]:
+            for ref in other_refs:
                 text = truncate_text(ref.raw_text, 300)
                 other_items.append(
                     self.builder.bulleted_list_item(f"[{ref.citation_key or '?'}]  {text}")

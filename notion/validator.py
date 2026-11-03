@@ -25,6 +25,8 @@ def validate_notion_blocks(blocks: list[dict[str, Any]]) -> None:
                 if len(node["equation"].get("expression", "")) > 1000:
                     raise NotionPayloadError(f"{path}: equation exceeds 1000 characters")
             for key, value in node.items():
+                if key == "rich_text" and isinstance(value, list) and len(value) > 100:
+                    raise NotionPayloadError(f"{path}.rich_text: more than 100 elements")
                 walk(value, f"{path}.{key}")
 
     for i, block in enumerate(blocks):

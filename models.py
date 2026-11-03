@@ -75,6 +75,7 @@ class Equation:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "latex": self.latex,
+            "mathml": self.mathml,
             "label": self.label,
             "inline": self.inline
         }
@@ -91,6 +92,7 @@ class Section:
     tables: List[Table] = field(default_factory=list)
     equations: List[Equation] = field(default_factory=list)
     ordered_content: List[Dict[str, Any]] = field(default_factory=list)
+    source_anchor: Optional[str] = None  # HTML section id when available
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -102,6 +104,7 @@ class Section:
             "tables": [t.to_dict() for t in self.tables],
             "equations": [e.to_dict() for e in self.equations],
             "ordered_content": self.ordered_content,
+            "source_anchor": self.source_anchor,
         }
 
 
@@ -315,6 +318,7 @@ class ParagraphAnnotation:
     plain_explanation: str  # Chinese plain-language summary
     key_points: List[str]   # 2-3 Chinese bullet points
     cached: bool = False    # True if loaded from disk, not generated via API
+    node_id: Optional[str] = None  # M01: canonical paragraph identity
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -324,6 +328,7 @@ class ParagraphAnnotation:
             "plain_explanation": self.plain_explanation,
             "key_points": self.key_points,
             "cached": self.cached,
+            "node_id": self.node_id,
         }
 
     @classmethod
@@ -335,4 +340,5 @@ class ParagraphAnnotation:
             plain_explanation=d["plain_explanation"],
             key_points=d["key_points"],
             cached=d.get("cached", True),
+            node_id=d.get("node_id"),
         )

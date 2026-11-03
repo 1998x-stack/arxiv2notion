@@ -5,6 +5,7 @@ ar5iv 内容提取模块
 """
 import asyncio
 import re
+from urllib.parse import urljoin
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -13,6 +14,7 @@ from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
 from config import ArxivConfig, CacheConfig
+from domain.paper_document import assess_quality
 from models import (
     Ar5ivContent,
     Section,
@@ -191,7 +193,10 @@ class Ar5ivExtractor:
         sections = []
         
         # 查找所有顶级章节
-        for section in soup.select("section.ltx_section"):
+        for section in soup.select("section.ltx_section, section.ltx_appendix"):
+            # A section nested in another top-level section is handled recursively.
+            if section.find_parent("section", class_=["ltx_section", "ltx_appendix"]):
+                continue
             section_data = self._parse_section(section, level=2)
             if section_data:
                 sections.append(section_data)
@@ -228,8 +233,8 @@ class Ar5ivExtractor:
         
         title = clean_text(title_elem.get_text())
         
-        # 跳过参考文献和附录标题
-        if re.match(r"^(references|bibliography|appendix|acknowledgement)", title, re.I):
+        # Bibliography is parsed separately; keep appendices in the section tree.
+        if re.match(r"^(references|bibliography)\b", title, re.I):
             return None
         
         # Collect content in document order by iterating direct children
@@ -314,14 +319,13 @@ class Ar5ivExtractor:
                     ordered_content.append({"type": "equation", "data": eq.to_dict()})
                     equations.append(eq)
 
-        # Subsections (always collected separately — they appear as <section> children)
+        # Only direct descendant sections belong to this parent. The old
+        # recursive selector flattened grandchildren and duplicated nested text.
         subsections = []
-        for subsection in elem.select("section.ltx_subsection"):
+        for subsection in elem.select("section.ltx_subsection, section.ltx_subsubsection"):
+            if subsection.find_parent("section") is not elem:
+                continue
             sub_data = self._parse_section(subsection, level=level + 1)
-            if sub_data:
-                subsections.append(sub_data)
-        for subsubsection in elem.select("section.ltx_subsubsection"):
-            sub_data = self._parse_section(subsubsection, level=level + 2)
             if sub_data:
                 subsections.append(sub_data)
 
@@ -334,6 +338,7 @@ class Ar5ivExtractor:
             tables=tables,
             equations=equations,
             ordered_content=ordered_content,
+            source_anchor=elem.get("id"),
         )
     
     def _math_to_marker(self, math_node: Tag) -> str:
@@ -444,7 +449,9 @@ class Ar5ivExtractor:
         """解析表格"""
         # 提取标题
         caption = None
-        caption_elem = table.find_previous("figcaption") or table.find_previous(class_="ltx_caption")
+        wrapper = table.find_parent("figure")
+        caption_elem = ((wrapper.select_one("figcaption, .ltx_caption") if wrapper else None)
+                        or table.find("caption"))
         if caption_elem:
             caption = clean_text(caption_elem.get_text())
             # 移除 "Table X:" 前缀
@@ -461,7 +468,9 @@ class Ar5ivExtractor:
         rows = []
         tbody = table.select_one("tbody") or table
         for tr in tbody.select("tr"):
-            row = [clean_text(td.get_text()) for td in tr.select("td")]
+            if tr.find_parent("thead") is not None:
+                continue
+            row = [clean_text(td.get_text()) for td in tr.select("td, th")]
             if row and any(row):  # 至少有一个非空单元格
                 rows.append(row)
         
@@ -479,6 +488,9 @@ class Ar5ivExtractor:
         math_elem = eq.select_one("math")
         if math_elem:
             latex = math_elem.get("alttext", "")
+            if not latex:
+                annotation = math_elem.select_one('annotation[encoding="application/x-tex"]')
+                latex = annotation.get_text(strip=True) if annotation else ""
             mathml = str(math_elem)
             
             # 提取标签
@@ -489,7 +501,7 @@ class Ar5ivExtractor:
             
             return Equation(
                 latex=latex,
-                mathml=mathml[:2000] if len(mathml) > 2000 else mathml,
+                mathml=mathml,
                 label=label,
                 inline=False
             )
@@ -626,8 +638,22 @@ class Ar5ivExtractor:
             equations = self._extract_equations(soup)
             references = self._extract_references(soup)
             full_text = self._extract_full_text(sections)
-            
-            return Ar5ivContent(
+            base_url = build_ar5iv_url(paper_id)
+            def absolute(src):
+                return urljoin(base_url, src) if src else ""
+            for figure in figures:
+                figure.src = absolute(figure.src)
+            def normalize_sections(items):
+                for sec in items:
+                    for figure in sec.figures:
+                        figure.src = absolute(figure.src)
+                    for item in sec.ordered_content:
+                        if item.get("type") == "figure" and isinstance(item.get("data"), dict):
+                            item["data"]["src"] = absolute(item["data"].get("src", ""))
+                    normalize_sections(sec.subsections)
+            normalize_sections(sections)
+
+            content = Ar5ivContent(
                 paper_id=paper_id,
                 title=title,
                 authors=authors,
@@ -640,7 +666,11 @@ class Ar5ivExtractor:
                 references=references,
                 full_text=full_text,
             )
-            
+            if assess_quality(content).status == "unavailable":
+                logger.warning(f"ar5iv returned no usable abstract or body: {paper_id}")
+                return None
+            return content
+
         except Exception:
             error_message = format_exception()
             logger.error(f"解析 HTML 失败 {paper_id}: {error_message}")
@@ -666,9 +696,14 @@ class Ar5ivExtractor:
             cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
             cached_data = await load_json(cache_file)
             if cached_data:
-                logger.debug(f"使用缓存: {arxiv_id}")
-                # 重建对象
-                return self._rebuild_content(cached_data)
+                try:
+                    cached_content = self._rebuild_content(cached_data)
+                    if assess_quality(cached_content).cacheable_full_text:
+                        logger.debug(f"使用缓存: {arxiv_id}")
+                        return cached_content
+                    logger.warning(f"Rejecting incomplete cached ar5iv content: {arxiv_id}")
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning(f"Rejecting invalid ar5iv cache for {arxiv_id}: {exc}")
         
         url = build_ar5iv_url(arxiv_id)
         logger.info(f"提取 ar5iv 内容: {arxiv_id}")
@@ -684,7 +719,7 @@ class Ar5ivExtractor:
             
             if content:
                 # 保存到缓存
-                if self.cache_config.enabled:
+                if self.cache_config.enabled and assess_quality(content).cacheable_full_text:
                     cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
                     await save_json(content.to_dict(), cache_file)
                 
@@ -710,6 +745,7 @@ class Ar5ivExtractor:
                 tables=[Table(**t) for t in s.get('tables', [])],
                 equations=[Equation(**e) for e in s.get('equations', [])],
                 ordered_content=s.get('ordered_content', []),
+                source_anchor=s.get("source_anchor"),
             )
         
         return Ar5ivContent(
