@@ -301,8 +301,9 @@ class NotionConverter:
 
                 elif itype == "equation" and self.include_equations:
                     latex = _clean_latex(item["data"].get("latex", ""))
-                    if latex:
-                        blocks.append(self.builder.equation(latex))
+                    if not latex:
+                        raise ValueError("Equation missing renderable LaTeX; canonical MathML retained")
+                    blocks.append(self.builder.equation(latex))
 
         else:
             for idx, para in enumerate(section.paragraphs):
@@ -317,8 +318,9 @@ class NotionConverter:
             if self.include_equations and section.equations:
                 for eq in section.equations:
                     latex = _clean_latex(eq.latex or "")
-                    if latex:
-                        blocks.append(self.builder.equation(latex))
+                    if not latex:
+                        raise ValueError("Equation missing renderable LaTeX; canonical MathML retained")
+                    blocks.append(self.builder.equation(latex))
 
             if self.include_figures and section.figures:
                 for fig in section.figures:

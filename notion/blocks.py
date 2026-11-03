@@ -54,6 +54,15 @@ class NotionBlockBuilder:
         return result
 
     @staticmethod
+    def rich_text_chunks(text: str, **kwargs) -> List[Dict[str, Any]]:
+        """Split long content without changing even one original character."""
+        size = NotionBlockBuilder.MAX_TEXT_LENGTH
+        chunks = [text[i:i + size] for i in range(0, len(text), size)] or [""]
+        if len(chunks) > 100:
+            raise ValueError("More than 100 rich-text elements; split into multiple blocks")
+        return [NotionBlockBuilder.rich_text(part, **kwargs) for part in chunks]
+
+    @staticmethod
     def heading(text: str, level: int = 1, color: str = "default") -> Dict[str, Any]:
         """创建标题 block"""
         level = max(1, min(3, level))
@@ -62,7 +71,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": block_type,
             block_type: {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text),
                 "color": color,
             },
         }
@@ -76,7 +85,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "paragraph",
             "paragraph": {
-                "rich_text": [NotionBlockBuilder.rich_text(text, bold=bold, italic=italic)],
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text, bold=bold, italic=italic),
                 "color": color,
             },
         }
@@ -97,7 +106,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "callout",
             "callout": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text),
                 "icon": {"emoji": icon},
                 "color": color,
             },
@@ -109,7 +118,7 @@ class NotionBlockBuilder:
         return {
             "object": "block",
             "type": "quote",
-            "quote": {"rich_text": [NotionBlockBuilder.rich_text(text)], "color": color},
+            "quote": {"rich_text": NotionBlockBuilder.rich_text_chunks(text), "color": color},
         }
 
     @staticmethod
@@ -119,7 +128,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "code",
             "code": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)],
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text),
                 "language": language,
             },
         }
@@ -140,7 +149,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "bulleted_list_item",
             "bulleted_list_item": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)]
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text)
             },
         }
         if children:
@@ -154,7 +163,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "numbered_list_item",
             "numbered_list_item": {
-                "rich_text": [NotionBlockBuilder.rich_text(text)]
+                "rich_text": NotionBlockBuilder.rich_text_chunks(text)
             },
         }
         if children:
@@ -172,7 +181,7 @@ class NotionBlockBuilder:
         block = {
             "object": "block",
             "type": "toggle",
-            "toggle": {"rich_text": [NotionBlockBuilder.rich_text(text)]},
+            "toggle": {"rich_text": NotionBlockBuilder.rich_text_chunks(text)},
         }
         if children:
             block["toggle"]["children"] = children
@@ -187,7 +196,7 @@ class NotionBlockBuilder:
             "image": {"type": "external", "external": {"url": url}},
         }
         if caption:
-            block["image"]["caption"] = [NotionBlockBuilder.rich_text(caption)]
+            block["image"]["caption"] = NotionBlockBuilder.rich_text_chunks(caption)
         return block
 
     @staticmethod
@@ -195,7 +204,7 @@ class NotionBlockBuilder:
         """创建书签 block"""
         block = {"object": "block", "type": "bookmark", "bookmark": {"url": url}}
         if caption:
-            block["bookmark"]["caption"] = [NotionBlockBuilder.rich_text(caption)]
+            block["bookmark"]["caption"] = NotionBlockBuilder.rich_text_chunks(caption)
         return block
 
     @staticmethod
@@ -213,7 +222,7 @@ class NotionBlockBuilder:
             table_rows.append({
                 "type": "table_row",
                 "table_row": {
-                    "cells": [[NotionBlockBuilder.rich_text(cell)] for cell in headers]
+                    "cells": [NotionBlockBuilder.rich_text_chunks(cell) for cell in headers]
                 },
             })
 
@@ -223,7 +232,7 @@ class NotionBlockBuilder:
                 "type": "table_row",
                 "table_row": {
                     "cells": [
-                        [NotionBlockBuilder.rich_text(cell)]
+                        NotionBlockBuilder.rich_text_chunks(cell)
                         for cell in padded_row[:table_width]
                     ]
                 },
@@ -326,6 +335,7 @@ def _text_to_rich_texts(
 ) -> List[Dict[str, Any]]:
     """Convert plain text (possibly containing $...$ inline math) to rich_text objects."""
     rich_texts: List[Dict[str, Any]] = []
+    max_text_length = max(1, min(max_text_length, builder.MAX_TEXT_LENGTH))
     inline_parts = _INLINE_MATH_RE.split(text)
 
     for j, chunk in enumerate(inline_parts):
@@ -344,7 +354,7 @@ def _text_to_rich_texts(
                 cut = remaining.rfind(" ", 0, max_text_length)
                 cut = cut if cut > 0 else max_text_length
                 rich_texts.append(builder.rich_text(remaining[:cut]))
-                remaining = remaining[cut:].lstrip()
+                remaining = remaining[cut:]
 
     return rich_texts
 
