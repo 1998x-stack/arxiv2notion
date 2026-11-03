@@ -20,6 +20,7 @@ from loguru import logger
 
 from config import AppConfig
 from models import PaperData, PaperStatus
+from domain.paper_document import build_paper_document
 from fetch import ArxivApiClient, Ar5ivExtractor
 from process import ReferenceResolver, QwenAnnotator
 from notion import NotionConverter, NotionCreator
@@ -114,6 +115,16 @@ class Ar5ivToNotion:
             if not paper.content:
                 logger.warning("ar5iv extraction failed — using metadata only")
 
+            # Canonical data is saved independently of Notion and LLM results.
+            document = build_paper_document(paper)
+            self.file_manager.save_document(arxiv_id, category, document)
+            logger.info(
+                f"Parse quality: {document.quality.status}; "
+                f"paragraphs={document.quality.paragraph_count}"
+            )
+            if document.quality.status == "unavailable":
+                raise ValueError("Neither arXiv metadata nor usable full text is available")
+
             # 3 + 5 (concurrent). Annotation and reference resolution run at the same time.
             async def _do_annotation() -> list:
                 if not (annotate and self.config.qwen.enabled and paper.content):
@@ -172,6 +183,7 @@ class Ar5ivToNotion:
                     "blocks_created": result.blocks_created,
                     "ref_pages_created": result.children_pages,
                     "annotated_paragraphs": len(annotations),
+                    "parse_quality": document.quality.status,
                 })
             else:
                 paper.status = PaperStatus.FAILED

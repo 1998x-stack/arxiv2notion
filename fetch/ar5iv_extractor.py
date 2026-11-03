@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
 from config import ArxivConfig, CacheConfig
+from domain.paper_document import assess_quality
 from models import (
     Ar5ivContent,
     Section,
@@ -314,14 +315,13 @@ class Ar5ivExtractor:
                     ordered_content.append({"type": "equation", "data": eq.to_dict()})
                     equations.append(eq)
 
-        # Subsections (always collected separately — they appear as <section> children)
+        # Only direct descendant sections belong to this parent. The old
+        # recursive selector flattened grandchildren and duplicated nested text.
         subsections = []
-        for subsection in elem.select("section.ltx_subsection"):
+        for subsection in elem.select("section.ltx_subsection, section.ltx_subsubsection"):
+            if subsection.find_parent("section") is not elem:
+                continue
             sub_data = self._parse_section(subsection, level=level + 1)
-            if sub_data:
-                subsections.append(sub_data)
-        for subsubsection in elem.select("section.ltx_subsubsection"):
-            sub_data = self._parse_section(subsubsection, level=level + 2)
             if sub_data:
                 subsections.append(sub_data)
 
@@ -334,6 +334,7 @@ class Ar5ivExtractor:
             tables=tables,
             equations=equations,
             ordered_content=ordered_content,
+            source_anchor=elem.get("id"),
         )
     
     def _math_to_marker(self, math_node: Tag) -> str:
@@ -627,7 +628,7 @@ class Ar5ivExtractor:
             references = self._extract_references(soup)
             full_text = self._extract_full_text(sections)
             
-            return Ar5ivContent(
+            content = Ar5ivContent(
                 paper_id=paper_id,
                 title=title,
                 authors=authors,
@@ -640,7 +641,11 @@ class Ar5ivExtractor:
                 references=references,
                 full_text=full_text,
             )
-            
+            if assess_quality(content).status == "unavailable":
+                logger.warning(f"ar5iv returned no usable abstract or body: {paper_id}")
+                return None
+            return content
+
         except Exception:
             error_message = format_exception()
             logger.error(f"解析 HTML 失败 {paper_id}: {error_message}")
@@ -666,9 +671,14 @@ class Ar5ivExtractor:
             cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
             cached_data = await load_json(cache_file)
             if cached_data:
-                logger.debug(f"使用缓存: {arxiv_id}")
-                # 重建对象
-                return self._rebuild_content(cached_data)
+                try:
+                    cached_content = self._rebuild_content(cached_data)
+                    if assess_quality(cached_content).cacheable_full_text:
+                        logger.debug(f"使用缓存: {arxiv_id}")
+                        return cached_content
+                    logger.warning(f"Rejecting incomplete cached ar5iv content: {arxiv_id}")
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning(f"Rejecting invalid ar5iv cache for {arxiv_id}: {exc}")
         
         url = build_ar5iv_url(arxiv_id)
         logger.info(f"提取 ar5iv 内容: {arxiv_id}")
@@ -684,7 +694,7 @@ class Ar5ivExtractor:
             
             if content:
                 # 保存到缓存
-                if self.cache_config.enabled:
+                if self.cache_config.enabled and assess_quality(content).cacheable_full_text:
                     cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
                     await save_json(content.to_dict(), cache_file)
                 
@@ -710,6 +720,7 @@ class Ar5ivExtractor:
                 tables=[Table(**t) for t in s.get('tables', [])],
                 equations=[Equation(**e) for e in s.get('equations', [])],
                 ordered_content=s.get('ordered_content', []),
+                source_anchor=s.get("source_anchor"),
             )
         
         return Ar5ivContent(

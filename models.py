@@ -75,6 +75,7 @@ class Equation:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "latex": self.latex,
+            "mathml": self.mathml,
             "label": self.label,
             "inline": self.inline
         }
@@ -91,6 +92,7 @@ class Section:
     tables: List[Table] = field(default_factory=list)
     equations: List[Equation] = field(default_factory=list)
     ordered_content: List[Dict[str, Any]] = field(default_factory=list)
+    source_anchor: Optional[str] = None  # HTML section id when available
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -102,6 +104,7 @@ class Section:
             "tables": [t.to_dict() for t in self.tables],
             "equations": [e.to_dict() for e in self.equations],
             "ordered_content": self.ordered_content,
+            "source_anchor": self.source_anchor,
         }
 
 

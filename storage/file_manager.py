@@ -11,6 +11,7 @@ from typing import List
 from loguru import logger
 
 from models import ArxivMetadata, Ar5ivContent, ParagraphAnnotation, Section
+from domain.paper_document import PaperDocument
 from utils import is_valid_arxiv_id
 
 
@@ -80,6 +81,16 @@ class FileManager:
             json.dumps(content.to_dict(), ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
+
+    def save_document(self, arxiv_id: str, category: str, document: PaperDocument) -> None:
+        """Write the canonical structural snapshot for inspection and recovery."""
+        path = self.get_paper_dir(arxiv_id, category) / "document.json"
+        temp = path.with_suffix(".json.tmp")
+        temp.write_text(
+            json.dumps(document.to_dict(), ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        temp.replace(path)
 
     # ── Annotation persistence ───────────────────────────────────────────────
 
