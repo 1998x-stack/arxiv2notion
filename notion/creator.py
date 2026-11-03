@@ -22,6 +22,8 @@ from models import (
 )
 from notion import NotionConverter
 from notion.validator import validate_notion_blocks
+from notion.durable_sync import DurableNotionWriter
+from storage.import_journal import ImportJournal
 from utils import format_exception, get_category_emoji, truncate_text
 
 
@@ -42,6 +44,8 @@ class NotionCreator:
         config: NotionConfig,
         converter: Optional[NotionConverter] = None,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
+        journal: Optional[ImportJournal] = None,
+        allow_uncertain_retry: bool = False,
     ):
         """
         初始化创建器
@@ -52,11 +56,16 @@ class NotionCreator:
             progress_callback: 进度回调函数
         """
         self.config = config
-        self.client = Client(auth=config.token)
+        # SDK retries are intentionally disabled for durable imports:
+        # pages.create/blocks.append are non-idempotent; our journal decides
+        # which HTTP requests are safe to reattempt after remote read-back.
+        self.client = Client(auth=config.token, retry=False) if journal is not None else Client(auth=config.token)
         self.converter = converter or NotionConverter()
         self.progress_callback = progress_callback
         
         self.stats = ProcessingStats()
+        self.journal = journal
+        self.allow_uncertain_retry = allow_uncertain_retry
     
     def _report_progress(self, message: str, current: int, total: int):
         """报告进度"""
@@ -233,7 +242,21 @@ class NotionCreator:
             blocks = self.converter.convert_paper(paper, annotations=annotations)
             validate_notion_blocks(blocks)
             logger.debug(f"转换完成: {len(blocks)} blocks")
-            
+
+            if self.journal is not None:
+                icon = get_category_emoji(paper.metadata.primary_category) if paper.metadata else "📄"
+                result = DurableNotionWriter(
+                    client=self.client, config=self.config, journal=self.journal,
+                    allow_uncertain_retry=self.allow_uncertain_retry,
+                ).sync_page(
+                    parent_id=parent_id, resource_id=paper.arxiv_id,
+                    kind="paper", title=paper.title, icon=icon, blocks=blocks,
+                )
+                if result.success:
+                    self.stats.created_pages += 1
+                    self.stats.created_blocks += result.blocks_created
+                return result
+
             # 确定图标
             icon = "📄"
             if paper.metadata:
@@ -308,17 +331,30 @@ class NotionCreator:
         
         try:
             blocks = self.converter.create_reference_page_blocks(ref, metadata)
-            
+            validate_notion_blocks(blocks)
+
             icon = "📎"
             if metadata:
                 icon = get_category_emoji(metadata.primary_category)
             
-            result = self._create_page_sync(
-                parent_id,
-                title[:100],  # Notion 标题限制
-                icon,
-                blocks
-            )
+            if self.journal is not None:
+                import hashlib
+                identity = (
+                    ref.arxiv_id or ref.doi or
+                    hashlib.sha256(ref.raw_text.encode("utf-8")).hexdigest()
+                )
+                result = DurableNotionWriter(
+                    client=self.client, config=self.config, journal=self.journal,
+                    allow_uncertain_retry=self.allow_uncertain_retry,
+                ).sync_page(
+                    parent_id=parent_id, resource_id=identity,
+                    kind="reference", title=title[:200],
+                    icon=icon, blocks=blocks,
+                )
+            else:
+                result = self._create_page_sync(
+                    parent_id, title[:100], icon, blocks,
+                )
             
             if result.success:
                 self.stats.created_pages += 1
@@ -374,7 +410,12 @@ class NotionCreator:
         reference_source = paper.resolved_references
         if not reference_source and paper.content:
             reference_source = paper.content.references
-        arxiv_refs = [r for r in reference_source if r.arxiv_id]
+        # One Notion child page per arXiv ID; repeated citations share identity.
+        deduplicated = {}
+        for reference in reference_source:
+            if reference.arxiv_id and reference.arxiv_id not in deduplicated:
+                deduplicated[reference.arxiv_id] = reference
+        arxiv_refs = list(deduplicated.values())
         
         if not arxiv_refs:
             logger.info("没有找到有 arXiv ID 的参考文献")
