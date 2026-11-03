@@ -159,9 +159,9 @@ class PaperCatalog:
             rows = db.execute("""
                 SELECT arxiv_id, title, quality, content_hash
                 FROM papers
-                WHERE arxiv_id LIKE ? ESCAPE '\'
-                   OR title LIKE ? ESCAPE '\'
-                   OR abstract LIKE ? ESCAPE '\'
+                WHERE arxiv_id LIKE ? ESCAPE '!'
+                   OR title LIKE ? ESCAPE '!'
+                   OR abstract LIKE ? ESCAPE '!'
                 ORDER BY updated_at DESC, arxiv_id LIMIT ?
             """, (f"%{escaped}%",)*3 + (limit,)).fetchall()
         return [dict(r) for r in rows]
