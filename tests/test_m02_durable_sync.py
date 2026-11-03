@@ -371,3 +371,30 @@ def test_mismatched_known_page_and_marked_remote_page_is_rejected(
     result = sync(remote, config, journal, count=1)
     assert not result.success
     assert "differs" in result.error
+
+
+
+def test_durable_creator_disables_sdk_hidden_retries(monkeypatch, config, journal):
+    import notion.creator as creator_module
+    received = {}
+
+    def factory(**kwargs):
+        received.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(creator_module, "Client", factory)
+    NotionCreator(config, journal=journal)
+    assert received["retry"] is False
+
+
+def test_legacy_creator_does_not_change_its_sdk_retry_config(monkeypatch, config):
+    import notion.creator as creator_module
+    received = {}
+
+    def factory(**kwargs):
+        received.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(creator_module, "Client", factory)
+    NotionCreator(config)
+    assert "retry" not in received

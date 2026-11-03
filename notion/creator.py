@@ -56,7 +56,10 @@ class NotionCreator:
             progress_callback: 进度回调函数
         """
         self.config = config
-        self.client = Client(auth=config.token)
+        # SDK retries are intentionally disabled for durable imports:
+        # pages.create/blocks.append are non-idempotent; our journal decides
+        # which HTTP requests are safe to reattempt after remote read-back.
+        self.client = Client(auth=config.token, retry=False) if journal is not None else Client(auth=config.token)
         self.converter = converter or NotionConverter()
         self.progress_callback = progress_callback
         

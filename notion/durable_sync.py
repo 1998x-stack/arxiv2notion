@@ -84,7 +84,7 @@ class DurableNotionWriter:
             kwargs: dict[str, Any] = {"block_id": block_id, "page_size": 100}
             if cursor:
                 kwargs["start_cursor"] = cursor
-            response = self.client.blocks.children.list(**kwargs)
+            response = self._rate_limit_call(self.client.blocks.children.list, **kwargs)
             children.extend(response.get("results", []))
             if not response.get("has_more"):
                 break
