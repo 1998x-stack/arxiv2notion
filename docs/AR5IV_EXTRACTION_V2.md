@@ -50,7 +50,7 @@ Priority for recoverable LaTeX:
 2. Semantics annotation with encoding application/x-tex.
 3. Preserve MathML alone when no LaTeX exists; never invent a formula.
 
-Inline mathematics is preserved as dollar-marked text. Display formulas are Equation blocks with raw MathML and optional LaTeX. Equation groups must not be double-counted with their children.
+Inline mathematics uses dollar-marked text when LaTeX exists; when only MathML is present, it is preserved as visible literal XML rather than silently dropped. Display formulas are Equation blocks with raw MathML and optional LaTeX. Equation groups must not be double-counted with their children.
 
 Notion requires renderable LaTeX for Equation blocks. Canonical content can preserve MathML when Notion cannot render the formula. Existing no-silent-loss behavior is intentional.
 
@@ -94,7 +94,7 @@ Document node IDs, duplicate-content handling, source_anchor and content hashes 
 | Official arXiv HTML also available | Current configured ar5iv source only | Ordered, quality-aware HTML provider fallback |
 | Theorems, proofs, lists | Their body paragraphs preserved | Dedicated node types for semantic presentation |
 | Complex algorithms / code listings | Generic text when represented as paragraphs | Typed code and algorithm nodes |
-| MathML without LaTeX | Canonical MathML retained, Notion cannot render | MathML-to-image or carefully validated conversion |
+| MathML without LaTeX | Inline XML visible as text; display MathML retained canonically but Notion cannot render it | MathML-to-image or carefully validated conversion |
 | Cross-references | Visible link text retained | Inline span/link AST with target anchors |
 | Footnotes and margin annotations | Excluded from body traversal | Footnote nodes with backlinks |
 | Multiple figure panels | All image URLs emitted as ordered Figure panels; parent caption on first | Individual subpanel captions and exact grid layout |
