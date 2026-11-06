@@ -373,7 +373,9 @@ class Ar5ivExtractor:
                 latex = ann.get_text().strip()
 
         if not latex:
-            return ""
+            # Preserve evidence rather than silently dropping an inline
+            # MathML-only formula. Notion displays the XML as text.
+            return " [MathML: " + str(math_node) + "] "
 
         display = (math_node.get("display") or "inline").lower()
         return f" $${latex}$$ " if display == "block" else f"${latex}$"
