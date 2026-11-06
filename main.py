@@ -331,7 +331,8 @@ async def main_async(args):
     try:
         config = AppConfig.from_env()
         config.cache.enabled = not args.no_cache
-        config.arxiv.html_source_strategy = getattr(args, "source_strategy", "ar5iv")
+        if getattr(args, "source_strategy", None) is not None:
+            config.arxiv.html_source_strategy = args.source_strategy
         config.reference.create_ref_pages = args.with_refs
         config.reference.search_missing_ids = args.search_refs
         config.sync.allow_uncertain_retry = getattr(args, "retry_uncertain", False)
@@ -461,7 +462,7 @@ def build_parser():
     
     parser.add_argument(
         "--source-strategy",
-        choices=("ar5iv", "multi"), default="ar5iv",
+        choices=("ar5iv", "multi"), default=None,
         help="HTML sources: legacy ar5iv or conservative multi-source audit (opt-in)",
     )
 
