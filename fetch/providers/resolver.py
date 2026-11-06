@@ -10,6 +10,7 @@ from quality.report import QualityReport
 from quality.structural import evaluate
 from quality.source_selector import choose
 from utils import normalize_arxiv_id, is_valid_arxiv_id
+from fetch.providers.identity import check_declared_identity
 
 @dataclass
 class ResolutionResult:
@@ -41,6 +42,7 @@ class MultiSourceResolver:
                 if not candidate.available:
                     failures.append(f"{provider.name}:{candidate.error or 'unavailable'}")
                     continue
+                identity_warnings = check_declared_identity(candidate)
                 parsed = provider.parse(candidate)
                 if parsed is None:
                     failures.append(f"{provider.name}:empty_parsed_article")
@@ -50,6 +52,7 @@ class MultiSourceResolver:
                     paper_id=normalized, content=candidate.html,
                 )
                 document = from_legacy(parsed, source)
+                document.warnings.extend(identity_warnings)
                 report = evaluate(document)
                 entries.append((document, report, candidate, parsed))
             except (ValueError, TypeError, OSError) as exc:
