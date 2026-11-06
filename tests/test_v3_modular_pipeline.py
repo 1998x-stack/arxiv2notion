@@ -223,3 +223,84 @@ def test_golden_metrics_precise_recall_and_diff(tmp_path):
     }))
     loaded = load_golden(manifest, tmp_path)
     assert loaded.labels == golden.labels
+
+
+def test_semantic_roles_roundtrip_to_notion():
+    old = '<div class="ltx_para"><p class="ltx_p">A paragraph with sufficient content.</p></div>'
+    new = (
+        '<div class="ltx_theorem"><p class="ltx_p">Theorem statement.</p></div>'
+        '<div class="ltx_proof"><p class="ltx_p">Proof text.</p></div>'
+        '<div class="ltx_algorithm"><p class="ltx_p">Algorithm steps.</p></div>'
+        '<pre class="ltx_listing">print(1)</pre>'
+        '<div class="ltx_note"><p class="ltx_p">Source footnote.</p></div>'
+    )
+    html = HTML.replace(old, new)
+    parsed = Ar5ivHTMLParser().parse_html(html, "1706.03762")
+    assert parsed
+    roles = [x.get("semantic_role") for x in parsed.sections[0].ordered_content
+             if x["type"] == "para"]
+    assert roles == ["theorem", "proof", "algorithm", "code", "footnote"]
+    source = DocumentSource.from_bytes(
+        provider="ar5iv", url="https://ar5iv.labs.arxiv.org/html/1706.03762",
+        paper_id="1706.03762", content=html.encode()
+    )
+    doc = from_legacy(parsed, source)
+    assert [n.kind for n in doc.nodes if n.kind in roles] == roles
+    assert evaluate(doc).status == "ACCEPTED"
+    types = [block["type"] for block in compile_document(doc).blocks]
+    assert "callout" in types and "code" in types
+
+
+def test_identity_guard_checks_explicit_revision():
+    from fetch.providers.identity import check_declared_identity
+    candidate = SourceCandidate("1706.03762v2", "official_arxiv_html",
+        "https://arxiv.org/html/1706.03762v2", HTML.encode())
+    assert check_declared_identity(candidate)
+    html = HTML.replace("<head>", '<head><meta name="citation_arxiv_id" content="1706.03762v2">')
+    assert check_declared_identity(SourceCandidate(candidate.paper_id,
+        candidate.provider, candidate.url, html.encode())) == []
+    with pytest.raises(ValueError, match="revision"):
+        check_declared_identity(SourceCandidate(candidate.paper_id,
+            candidate.provider, candidate.url,
+            html.replace("1706.03762v2", "1706.03762v3").encode()))
+
+
+def test_provider_provenance_is_saved_in_legacy_document():
+    from models import PaperData
+    from domain.paper_document import build_paper_document
+    result = asyncio.run(MultiSourceResolver([
+        FakeProvider("official_arxiv_html")
+    ]).resolve("1706.03762"))
+    assert result.legacy_content.source_provider == "official_arxiv_html"
+    assert build_paper_document(
+        PaperData(arxiv_id="1706.03762", content=result.legacy_content)
+    ).source == "official_arxiv_html"
+
+
+def test_nano_m04_node_kind_mapping():
+    record = {"schema_version": "1.0", "quality_status": "NOT_EVALUATED",
+       "nodes": [
+           {"id": "s1", "kind": "section", "parent_id": None, "title": "Intro"},
+           {"id": "p1", "kind": "paragraph_text", "parent_id": "s1", "text": "Detail"},
+       ], "equations": [], "assets": [], "citations": [], "relations": []}
+    doc = from_nano_artifact(record, paper_id="1706.03762",
+                             artifact_sha256="a"*64)
+    assert [n.kind for n in doc.nodes] == ["heading", "paragraph"]
+    assert doc.status == "NOT_EVALUATED"
+
+
+def test_v2_atomic_artifact_persistence(tmp_path):
+    from storage.file_manager import FileManager
+    _, doc = prepared()
+    FileManager(base_dir=tmp_path).save_scientific_document(
+        "1706.03762", "deep_learning", doc
+    )
+    dest = tmp_path / "papers/deep_learning/1706.03762/document-v2.json"
+    assert ScientificDocument.from_dict(json.loads(dest.read_text())).content_hash == doc.content_hash
+
+
+def test_cli_source_strategy_requires_opt_in():
+    from main import build_parser
+    assert build_parser().parse_args(["1706.03762"]).source_strategy is None
+    assert build_parser().parse_args(["--source-strategy", "multi",
+                                      "1706.03762"]).source_strategy == "multi"
