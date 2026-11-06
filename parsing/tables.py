@@ -1,4 +1,5 @@
 """LaTeXML/ar5iv semantic parsing components, preserving historical extractor API."""
+from __future__ import annotations
 from typing import Optional, List
 from bs4 import Tag, BeautifulSoup
 from models import Table

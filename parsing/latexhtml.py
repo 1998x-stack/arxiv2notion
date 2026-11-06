@@ -1,4 +1,5 @@
 """LaTeXML/ar5iv semantic parsing components, preserving historical extractor API."""
+from __future__ import annotations
 import re
 from datetime import datetime
 from urllib.parse import urljoin, urlsplit
