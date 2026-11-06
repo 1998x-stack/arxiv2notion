@@ -56,7 +56,7 @@ Notion requires renderable LaTeX for Equation blocks. Canonical content can pres
 
 ### Figures, tables, bibliography
 
-A figure carries source, caption, alternative text, and source anchor. Image URLs are resolved relative to source HTML and only HTTPS URLs are exported; an unsafe URL is replaced with the empty string. For complex multi-panel figures, full panel fidelity requires a future typed schema.
+A figure carries source, caption, alternative text, and source anchor. Image URLs are resolved relative to source HTML and only HTTPS URLs are exported; an unsafe URL is replaced with the empty string. Multi-image figures emit a panel per image, with the parent caption on the first panel and stable source-anchor suffixes for subsequent panels. Subfigure-level captions and exact panel layout remain a future schema extension.
 
 Tables capture the nearest caption, headers, and data rows, excluding rows of nested tabulars. Colspan and rowspan placeholders preserve a rectangular content matrix, but **not merged-cell presentation**. The original HTML/PDF remains authoritative for layout.
 
@@ -77,7 +77,7 @@ Document node IDs, duplicate-content handling, source_anchor and content hashes 
 - Validate modern and old-format arXiv IDs **before** filesystem cache or URL use.
 - Respect the configured ar5iv base URL.
 - Use bounded aiohttp calls; total response payload max 20 MiB, HTML/XHTML only.
-- Do not follow HTTP redirects to unknown hosts.
+- Do not follow HTTP redirects to unknown hosts; reject malformed links and private-network media URLs.
 - Retry only 429, 500, 502, 503, 504, timeout and client transport errors.
 - Use bounded exponential delays and honor numeric Retry-After when within budget.
 - Treat an excessive Retry-After as deferral, **not** permission to retry early.
@@ -97,7 +97,7 @@ Document node IDs, duplicate-content handling, source_anchor and content hashes 
 | MathML without LaTeX | Canonical MathML retained, Notion cannot render | MathML-to-image or carefully validated conversion |
 | Cross-references | Visible link text retained | Inline span/link AST with target anchors |
 | Footnotes and margin annotations | Excluded from body traversal | Footnote nodes with backlinks |
-| Multiple figure panels | Legacy single-image figure parser | Panel-wise Figure objects and captions |
+| Multiple figure panels | All image URLs emitted as ordered Figure panels; parent caption on first | Individual subpanel captions and exact grid layout |
 | Merged cells | Expanded rectangular placeholders | Explicit span metadata |
 | Nested section order | Child sections after parent's body | Mixed ordered child block stream |
 | Citations | Heuristic DOI/arXiv extraction | Provenance-aware citation graph with confidence |
