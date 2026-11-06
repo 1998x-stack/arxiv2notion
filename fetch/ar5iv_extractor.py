@@ -703,8 +703,11 @@ class Ar5ivExtractor:
             def absolute(src):
                 if not src:
                     return ""
-                resolved = urljoin(base_url, src)
-                parts = urlsplit(resolved)
+                try:
+                    resolved = urljoin(base_url, src)
+                    parts = urlsplit(resolved)
+                except ValueError:
+                    return ""
                 if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
                     return ""
                 if parts.hostname == "localhost" or parts.hostname.endswith((".localhost", ".local")):
