@@ -22,6 +22,8 @@ from config import AppConfig
 from models import PaperData, PaperStatus
 from domain.paper_document import build_paper_document
 from fetch import ArxivApiClient, Ar5ivExtractor
+from fetch.providers import (Ar5ivProvider, OfficialArxivHTMLProvider,
+                             MultiSourceResolver)
 from process import ReferenceResolver, QwenAnnotator
 from notion import NotionConverter, NotionCreator
 from storage import FileManager
@@ -61,6 +63,13 @@ class Ar5ivToNotion:
 
         self.arxiv_client = ArxivApiClient(config=config.arxiv, cache_config=config.cache)
         self.ar5iv_extractor = Ar5ivExtractor(config=config.arxiv, cache_config=config.cache)
+        if config.arxiv.html_source_strategy not in ("ar5iv", "multi"):
+            raise ValueError("Unknown ARXIV_HTML_SOURCE_STRATEGY")
+        self.source_resolver = (
+            MultiSourceResolver([Ar5ivProvider(config.arxiv),
+                                 OfficialArxivHTMLProvider(config.arxiv)])
+            if config.arxiv.html_source_strategy == "multi" else None
+        )
         self.ref_resolver = ReferenceResolver(config=config.reference, arxiv_client=self.arxiv_client)
 
         # File manager and annotator (new)
@@ -122,9 +131,18 @@ class Ar5ivToNotion:
 
             # 2. Extract ar5iv content
             paper.status = PaperStatus.PARSING
-            paper.content = await self.ar5iv_extractor.extract_paper(arxiv_id, use_cache)
+            if self.source_resolver is None:
+                paper.content = await self.ar5iv_extractor.extract_paper(arxiv_id, use_cache)
+            else:
+                resolution = await self.source_resolver.resolve(arxiv_id)
+                if resolution.status == "ACCEPTED":
+                    paper.content = resolution.legacy_content
+                else:
+                    logger.warning(
+                        f"Multi-source result {resolution.status}; not auto-importing unverified HTML"
+                    )
             if not paper.content:
-                logger.warning("ar5iv extraction failed — using metadata only")
+                logger.warning("HTML extraction unavailable or ambiguous — using metadata only")
 
             # Canonical data is saved independently of Notion and LLM results.
             document = build_paper_document(paper)
@@ -313,6 +331,7 @@ async def main_async(args):
     try:
         config = AppConfig.from_env()
         config.cache.enabled = not args.no_cache
+        config.arxiv.html_source_strategy = getattr(args, "source_strategy", "ar5iv")
         config.reference.create_ref_pages = args.with_refs
         config.reference.search_missing_ids = args.search_refs
         config.sync.allow_uncertain_retry = getattr(args, "retry_uncertain", False)
@@ -440,6 +459,12 @@ def build_parser():
         help="最大参考文献子页面数（默认 20）"
     )
     
+    parser.add_argument(
+        "--source-strategy",
+        choices=("ar5iv", "multi"), default="ar5iv",
+        help="HTML sources: legacy ar5iv or conservative multi-source audit (opt-in)",
+    )
+
     parser.add_argument(
         "--no-cache",
         action="store_true",

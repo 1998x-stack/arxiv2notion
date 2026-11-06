@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from domain.scientific_document_v2 import ScientificDocument
+from models import Ar5ivContent
 from domain.provenance import DocumentSource
 from adapters.legacy_to_v2 import from_legacy
 from fetch.providers.base import Provider, SourceCandidate
@@ -15,6 +16,7 @@ class ResolutionResult:
     status: str
     document: ScientificDocument | None
     candidate: SourceCandidate | None
+    legacy_content: Ar5ivContent | None = None
     reports: list[QualityReport] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
@@ -49,15 +51,16 @@ class MultiSourceResolver:
                 )
                 document = from_legacy(parsed, source)
                 report = evaluate(document)
-                entries.append((document, report, candidate))
+                entries.append((document, report, candidate, parsed))
             except (ValueError, TypeError, OSError) as exc:
                 failures.append(f"{provider.name}:{type(exc).__name__}")
-        selected = choose([(document, report) for document, report, _ in entries])
+        selected = choose([(document, report) for document, report, _, _ in entries])
         if selected.selected_index is not None:
-            document, _, candidate = entries[selected.selected_index]
+            document, _, candidate, parsed = entries[selected.selected_index]
         else:
-            document = candidate = None
+            document = candidate = parsed = None
         return ResolutionResult(
             status=selected.status, document=document, candidate=candidate,
-            reports=[report for _, report, _ in entries], failures=failures,
+            legacy_content=parsed,
+            reports=[report for _, report, _, _ in entries], failures=failures,
         )
