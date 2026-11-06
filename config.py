@@ -43,6 +43,7 @@ class ArxivConfig:
     """arXiv API 配置"""
     base_url: str = "http://export.arxiv.org/api/query"
     ar5iv_base_url: str = "https://ar5iv.labs.arxiv.org/html"
+    html_source_strategy: str = "ar5iv"  # ar5iv (default) | multi (opt-in review)
     request_delay: float = 3.0  # arXiv 要求最少 3 秒间隔
     max_retries: int = 3
     timeout: int = 60
@@ -156,7 +157,8 @@ class AppConfig:
         return cls(
             notion=NotionConfig.from_env(),
             arxiv=ArxivConfig(
-                request_delay=float(os.getenv("ARXIV_REQUEST_DELAY", "3.0"))
+                request_delay=float(os.getenv("ARXIV_REQUEST_DELAY", "3.0")),
+                html_source_strategy=os.getenv("ARXIV_HTML_SOURCE_STRATEGY", "ar5iv")
             ),
             cache=CacheConfig(
                 enabled=os.getenv("CACHE_ENABLED", "true").lower() == "true",

@@ -183,6 +183,7 @@ class Ar5ivContent:
     references: List[Reference] = field(default_factory=list)
     full_text: str = ""
     extracted_at: datetime = field(default_factory=datetime.now)
+    source_provider: str = "ar5iv"
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -197,7 +198,8 @@ class Ar5ivContent:
             "equations": [e.to_dict() for e in self.equations],
             "references": [r.to_dict() for r in self.references],
             "full_text": self.full_text,
-            "extracted_at": self.extracted_at.isoformat()
+            "extracted_at": self.extracted_at.isoformat(),
+            "source_provider": self.source_provider
         }
 
 

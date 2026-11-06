@@ -59,6 +59,23 @@ See [ar5iv extraction architecture and fidelity limitations](docs/AR5IV_EXTRACTI
 and run `python -m pytest tests/test_ar5iv_semantics_v2.py -q` for isolated
 regression tests.
 
+## V3 modular architecture (experimental)
+
+The [V3 modular refactor](docs/V3_MODULAR_REFACTOR.md) separates the
+previous monolithic ar5iv extractor into parsing mixins, adds source
+providers, ScientificDocument V2, strict Notion compilation and independent
+quality/benchmark modules. The existing `main.py` flow remains compatible.
+
+- Default: `python main.py 1706.03762` uses the existing ar5iv path.
+- Opt-in comparison: `python main.py 1706.03762 --source-strategy multi`
+  audits ar5iv and official arXiv HTML, abstaining on conflicting sources.
+- `document-v2.json` records selected-source provenance in opt-in mode.
+- nano-ar5iv integration currently accepts a trusted local M04 artifact with
+  a verified hash, not arbitrary TeX execution or an unavailable HTTP API.
+
+Structural acceptance is **not** proof of scientific fidelity. Live provider,
+gold-corpus and Notion E2E verification remain separate certification tasks.
+
 ## Quick Start
 
 ```bash
