@@ -10,7 +10,10 @@ def evaluate(document: ScientificDocument) -> QualityReport:
     counts = Counter(node.kind for node in document.nodes)
     failures = []
     warnings = list(document.warnings) + formula_warnings(document)
-    if not counts["paragraph"]:
+    body_count = sum(counts[kind] for kind in (
+        "paragraph", "theorem", "proof", "algorithm", "code", "footnote"
+    ))
+    if not body_count:
         failures.append("no_body_paragraphs")
     if not counts["heading"]:
         warnings.append("no_section_headings")
@@ -21,7 +24,7 @@ def evaluate(document: ScientificDocument) -> QualityReport:
               else "ACCEPTED")
     return QualityReport(
         status=status, provider=document.source.provider,
-        section_count=counts["heading"], paragraph_count=counts["paragraph"],
+        section_count=counts["heading"], paragraph_count=body_count,
         equation_count=counts["equation"], figure_count=counts["figure"],
         table_count=counts["table"], warnings=tuple(dict.fromkeys(warnings)),
         hard_failures=tuple(failures),

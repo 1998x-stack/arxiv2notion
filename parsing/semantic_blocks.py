@@ -58,11 +58,14 @@ class SemanticBlocksMixin:
         tables = []
         equations = []
 
-        def emit(kind: str, value: Any) -> None:
+        def emit(kind: str, value: Any, role: str | None = None) -> None:
             if kind == "para":
                 if value:
                     paragraphs.append(value)
-                    ordered_content.append({"type": "para", "data": value})
+                    item = {"type": "para", "data": value}
+                    if role:
+                        item["semantic_role"] = role
+                    ordered_content.append(item)
             elif kind == "figure" and value:
                 figures.append(value)
                 ordered_content.append({"type": "figure", "data": value.to_dict()})
@@ -73,7 +76,7 @@ class SemanticBlocksMixin:
                 equations.append(value)
                 ordered_content.append({"type": "equation", "data": value.to_dict()})
 
-        def visit(node: Tag) -> None:
+        def visit(node: Tag, role: str | None = None) -> None:
             if node is not elem and node.name == "section":
                 return
             if node.name in ("script", "style", "nav", "footer"):
@@ -81,11 +84,23 @@ class SemanticBlocksMixin:
             classes = set(node.get("class") or ())
             if node.get("aria-hidden") == "true" or classes.intersection(
                 {"ltx_title", "ltx_bibliography", "ltx_abstract",
-                 "ltx_authors", "ltx_caption", "ltx_note"}
+                 "ltx_authors", "ltx_caption"}
             ):
                 return
+            semantic_classes = {
+                "ltx_theorem": "theorem", "ltx_proof": "proof",
+                "ltx_algorithm": "algorithm", "ltx_listing": "code",
+                "ltx_verbatim": "code", "ltx_note": "footnote",
+            }
+            for token, semantic_role in semantic_classes.items():
+                if token in classes:
+                    role = semantic_role
+                    break
+            if node.name == "pre":
+                emit("para", node.get_text().strip(), role="code")
+                return
             if node.name == "p":
-                emit("para", self._extract_para_with_math(node))
+                emit("para", self._extract_para_with_math(node), role=role)
                 return
             if node.name == "figure" or classes.intersection({"ltx_figure", "ltx_table"}):
                 table = node.select_one("table.ltx_tabular")
@@ -112,11 +127,11 @@ class SemanticBlocksMixin:
                 return
             # List items without ltx_p still contain meaningful text.
             if node.name == "li" and not node.find("p"):
-                emit("para", self._extract_para_with_math(node))
+                emit("para", self._extract_para_with_math(node), role=role)
                 return
             for child in node.children:
                 if isinstance(child, Tag):
-                    visit(child)
+                    visit(child, role=role)
 
         visit(elem)
 
