@@ -6,7 +6,9 @@ ar5iv 内容提取模块
 import asyncio
 import re
 from urllib.parse import urljoin, urlsplit
-from datetime import datetime
+from ipaddress import ip_address
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 import aiohttp
@@ -125,7 +127,13 @@ class Ar5ivExtractor:
                         try:
                             retry_after = max(0.0, float(value))
                         except ValueError:
-                            retry_after = None
+                            try:
+                                until = parsedate_to_datetime(value)
+                                if until.tzinfo is None:
+                                    until = until.replace(tzinfo=timezone.utc)
+                                retry_after = max(0.0, (until - datetime.now(timezone.utc)).total_seconds())
+                            except (ValueError, TypeError, OverflowError):
+                                retry_after = None
                     logger.warning(f"Transient ar5iv HTTP {status}, attempt {attempt + 1}: {url}")
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 logger.warning(f"Transient ar5iv fetch error ({type(exc).__name__}): {url}")
@@ -293,7 +301,8 @@ class Ar5ivExtractor:
                 if table:
                     emit("table", self._parse_table(table))
                 elif node.select_one("img"):
-                    emit("figure", self._parse_figure(node))
+                    for figure in self._parse_figure_panels(node):
+                        emit("figure", figure)
                 return
             if node.name == "table" and "ltx_tabular" in classes:
                 emit("table", self._parse_table(node))
@@ -440,6 +449,25 @@ class Ar5ivExtractor:
             label=fig.get("id"),
         )
 
+    def _parse_figure_panels(self, fig: Tag) -> List[Figure]:
+        """Split multi-image figures into ordered panels without losing images.
+
+        The first panel retains the parent caption/anchor for compatibility.
+        Additional panels have stable suffixes derived from the same anchor.
+        """
+        first = self._parse_figure(fig)
+        if first is None:
+            return []
+        result = [first]
+        for index, image in enumerate(fig.select("img")[1:], start=2):
+            result.append(Figure(
+                src=image.get("src") or image.get("data-src") or "",
+                alt=image.get("alt"),
+                caption=None,
+                label=(f"{fig.get('id')}:panel{index}" if fig.get("id") else None),
+            ))
+        return result
+
     def _parse_table(self, table: Tag) -> Optional[Table]:
         """Parse only rows of this table, excluding nested tabulars.
 
@@ -525,9 +553,9 @@ class Ar5ivExtractor:
         figures = []
         
         for fig in soup.select("figure.ltx_figure"):
-            figure = self._parse_figure(fig)
-            if figure and figure not in figures:
-                figures.append(figure)
+            for figure in self._parse_figure_panels(fig):
+                if figure not in figures:
+                    figures.append(figure)
         
         return figures
     
@@ -677,7 +705,16 @@ class Ar5ivExtractor:
                     return ""
                 resolved = urljoin(base_url, src)
                 parts = urlsplit(resolved)
-                return resolved if parts.scheme == "https" and parts.hostname else ""
+                if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+                    return ""
+                if parts.hostname == "localhost" or parts.hostname.endswith((".localhost", ".local")):
+                    return ""
+                try:
+                    if not ip_address(parts.hostname).is_global:
+                        return ""
+                except ValueError:
+                    pass  # DNS name, not an IP literal
+                return resolved
             for figure in figures:
                 figure.src = absolute(figure.src)
             def normalize_sections(items):
