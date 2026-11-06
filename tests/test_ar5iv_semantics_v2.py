@@ -286,3 +286,12 @@ def test_legacy_cache_triggers_fresh_parse_and_versioned_write(tmp_path, monkeyp
     assert content and content.sections[0].title == "Introduction"
     assert [event[0] for event in calls] == ["fetch", "save"]
     assert calls[1][1]["_extractor_version"] == 2
+
+
+def test_mathml_only_inline_formula_is_not_silently_removed():
+    html = PAPER_HTML.replace('alttext="x+y"', "")
+    paper = Ar5ivExtractor().parse_html(html, "1706.03762")
+    assert paper
+    paragraph = paper.sections[0].paragraphs[1]
+    assert "[MathML:" in paragraph
+    assert "<math" in paragraph
