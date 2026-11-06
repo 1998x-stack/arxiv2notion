@@ -19,8 +19,10 @@ def require_external_media_url(url: str) -> str:
     if hostname == "localhost" or hostname.endswith((".localhost", ".local")):
         raise UnsafeMediaURL("Local media host is forbidden")
     try:
-        if not ip_address(hostname).is_global:
-            raise UnsafeMediaURL("Private or reserved network address")
+        address = ip_address(hostname)
     except ValueError:
-        pass  # Ordinary DNS name, not an IP address literal.
+        pass  # Ordinary DNS name, not an IP literal.
+    else:
+        if not address.is_global:
+            raise UnsafeMediaURL("Private or reserved network address")
     return url
