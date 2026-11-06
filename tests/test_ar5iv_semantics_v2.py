@@ -226,3 +226,63 @@ def test_invalid_paper_id_fails_before_network_and_cache(tmp_path):
                                config=ArxivConfig(request_delay=0))
     assert asyncio.run(extractor.extract_paper("../../../../private")) is None
     assert extractor.failure_count == 1
+
+
+def test_multi_panel_figures_keep_both_images_and_one_caption():
+    html = """
+    <section class="ltx_section"><h2 class="ltx_title">Panels</h2>
+      <figure class="ltx_figure" id="F2">
+        <div class="ltx_flex_figure">
+          <img src="/html/1706.03762/left.svg" alt="left"/>
+          <img src="/html/1706.03762/right.svg" alt="right"/>
+        </div>
+        <figcaption class="ltx_caption">Figure 2: Two panels</figcaption>
+      </figure>
+      <p class="ltx_p">After panels.</p>
+    </section>
+    """
+    paper = Ar5ivExtractor().parse_html(html, "1706.03762")
+    assert paper
+    assert len(paper.figures) == 2
+    assert [x.label for x in paper.figures] == ["F2", "F2:panel2"]
+    assert [x.caption for x in paper.figures] == ["Two panels", None]
+    assert paper.figures[1].src.endswith("/html/1706.03762/right.svg")
+    assert [x["type"] for x in paper.sections[0].ordered_content] == [
+        "figure", "figure", "para"
+    ]
+
+
+def test_private_network_media_hosts_do_not_escape():
+    markup = PAPER_HTML.replace(
+        "/html/1706.03762/fig1.svg", "https://127.0.0.1/private.png"
+    )
+    paper = Ar5ivExtractor().parse_html(markup, "1706.03762")
+    assert paper and paper.figures[0].src == ""
+
+
+def test_legacy_cache_triggers_fresh_parse_and_versioned_write(tmp_path, monkeypatch):
+    from config import CacheConfig
+    extractor = Ar5ivExtractor(config=ArxivConfig(request_delay=0),
+                               cache_config=CacheConfig(cache_dir=tmp_path))
+    calls = []
+
+    async def stale_load(path):
+        return {"paper_id": "1706.03762", "title": "old",
+                "abstract": "old abstract",
+                "sections": [{"title": "Old", "paragraphs": ["stale body"]}]}
+
+    async def record_save(value, path):
+        calls.append(("save", value, path))
+
+    async def fake_fetch(session, url, retry_count=0):
+        calls.append(("fetch", url))
+        return PAPER_HTML
+
+    monkeypatch.setattr("fetch.ar5iv_extractor.load_json", stale_load)
+    monkeypatch.setattr("fetch.ar5iv_extractor.save_json", record_save)
+    monkeypatch.setattr(extractor, "_fetch_page", fake_fetch)
+
+    content = asyncio.run(extractor.extract_paper("1706.03762"))
+    assert content and content.sections[0].title == "Introduction"
+    assert [event[0] for event in calls] == ["fetch", "save"]
+    assert calls[1][1]["_extractor_version"] == 2
