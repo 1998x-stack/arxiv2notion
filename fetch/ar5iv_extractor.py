@@ -1,49 +1,27 @@
-"""
-ar5iv 内容提取模块
-职责：从 ar5iv 页面提取论文完整内容
-遵循 CleanRL 设计原则：单一职责、显式依赖、易于测试
+"""Network/cache compatibility boundary for ar5iv HTML.
+
+Semantic extraction lives under parsing/. This class preserves the public
+Ar5ivExtractor import path used by existing application code and tests.
 """
 import asyncio
-import re
-from urllib.parse import urljoin, urlsplit
-from ipaddress import ip_address
-from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from email.utils import parsedate_to_datetime
+from typing import Optional, Dict, Any
 
 import aiohttp
-from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
 from config import ArxivConfig, CacheConfig
 from domain.paper_document import assess_quality
-from models import (
-    Ar5ivContent,
-    Section,
-    Figure,
-    Table,
-    Equation,
-    Reference,
-)
-from utils import (
-    save_json,
-    load_json,
-    build_ar5iv_url,
-    clean_text,
-    truncate_text,
-    format_exception,
-    extract_arxiv_ids,
-    normalize_arxiv_id,
-    is_valid_arxiv_id,
-)
-
+from models import Ar5ivContent, Section, Figure, Table, Equation, Reference
+from parsing.latexhtml import Ar5ivHTMLParser
+from utils import (save_json, load_json, truncate_text,
+                   normalize_arxiv_id, is_valid_arxiv_id)
 
 EXTRACTOR_CACHE_VERSION = 2
 MAX_HTML_BYTES = 20 * 1024 * 1024
 
 
-
-from parsing.latexhtml import Ar5ivHTMLParser
 
 class Ar5ivExtractor(Ar5ivHTMLParser):
     """
