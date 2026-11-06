@@ -47,6 +47,7 @@ class MultiSourceResolver:
                 if parsed is None:
                     failures.append(f"{provider.name}:empty_parsed_article")
                     continue
+                parsed.source_provider = provider.name
                 source = DocumentSource.from_bytes(
                     provider=provider.name, url=candidate.url,
                     paper_id=normalized, content=candidate.html,

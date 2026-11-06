@@ -13,6 +13,7 @@ from loguru import logger
 
 from models import ArxivMetadata, Ar5ivContent, ParagraphAnnotation, Section
 from domain.paper_document import PaperDocument
+from domain.scientific_document_v2 import ScientificDocument
 from utils import is_valid_arxiv_id
 
 
@@ -93,6 +94,19 @@ class FileManager:
         temp = path.with_suffix(".json.tmp")
         temp.write_text(
             json.dumps(document.to_dict(), ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        temp.replace(path)
+
+    def save_scientific_document(
+        self, arxiv_id: str, category: str, document: ScientificDocument,
+    ) -> None:
+        """Atomically persist source-bound IR V2 with its SHA256 evidence."""
+        document.validate()
+        path = self.get_paper_dir(arxiv_id, category) / "document-v2.json"
+        temp = path.with_suffix(".json.tmp")
+        temp.write_text(
+            json.dumps(document.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         temp.replace(path)

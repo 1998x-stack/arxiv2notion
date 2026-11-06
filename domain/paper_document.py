@@ -243,7 +243,7 @@ def build_paper_document(paper: PaperData) -> PaperDocument:
     return PaperDocument(
         SCHEMA_VERSION, paper.arxiv_id, base_id, revision, metadata,
         tuple(nodes), references, quality, _digest(hash_material),
-        "ar5iv" if paper.content else "arxiv_metadata", paper.title,
+        getattr(paper.content, "source_provider", "ar5iv") if paper.content else "arxiv_metadata", paper.title,
     )
 
 

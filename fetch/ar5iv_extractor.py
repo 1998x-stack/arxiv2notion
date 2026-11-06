@@ -223,7 +223,8 @@ class Ar5ivExtractor(Ar5ivHTMLParser):
             equations=[Equation(**e) for e in data.get('equations', [])],
             references=[Reference(**r) for r in data.get('references', [])],
             full_text=data.get('full_text', ''),
-            extracted_at=datetime.fromisoformat(data['extracted_at']) if isinstance(data.get('extracted_at'), str) else datetime.now()
+            extracted_at=datetime.fromisoformat(data['extracted_at']) if isinstance(data.get('extracted_at'), str) else datetime.now(),
+            source_provider=data.get('source_provider', 'ar5iv')
         )
 
     def get_stats(self) -> Dict[str, int]:
