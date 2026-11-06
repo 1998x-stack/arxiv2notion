@@ -5,8 +5,10 @@ ar5iv 内容提取模块
 """
 import asyncio
 import re
-from urllib.parse import urljoin
-from datetime import datetime
+from urllib.parse import urljoin, urlsplit
+from ipaddress import ip_address
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 import aiohttp
@@ -31,7 +33,13 @@ from utils import (
     truncate_text,
     format_exception,
     extract_arxiv_ids,
+    normalize_arxiv_id,
+    is_valid_arxiv_id,
 )
+
+
+EXTRACTOR_CACHE_VERSION = 2
+MAX_HTML_BYTES = 20 * 1024 * 1024
 
 
 class Ar5ivExtractor:
@@ -67,60 +75,80 @@ class Ar5ivExtractor:
         self,
         session: aiohttp.ClientSession,
         url: str,
-        retry_count: int = 0
+        retry_count: int = 0,
     ) -> Optional[str]:
-        """
-        获取页面 HTML
-        
-        Args:
-            session: aiohttp 会话
-            url: 页面 URL
-            retry_count: 当前重试次数
-            
-        Returns:
-            HTML 内容或 None
+        """Fetch bounded HTML with retry on transient errors, never on 404/410.
+
+        No recursive retry or unconditional 120-second rate-limit sleep. An
+        oversized Retry-After is respected by failing this attempt rather
+        than hitting the upstream service earlier than requested.
         """
         headers = {
             "User-Agent": self.user_agent,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept": "text/html,application/xhtml+xml;q=0.9",
             "Accept-Language": "en-US,en;q=0.5",
         }
-        
-        try:
-            timeout = aiohttp.ClientTimeout(total=self.config.timeout)
-            async with session.get(url, headers=headers, timeout=timeout) as response:
-                if response.status == 200:
-                    content = await response.read()
-                    try:
-                        return content.decode('utf-8')
-                    except UnicodeDecodeError:
-                        return content.decode('utf-8', errors='replace')
-                        
-                elif response.status == 404:
-                    logger.warning(f"论文不存在于 ar5iv: {url}")
-                    return None
-                    
-                elif response.status == 429:
-                    wait_time = 120 * (retry_count + 1)
-                    logger.warning(f"速率限制，等待 {wait_time} 秒: {url}")
-                    await asyncio.sleep(wait_time)
-                    if retry_count < self.config.max_retries:
-                        return await self._fetch_page(session, url, retry_count + 1)
-                else:
-                    logger.warning(f"HTTP {response.status}: {url}")
-                    
-        except asyncio.TimeoutError:
-            logger.warning(f"请求超时: {url}")
-            if retry_count < self.config.max_retries:
-                await asyncio.sleep(10 * (retry_count + 1))
-                return await self._fetch_page(session, url, retry_count + 1)
-                
-        except Exception:
-            error_message = format_exception()
-            logger.error(f"请求失败 {url}: {error_message}")
-        
+        max_attempts = max(0, self.config.max_retries) + 1
+        for attempt in range(retry_count, max_attempts):
+            retry_after = None
+            try:
+                timeout = aiohttp.ClientTimeout(total=self.config.timeout)
+                async with session.get(
+                    url, headers=headers, timeout=timeout, allow_redirects=False
+                ) as response:
+                    status = response.status
+                    if status == 200:
+                        media_type = response.headers.get("Content-Type", "").lower()
+                        if media_type and not any(
+                            kind in media_type for kind in ("text/html", "application/xhtml+xml")
+                        ):
+                            logger.warning(f"Unexpected ar5iv content type {media_type}: {url}")
+                            return None
+                        if response.content_length is not None and response.content_length > MAX_HTML_BYTES:
+                            logger.warning(f"ar5iv HTML exceeds byte limit: {url}")
+                            return None
+                        chunks = []
+                        size = 0
+                        async for chunk in response.content.iter_chunked(64 * 1024):
+                            size += len(chunk)
+                            if size > MAX_HTML_BYTES:
+                                logger.warning(f"ar5iv HTML exceeds byte limit while streaming: {url}")
+                                return None
+                            chunks.append(chunk)
+                        return b"".join(chunks).decode("utf-8", errors="replace")
+                    if status in (404, 410):
+                        logger.info(f"ar5iv has no HTML for paper: {url} ({status})")
+                        return None
+                    if status not in (429, 500, 502, 503, 504):
+                        logger.warning(f"Unexpected ar5iv HTTP {status}: {url}")
+                        return None
+                    value = response.headers.get("Retry-After")
+                    if value:
+                        try:
+                            retry_after = max(0.0, float(value))
+                        except ValueError:
+                            try:
+                                until = parsedate_to_datetime(value)
+                                if until.tzinfo is None:
+                                    until = until.replace(tzinfo=timezone.utc)
+                                retry_after = max(0.0, (until - datetime.now(timezone.utc)).total_seconds())
+                            except (ValueError, TypeError, OverflowError):
+                                retry_after = None
+                    logger.warning(f"Transient ar5iv HTTP {status}, attempt {attempt + 1}: {url}")
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                logger.warning(f"Transient ar5iv fetch error ({type(exc).__name__}): {url}")
+
+            if attempt + 1 >= max_attempts:
+                break
+            if retry_after is not None and retry_after > 60:
+                logger.warning(f"Retry-After exceeds 60s budget; deferring paper: {url}")
+                break
+            delay = retry_after if retry_after is not None else min(2 ** attempt * 3, 30)
+            await asyncio.sleep(delay)
+
         return None
-    
+
+
     def _extract_title(self, soup: BeautifulSoup) -> str:
         """提取论文标题"""
         # 方法1: ltx_title 类
@@ -204,128 +232,112 @@ class Ar5ivExtractor:
         return sections
     
     def _parse_section(self, elem: Tag, level: int = 2) -> Optional[Section]:
+        """Parse only this section's own body, preserving nested container order.
+
+        LaTeXML wraps content in ltx_para, theorem, proof, lists and other
+        intermediate containers. Descend into those, but stop at child
+        sections and at every emitted semantic block to prevent duplicates.
         """
-        递归解析章节
-        
-        Args:
-            elem: 章节元素
-            level: 当前层级
-            
-        Returns:
-            Section 对象或 None
-        """
-        # 提取标题
-        title_elem = None
-        for h_level in range(1, 7):
-            title_elem = elem.select_one(f"h{h_level}.ltx_title")
-            if title_elem:
-                break
-        
-        if not title_elem:
-            title_elem = elem.select_one(".ltx_title")
-        
-        if not title_elem:
+        title_elem = next(
+            (candidate for candidate in elem.select(".ltx_title")
+             if candidate.find_parent("section") is elem),
+            None,
+        )
+        if title_elem is None:
+            title_elem = next(
+                (candidate for candidate in elem.find_all(re.compile(r"^h[1-6]$"))
+                 if candidate.find_parent("section") is elem),
+                None,
+            )
+        if title_elem is None:
             return None
-        
-        # 移除标签号
-        for tag in title_elem.select(".ltx_tag"):
+
+        # Work on a clone: deleting section-number tags must not modify the
+        # document DOM used by other extraction passes.
+        title_copy = BeautifulSoup(str(title_elem), "lxml")
+        for tag in title_copy.select(".ltx_tag"):
             tag.decompose()
-        
-        title = clean_text(title_elem.get_text())
-        
-        # Bibliography is parsed separately; keep appendices in the section tree.
-        if re.match(r"^(references|bibliography)\b", title, re.I):
+        title = clean_text(title_copy.get_text(" ", strip=True))
+        if not title or re.match(r"^(references|bibliography)\b", title, re.I):
             return None
-        
-        # Collect content in document order by iterating direct children
+
         ordered_content = []
         paragraphs = []
         figures = []
         tables = []
         equations = []
 
-        for child in elem.children:
-            if not hasattr(child, "name") or not child.name:
-                continue
-            classes = child.get("class") or []
+        def emit(kind: str, value: Any) -> None:
+            if kind == "para":
+                if value:
+                    paragraphs.append(value)
+                    ordered_content.append({"type": "para", "data": value})
+            elif kind == "figure" and value:
+                figures.append(value)
+                ordered_content.append({"type": "figure", "data": value.to_dict()})
+            elif kind == "table" and value:
+                tables.append(value)
+                ordered_content.append({"type": "table", "data": value.to_dict()})
+            elif kind == "equation" and value:
+                equations.append(value)
+                ordered_content.append({"type": "equation", "data": value.to_dict()})
 
-            if "ltx_para" in classes:
-                # Paragraph container — may hold multiple <p class="ltx_p">
-                for para in child.find_all("p", class_="ltx_p"):
-                    text = self._extract_para_with_math(para)
-                    if text and len(text) > 10:
-                        ordered_content.append({"type": "para", "data": text})
-                        paragraphs.append(text)
+        def visit(node: Tag) -> None:
+            if node is not elem and node.name == "section":
+                return
+            if node.name in ("script", "style", "nav", "footer"):
+                return
+            classes = set(node.get("class") or ())
+            if node.get("aria-hidden") == "true" or classes.intersection(
+                {"ltx_title", "ltx_bibliography", "ltx_abstract",
+                 "ltx_authors", "ltx_caption", "ltx_note"}
+            ):
+                return
+            if node.name == "p":
+                emit("para", self._extract_para_with_math(node))
+                return
+            if node.name == "figure" or classes.intersection({"ltx_figure", "ltx_table"}):
+                table = node.select_one("table.ltx_tabular")
+                if table:
+                    emit("table", self._parse_table(table))
+                elif node.select_one("img"):
+                    for figure in self._parse_figure_panels(node):
+                        emit("figure", figure)
+                return
+            if node.name == "table" and "ltx_tabular" in classes:
+                emit("table", self._parse_table(node))
+                return
+            if "ltx_equationgroup" in classes:
+                members = node.select(".ltx_equation")
+                if members:
+                    for equation in members:
+                        if equation.find_parent(class_="ltx_equation") is None:
+                            emit("equation", self._parse_equation(equation))
+                else:
+                    emit("equation", self._parse_equation(node))
+                return
+            if "ltx_equation" in classes:
+                emit("equation", self._parse_equation(node))
+                return
+            # List items without ltx_p still contain meaningful text.
+            if node.name == "li" and not node.find("p"):
+                emit("para", self._extract_para_with_math(node))
+                return
+            for child in node.children:
+                if isinstance(child, Tag):
+                    visit(child)
 
-            elif child.name == "figure":
-                if "ltx_figure" in classes or "ltx_table" in classes:
-                    if child.select_one("img"):
-                        # Image figure
-                        fig = self._parse_figure(child)
-                        if fig:
-                            ordered_content.append({"type": "figure", "data": fig.to_dict()})
-                            figures.append(fig)
-                    else:
-                        # Table figure (table inside a <figure> wrapper)
-                        tbl_elem = child.select_one("table.ltx_tabular")
-                        if tbl_elem:
-                            tbl = self._parse_table(tbl_elem)
-                            if tbl:
-                                # Grab caption from the figure wrapper
-                                cap_elem = child.select_one("figcaption") or child.select_one(".ltx_caption")
-                                if cap_elem and not tbl.caption:
-                                    tbl.caption = re.sub(
-                                        r"^Table\s*\d+[:.]\s*", "",
-                                        clean_text(cap_elem.get_text()),
-                                        flags=re.I,
-                                    )
-                                ordered_content.append({"type": "table", "data": tbl.to_dict()})
-                                tables.append(tbl)
+        visit(elem)
 
-            elif "ltx_equation" in classes or "ltx_equationgroup" in classes:
-                eq = self._parse_equation(child)
-                if eq:
-                    ordered_content.append({"type": "equation", "data": eq.to_dict()})
-                    equations.append(eq)
-
-            elif child.name == "table" and "ltx_tabular" in classes:
-                # Bare table not wrapped in <figure>
-                tbl = self._parse_table(child)
-                if tbl:
-                    ordered_content.append({"type": "table", "data": tbl.to_dict()})
-                    tables.append(tbl)
-
-        # Fallback: if no ordered content found via child iteration, use old deep-search approach
-        if not ordered_content:
-            for para_container in elem.find_all(class_="ltx_para", recursive=False):
-                for para in para_container.find_all("p", class_="ltx_p"):
-                    text = self._extract_para_with_math(para)
-                    if text and len(text) > 10:
-                        ordered_content.append({"type": "para", "data": text})
-                        paragraphs.append(text)
-            for fig_elem in elem.find_all("figure", class_="ltx_figure", recursive=False):
-                fig = self._parse_figure(fig_elem)
-                if fig:
-                    ordered_content.append({"type": "figure", "data": fig.to_dict()})
-                    figures.append(fig)
-            for tbl_elem in elem.find_all("table", class_="ltx_tabular", recursive=False):
-                tbl = self._parse_table(tbl_elem)
-                if tbl:
-                    ordered_content.append({"type": "table", "data": tbl.to_dict()})
-                    tables.append(tbl)
-            for eq_elem in elem.find_all(class_=["ltx_equation", "ltx_equationgroup"], recursive=False):
-                eq = self._parse_equation(eq_elem)
-                if eq:
-                    ordered_content.append({"type": "equation", "data": eq.to_dict()})
-                    equations.append(eq)
-
-        # Only direct descendant sections belong to this parent. The old
-        # recursive selector flattened grandchildren and duplicated nested text.
         subsections = []
-        for subsection in elem.select("section.ltx_subsection, section.ltx_subsubsection"):
+        valid_sections = {"ltx_section", "ltx_subsection", "ltx_subsubsection",
+                          "ltx_paragraph", "ltx_subparagraph", "ltx_appendix"}
+        for subsection in elem.select("section"):
             if subsection.find_parent("section") is not elem:
                 continue
-            sub_data = self._parse_section(subsection, level=level + 1)
+            if not valid_sections.intersection(subsection.get("class") or ()):
+                continue
+            sub_data = self._parse_section(subsection, level=min(level + 1, 6))
             if sub_data:
                 subsections.append(sub_data)
 
@@ -340,7 +352,8 @@ class Ar5ivExtractor:
             ordered_content=ordered_content,
             source_anchor=elem.get("id"),
         )
-    
+
+
     def _math_to_marker(self, math_node: Tag) -> str:
         """
         Convert a <math> element to a $...$ or $$...$$ LaTeX marker.
@@ -360,7 +373,9 @@ class Ar5ivExtractor:
                 latex = ann.get_text().strip()
 
         if not latex:
-            return ""
+            # Preserve evidence rather than silently dropping an inline
+            # MathML-only formula. Notion displays the XML as text.
+            return " [MathML: " + str(math_node) + "] "
 
         display = (math_node.get("display") or "inline").lower()
         return f" $${latex}$$ " if display == "block" else f"${latex}$"
@@ -392,6 +407,8 @@ class Ar5ivExtractor:
                 continue
 
             node_classes = set(node.get("class") or [])
+            if node.get("aria-hidden") == "true" or node.name in ("script", "style"):
+                continue
 
             # ── Direct <math> element ──────────────────────────────────────
             if node.name == "math":
@@ -419,103 +436,128 @@ class Ar5ivExtractor:
         return text
 
     def _parse_figure(self, fig: Tag) -> Optional[Figure]:
-        """解析图片"""
+        """Extract a figure; resolve image URLs once against the paper URL."""
         img = fig.select_one("img")
-        if not img:
+        if img is None:
             return None
-        
-        src = img.get("src", "")
-        # 转换为完整 URL
-        if src.startswith("/"):
-            src = f"https://ar5iv.labs.arxiv.org{src}"
-        
-        caption_elem = fig.select_one("figcaption.ltx_caption")
-        caption = clean_text(caption_elem.get_text()) if caption_elem else None
-        
-        # 移除 "Figure X:" 前缀
+        caption_elem = fig.select_one("figcaption, .ltx_caption")
+        caption = clean_text(caption_elem.get_text(" ", strip=True)) if caption_elem else None
         if caption:
-            caption = re.sub(r"^Figure\s*\d+[:.]\s*", "", caption, flags=re.I)
-        
-        label = fig.get("id", None)
-        
+            caption = re.sub(r"^Figure\s*[\w.]+[:.]\s*", "", caption, flags=re.I)
         return Figure(
-            src=src,
+            src=img.get("src") or img.get("data-src") or "",
             alt=img.get("alt"),
             caption=caption,
-            label=label
+            label=fig.get("id"),
         )
-    
+
+    def _parse_figure_panels(self, fig: Tag) -> List[Figure]:
+        """Split multi-image figures into ordered panels without losing images.
+
+        The first panel retains the parent caption/anchor for compatibility.
+        Additional panels have stable suffixes derived from the same anchor.
+        """
+        first = self._parse_figure(fig)
+        if first is None:
+            return []
+        result = [first]
+        for index, image in enumerate(fig.select("img")[1:], start=2):
+            result.append(Figure(
+                src=image.get("src") or image.get("data-src") or "",
+                alt=image.get("alt"),
+                caption=None,
+                label=(f"{fig.get('id')}:panel{index}" if fig.get("id") else None),
+            ))
+        return result
+
     def _parse_table(self, table: Tag) -> Optional[Table]:
-        """解析表格"""
-        # 提取标题
-        caption = None
+        """Parse only rows of this table, excluding nested tabulars.
+
+        Colspans are expanded into empty cells and active rowspans are
+        represented by empty placeholder cells to fit Notion's rectangular
+        table contract. The canonical HTML remains the source of exact layout.
+        """
         wrapper = table.find_parent("figure")
-        caption_elem = ((wrapper.select_one("figcaption, .ltx_caption") if wrapper else None)
-                        or table.find("caption"))
-        if caption_elem:
-            caption = clean_text(caption_elem.get_text())
-            # 移除 "Table X:" 前缀
-            caption = re.sub(r"^Table\s*\d+[:.]\s*", "", caption, flags=re.I)
-        
-        # 提取表头
+        caption_elem = (
+            (wrapper.select_one("figcaption, .ltx_caption") if wrapper else None)
+            or table.find("caption")
+        )
+        caption = clean_text(caption_elem.get_text(" ", strip=True)) if caption_elem else None
+        if caption:
+            caption = re.sub(r"^Table\s*[\w.]+[:.]\s*", "", caption, flags=re.I)
         headers = []
-        thead = table.select_one("thead")
-        if thead:
-            for th in thead.select("th, td"):
-                headers.append(clean_text(th.get_text()))
-        
-        # 提取数据行
         rows = []
-        tbody = table.select_one("tbody") or table
-        for tr in tbody.select("tr"):
-            if tr.find_parent("thead") is not None:
+        occupied = {}  # column index -> number of *future* rows still occupied
+
+        for tr in table.find_all("tr"):
+            if tr.find_parent("table") is not table:
                 continue
-            row = [clean_text(td.get_text()) for td in tr.select("td, th")]
-            if row and any(row):  # 至少有一个非空单元格
-                rows.append(row)
-        
-        if headers or rows:
-            return Table(
-                caption=caption,
-                headers=headers,
-                rows=rows
-            )
-        
+            cells = tr.find_all(["td", "th"], recursive=False)
+            if not cells:
+                continue
+            result = []
+            col = 0
+
+            def advance() -> None:
+                nonlocal col
+                while col in occupied:
+                    result.append("")
+                    occupied[col] -= 1
+                    if occupied[col] <= 0:
+                        del occupied[col]
+                    col += 1
+
+            for cell in cells:
+                advance()
+                value = clean_text(self._extract_para_with_math(cell))
+                try:
+                    width = max(1, min(int(cell.get("colspan", 1)), 100))
+                    height = max(1, min(int(cell.get("rowspan", 1)), 100))
+                except (ValueError, TypeError):
+                    width = height = 1
+                for offset in range(width):
+                    result.append(value if offset == 0 else "")
+                    if height > 1:
+                        occupied[col + offset] = height - 1
+                col += width
+            advance()
+            if tr.find_parent("thead") is not None and not headers:
+                headers = result
+            elif result and any(result):
+                rows.append(result)
+
+        width = max([len(headers)] + [len(row) for row in rows], default=0)
+        if width:
+            if headers:
+                headers.extend([""] * (width - len(headers)))
+            for row in rows:
+                row.extend([""] * (width - len(row)))
+            return Table(caption=caption, headers=headers, rows=rows,
+                         label=(wrapper.get("id") if wrapper else table.get("id")))
         return None
-    
+
     def _parse_equation(self, eq: Tag) -> Optional[Equation]:
-        """解析数学公式"""
+        """Keep MathML even if LaTeX cannot be recovered."""
         math_elem = eq.select_one("math")
-        if math_elem:
-            latex = math_elem.get("alttext", "")
-            if not latex:
-                annotation = math_elem.select_one('annotation[encoding="application/x-tex"]')
-                latex = annotation.get_text(strip=True) if annotation else ""
-            mathml = str(math_elem)
-            
-            # 提取标签
-            label = None
-            tag = eq.select_one(".ltx_tag")
-            if tag:
-                label = clean_text(tag.get_text())
-            
-            return Equation(
-                latex=latex,
-                mathml=mathml,
-                label=label,
-                inline=False
-            )
-        
-        return None
-    
+        if math_elem is None:
+            return None
+        latex = (math_elem.get("alttext") or "").strip()
+        if not latex:
+            annotation = math_elem.find("annotation", attrs={"encoding": "application/x-tex"})
+            latex = annotation.get_text(strip=True) if annotation else ""
+        tag = eq.select_one(".ltx_tag")
+        label = clean_text(tag.get_text()) if tag else None
+        return Equation(latex=latex, mathml=str(math_elem), label=label, inline=False)
+
+
     def _extract_figures(self, soup: BeautifulSoup) -> List[Figure]:
         """提取所有图片"""
         figures = []
         
         for fig in soup.select("figure.ltx_figure"):
-            figure = self._parse_figure(fig)
-            if figure and figure not in figures:
-                figures.append(figure)
+            for figure in self._parse_figure_panels(fig):
+                if figure not in figures:
+                    figures.append(figure)
         
         return figures
     
@@ -531,16 +573,19 @@ class Ar5ivExtractor:
         return tables
     
     def _extract_equations(self, soup: BeautifulSoup) -> List[Equation]:
-        """提取数学公式"""
+        """One equation per semantic equation node; no group/member double count."""
         equations = []
-        
-        for eq in soup.select(".ltx_equation, .ltx_equationgroup"):
-            equation = self._parse_equation(eq)
+        for node in soup.select(".ltx_equation, .ltx_equationgroup"):
+            if node.find_parent(class_="ltx_equation"):
+                continue
+            if "ltx_equationgroup" in (node.get("class") or ()) and node.select(".ltx_equation"):
+                continue
+            equation = self._parse_equation(node)
             if equation:
                 equations.append(equation)
-        
         return equations
-    
+
+
     def _extract_references(self, soup: BeautifulSoup) -> List[Reference]:
         """提取参考文献"""
         references = []
@@ -594,26 +639,45 @@ class Ar5ivExtractor:
         return references
     
     def _extract_full_text(self, sections: List[Section]) -> str:
-        """从章节提取完整文本"""
-        texts = []
-        
-        def extract_section_text(section: Section):
-            prefix = "#" * section.level + " "
-            texts.append(prefix + section.title)
-            texts.append("")
-            
-            for para in section.paragraphs:
-                texts.append(para)
-                texts.append("")
-            
-            for sub in section.subsections:
-                extract_section_text(sub)
-        
+        """Render the section's semantic blocks in source order for search/export."""
+        result = []
+
+        def walk(section: Section) -> None:
+            result.append("#" * max(1, min(section.level, 6)) + " " + section.title)
+            items = section.ordered_content or [
+                {"type": "para", "data": text} for text in section.paragraphs
+            ]
+            for item in items:
+                kind, data = item.get("type"), item.get("data")
+                if kind == "para" and isinstance(data, str):
+                    result.append(data)
+                elif kind == "equation" and isinstance(data, dict):
+                    latex = data.get("latex") or ""
+                    mathml = data.get("mathml") or ""
+                    if latex:
+                        result.append("$$" + latex + "$$")
+                    elif mathml:
+                        result.append(mathml)
+                elif kind == "figure" and isinstance(data, dict):
+                    url = data.get("src") or ""
+                    alt = data.get("alt") or ""
+                    if url:
+                        result.append("![" + alt + "](" + url + ")")
+                    if data.get("caption"):
+                        result.append(data["caption"])
+                elif kind == "table" and isinstance(data, dict):
+                    if data.get("caption"):
+                        result.append(data["caption"])
+                    for row in ([data["headers"]] if data.get("headers") else []) + data.get("rows", []):
+                        result.append("| " + " | ".join(str(cell).replace("|", r"\|") for cell in row) + " |")
+            for child in section.subsections:
+                walk(child)
+
         for section in sections:
-            extract_section_text(section)
-        
-        return "\n".join(texts)
-    
+            walk(section)
+        return "\n\n".join(result)
+
+
     def parse_html(self, html: str, paper_id: str) -> Optional[Ar5ivContent]:
         """
         解析 HTML 提取论文内容
@@ -637,10 +701,25 @@ class Ar5ivExtractor:
             tables = self._extract_tables(soup)
             equations = self._extract_equations(soup)
             references = self._extract_references(soup)
-            full_text = self._extract_full_text(sections)
-            base_url = build_ar5iv_url(paper_id)
+            base_url = self.config.ar5iv_base_url.rstrip("/") + "/" + normalize_arxiv_id(paper_id)
             def absolute(src):
-                return urljoin(base_url, src) if src else ""
+                if not src:
+                    return ""
+                try:
+                    resolved = urljoin(base_url, src)
+                    parts = urlsplit(resolved)
+                except ValueError:
+                    return ""
+                if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+                    return ""
+                if parts.hostname == "localhost" or parts.hostname.endswith((".localhost", ".local")):
+                    return ""
+                try:
+                    if not ip_address(parts.hostname).is_global:
+                        return ""
+                except ValueError:
+                    pass  # DNS name, not an IP literal
+                return resolved
             for figure in figures:
                 figure.src = absolute(figure.src)
             def normalize_sections(items):
@@ -652,6 +731,7 @@ class Ar5ivExtractor:
                             item["data"]["src"] = absolute(item["data"].get("src", ""))
                     normalize_sections(sec.subsections)
             normalize_sections(sections)
+            full_text = self._extract_full_text(sections)
 
             content = Ar5ivContent(
                 paper_id=paper_id,
@@ -691,12 +771,20 @@ class Ar5ivExtractor:
         Returns:
             Ar5ivContent 对象或 None
         """
+        arxiv_id = normalize_arxiv_id(arxiv_id)
+        if not is_valid_arxiv_id(arxiv_id):
+            logger.warning(f"Invalid arXiv identifier: {arxiv_id!r}")
+            self.failure_count += 1
+            return None
+
         # 检查缓存
         if use_cache and self.cache_config.enabled:
             cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
             cached_data = await load_json(cache_file)
             if cached_data:
                 try:
+                    if cached_data.get("_extractor_version") != EXTRACTOR_CACHE_VERSION:
+                        raise ValueError("Legacy or stale HTML extraction cache")
                     cached_content = self._rebuild_content(cached_data)
                     if assess_quality(cached_content).cacheable_full_text:
                         logger.debug(f"使用缓存: {arxiv_id}")
@@ -705,7 +793,7 @@ class Ar5ivExtractor:
                 except (KeyError, TypeError, ValueError) as exc:
                     logger.warning(f"Rejecting invalid ar5iv cache for {arxiv_id}: {exc}")
         
-        url = build_ar5iv_url(arxiv_id)
+        url = self.config.ar5iv_base_url.rstrip("/") + "/" + arxiv_id
         logger.info(f"提取 ar5iv 内容: {arxiv_id}")
         
         async with aiohttp.ClientSession() as session:
@@ -721,7 +809,9 @@ class Ar5ivExtractor:
                 # 保存到缓存
                 if self.cache_config.enabled and assess_quality(content).cacheable_full_text:
                     cache_file = self.cache_config.get_ar5iv_cache_file(arxiv_id)
-                    await save_json(content.to_dict(), cache_file)
+                    serialized = content.to_dict()
+                    serialized["_extractor_version"] = EXTRACTOR_CACHE_VERSION
+                    await save_json(serialized, cache_file)
                 
                 self.success_count += 1
             else:

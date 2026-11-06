@@ -43,6 +43,22 @@
 - **Local file cache** — saves all content to `papers/{category}/{arxiv_id}/` and caches HTTP responses; re-importing a paper reuses the cache and skips redundant LLM calls
 - **60 curated examples** — ready-to-import paper lists covering deep learning, reinforcement learning, and AI agents
 
+## ar5iv / LaTeXML Extraction V2
+
+The ar5iv adapter now traverses semantic paper content inside nested LaTeXML
+containers (theorems, proofs and lists), preserves mixed paragraph/formula/
+figure/table ordering, handles grouped equations and keeps MathML evidence.
+It validates arXiv IDs, bounds HTML responses to 20 MiB, and distinguishes
+transient fetch failures from unavailable HTML.
+
+An older cached extraction is automatically refreshed using the V2 extractor
+cache marker. The existing Notion adapter and canonical document schema remain
+compatible; this is **HTML extraction**, not conversion of raw TeX projects.
+
+See [ar5iv extraction architecture and fidelity limitations](docs/AR5IV_EXTRACTION_V2.md)
+and run `python -m pytest tests/test_ar5iv_semantics_v2.py -q` for isolated
+regression tests.
+
 ## Quick Start
 
 ```bash
