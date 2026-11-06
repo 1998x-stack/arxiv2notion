@@ -27,16 +27,28 @@ def from_nano_artifact(data: dict[str, Any], *,
     )
     nodes = []
     for index, n in enumerate(data.get("nodes", [])):
-        kind = n.get("kind", "unknown")
-        if kind not in ("abstract", "heading", "paragraph", "theorem", "proof",
-                        "algorithm", "code", "footnote", "citation", "cross_reference"):
-            kind = "unknown" if kind not in ("figure", "table", "equation") else kind
+        upstream_kind = n.get("kind", "unknown")
+        if upstream_kind in ("part", "chapter", "section", "subsection",
+                             "subsubsection", "subparagraph"):
+            kind = "heading"
+        elif upstream_kind == "paragraph_text":
+            kind = "paragraph"
+        elif upstream_kind in ("bibliography_item", "bibitem"):
+            kind = "citation"
+        elif upstream_kind in ("abstract", "heading", "paragraph", "theorem",
+                               "proof", "algorithm", "code", "footnote",
+                               "citation", "cross_reference", "figure",
+                               "table", "equation"):
+            kind = upstream_kind
+        else:
+            kind = "unknown"
         nodes.append(ScientificNode(
             node_id=n["id"], kind=kind, parent_id=n.get("parent_id"),
             ordinal=index, text=n.get("text") or n.get("title") or "",
             source_anchor=n.get("source_id"),
             payload={"source_ref": n.get("source_ref"),
-                     "title": n.get("title"), "children": n.get("children", [])},
+                     "title": n.get("title"), "upstream_kind": upstream_kind,
+                     "upstream_children": n.get("children", [])},
         ))
     by_id = {n.node_id for n in nodes}
     # Preserve M04 math/assets without silently discarding them.
